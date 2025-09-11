@@ -1,0 +1,32 @@
+# [advice from AI] Backend 개발용 Dockerfile  
+# Node.js 20+ + Express + TypeScript 개발 환경
+
+FROM node:20-alpine
+
+# 작업 디렉토리 설정
+WORKDIR /app
+
+# 시스템 패키지 업데이트 및 필수 도구 설치
+RUN apk update && apk add --no-cache \
+    git \
+    curl \
+    postgresql-client
+
+# 패키지 파일 복사 (캐시 최적화)
+COPY package*.json ./
+
+# 의존성 설치
+RUN npm install
+
+# 소스 코드 복사
+COPY . .
+
+# 포트 노출
+EXPOSE 3001
+
+# 헬스체크
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:3001/health || exit 1
+
+# 개발 서버 실행 (nodemon 사용)
+CMD ["npm", "run", "dev"]

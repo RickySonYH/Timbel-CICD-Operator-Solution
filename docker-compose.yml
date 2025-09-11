@@ -1,0 +1,195 @@
+# [advice from AI] Timbel 지식자원 플랫폼 Docker 개발 환경
+# 개발계획서의 기술 스택을 기반으로 구성된 통합 개발 환경
+
+version: '3.8'
+
+services:
+  # Frontend - React 18 + TypeScript + Material-UI
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - REACT_APP_API_URL=http://localhost:3001
+      - REACT_APP_WS_URL=ws://localhost:3001
+      - VITE_API_URL=http://localhost:3001
+      - CHOKIDAR_USEPOLLING=true
+    depends_on:
+      - backend
+    networks:
+      - timbel-network
+
+  # Backend - Node.js 20+ + Express + TypeScript
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    environment:
+      # Database connections
+      - DATABASE_URL=postgresql://timbel_user:timbel_password@postgres:5432/timbel_db
+      - REDIS_URL=redis://redis:6379
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=timbel_access
+      - MINIO_SECRET_KEY=timbel_secret
+      
+      # AI Services
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - CLAUDE_API_KEY=${CLAUDE_API_KEY}
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8100
+      
+      # Application settings
+      - NODE_ENV=development
+      - JWT_SECRET=timbel-super-secret-jwt-key-change-in-production
+      - PORT=3001
+    depends_on:
+      - postgres
+      - redis
+      - elasticsearch
+      - minio
+      - chromadb
+    networks:
+      - timbel-network
+
+  # PostgreSQL - 주 데이터베이스 (카탈로그, 사용자, 조직)
+  postgres:
+    image: postgres:15-alpine
+    ports:
+      - "5434:5432"
+    environment:
+      - POSTGRES_DB=timbel_db
+      - POSTGRES_USER=timbel_user
+      - POSTGRES_PASSWORD=timbel_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d
+    networks:
+      - timbel-network
+
+  # Redis - 세션 관리 및 캐싱
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - timbel-network
+
+  # Elasticsearch - 지식자원 검색 및 RAG
+  elasticsearch:
+    image: elasticsearch:8.11.0
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - timbel-network
+
+  # MinIO - 파일, 다이어그램, 문서 저장
+  minio:
+    image: minio/minio:latest
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=timbel_access
+      - MINIO_ROOT_PASSWORD=timbel_secret
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - timbel-network
+
+  # ChromaDB - 벡터 데이터베이스 (RAG 시스템)
+  chromadb:
+    image: chromadb/chroma:latest
+    ports:
+      - "8100:8000"
+    environment:
+      - CHROMA_SERVER_HOST=0.0.0.0
+      - CHROMA_SERVER_HTTP_PORT=8000
+    volumes:
+      - chromadb_data:/chroma/chroma
+    networks:
+      - timbel-network
+
+  # Prometheus - 메트릭 수집
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - timbel-network
+
+  # Grafana - 모니터링 대시보드
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3003:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=timbel_admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    depends_on:
+      - prometheus
+    networks:
+      - timbel-network
+
+  # Nginx - 리버스 프록시 및 로드 밸런서
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - timbel-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  elasticsearch_data:
+  minio_data:
+  chromadb_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  timbel-network:
+    driver: bridge

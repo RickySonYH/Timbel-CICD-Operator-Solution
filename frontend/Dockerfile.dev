@@ -1,0 +1,25 @@
+# [advice from AI] Frontend 개발용 Dockerfile
+# React 18 + TypeScript + Material-UI 개발 환경
+
+FROM node:20-alpine
+
+# 작업 디렉토리 설정
+WORKDIR /app
+
+# 시스템 패키지 업데이트
+RUN apk update && apk add --no-cache git
+
+# 패키지 파일 복사 (캐시 최적화)
+COPY package*.json ./
+
+# 의존성 설치
+RUN npm install
+
+# 소스 코드 복사
+COPY . .
+
+# 포트 노출
+EXPOSE 3000
+
+# 개발 서버 실행
+CMD ["npm", "start"]
