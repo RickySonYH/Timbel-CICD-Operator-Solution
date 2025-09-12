@@ -320,7 +320,7 @@ const OperationsCenter: React.FC = () => {
       {/* [advice from AI] 운영 센터 헤더 */}
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" sx={{ fontWeight: 600, mb: 1 }}>
-          멀티테넌트 AI 서비스 운영 및 관리
+          운영 센터
         </Typography>
       </Box>
 

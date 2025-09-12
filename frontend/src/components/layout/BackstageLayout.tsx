@@ -45,7 +45,7 @@ const roleDashboards = [
   { text: 'PO 대시보드', path: '/po-dashboard', hasSubMenu: false }, // 향후 프로젝트 관리, PE 관리, 요구사항 관리 등
   { text: 'PE 작업공간', path: '/pe-workspace', hasSubMenu: false }, // 향후 개발도구, 지식자원 활용, 산출물 관리 등
   { text: 'QA/QC 센터', path: '/qa-center', hasSubMenu: false }, // 향후 테스트 계획, 품질 검사, 결함 관리 등
-  { text: '멀티테넌트 AI 서비스 운영 및 관리', path: '/operations', hasSubMenu: true }, // 현재 4개 하위 센터
+  { text: '운영 센터', path: '/operations', hasSubMenu: true }, // 현재 4개 하위 센터
 ];
 
 // [advice from AI] 운영센터 하위 메뉴 (모든 센터 하이라이트 적용)

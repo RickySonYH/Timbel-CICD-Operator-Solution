@@ -2,7 +2,7 @@
 
 ## 🚀 개요
 
-Timbel Knowledge Platform은 AI 기반 개발 생산성 향상을 위한 멀티테넌트 지식자원 플랫폼입니다. ECP-AI K8s Orchestrator와 연동하여 엔터프라이즈급 AI 서비스 운영 및 관리를 제공합니다.
+Timbel Knowledge Platform은 AI 기반 개발 생산성 향상을 위한 멀티테넌트 지식자원 플랫폼입니다. ECP-AI K8s Orchestrator와 연동하여 엔터프라이즈급 운영 센터를 제공합니다.
 
 ## ✨ 주요 기능
 
@@ -11,7 +11,7 @@ Timbel Knowledge Platform은 AI 기반 개발 생산성 향상을 위한 멀티�
 - 역할별 권한 관리 (PO, PE, QA, 운영팀, 관리자, 임원)
 - 자동 토큰 갱신 및 세션 관리
 
-### 🏢 멀티테넌트 AI 서비스 운영 및 관리
+### 🏢 운영 센터
 - 테넌트별 독립적인 AI 서비스 환경
 - 8개 기본 서비스 지원:
   - 📞 콜봇 (Callbot)
@@ -151,7 +151,7 @@ docker-compose exec postgres psql -U postgres -d timbel_platform -f /docker-entr
 ### v0.4 (2024-01-20)
 - JWT 토큰 기반 인증 시스템 구축
 - ECP-AI K8s Orchestrator 시뮬레이터 연동
-- 멀티테넌트 AI 서비스 운영 및 관리 시스템
+- 운영 센터 시스템
 - 8개 기본 서비스 지원
 - 실시간 모니터링 및 대시보드
 - TypeScript 타입 안전성 개선
