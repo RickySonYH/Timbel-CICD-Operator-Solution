@@ -326,9 +326,21 @@ app.use('/api/auth', authJWTRouter);
 const operationsRouter = require('./routes/operations');
 app.use('/api/operations', operationsRouter);
 
+// [advice from AI] QA/QC 라우트 추가 (JWT 인증 보호)
+const qaRouter = require('./routes/qa');
+app.use('/api/qa', qaRouter);
+
 // [advice from AI] ECP-AI 시뮬레이터 라우트 추가 (JWT 인증 보호)
 const simulatorRouter = require('./routes/simulator');
 app.use('/api/simulator', simulatorRouter);
+
+// [advice from AI] 통합 모니터링 라우트
+const monitoringRouter = require('./routes/monitoring');
+const catalogRouter = require('./routes/catalog');
+const catalogCICDRouter = require('./routes/catalogCICD');
+app.use('/api/monitoring', monitoringRouter);
+app.use('/api/catalog', catalogRouter);
+app.use('/api/catalog/cicd', catalogCICDRouter);
 
 // [advice from AI] 서버 시작
 app.listen(PORT, () => {

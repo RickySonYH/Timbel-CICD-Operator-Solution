@@ -210,7 +210,8 @@ const MultiTenantDeployment: React.FC = () => {
     loadTenants();
   }, []);
 
-  // [advice from AI] 하드코딩된 샘플 데이터 제거 (PostgreSQL 연동으로 대체)
+
+  // [advice from AI] 하드코딩된 샘플 데이터 (백업용)
   const [oldSampleTenants] = useState<Tenant[]>([
     {
       id: 'TENANT-001',

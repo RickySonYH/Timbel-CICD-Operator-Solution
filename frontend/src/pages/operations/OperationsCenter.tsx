@@ -473,6 +473,170 @@ const OperationsCenter: React.FC = () => {
         </Grid>
       </Grid>
 
+      {/* [advice from AI] 센터별 네비게이션 카드 */}
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid item xs={12}>
+          <Typography variant="h5" sx={{ fontWeight: 600, mb: 3 }}>
+            운영 센터
+          </Typography>
+        </Grid>
+        
+        {/* 테넌시 관리 센터 */}
+        <Grid item xs={12} md={6} lg={3}>
+          <Card 
+            sx={{ 
+              height: '100%', 
+              cursor: 'pointer',
+              '&:hover': { boxShadow: 6 },
+              transition: 'all 0.3s ease'
+            }}
+            onClick={() => window.location.href = '/operations/tenant-center'}
+          >
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                <CloudUploadIcon color="primary" sx={{ fontSize: 40 }} />
+                <Box>
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                    테넌시 관리 센터
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    테넌시 생성, 관리, 배포
+                  </Typography>
+                </Box>
+              </Box>
+              <Typography variant="body2" sx={{ mb: 2 }}>
+                ECP-AI 테넌시의 전체 생명주기 관리
+              </Typography>
+              <Chip label="4개 도구" color="primary" size="small" />
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* CI/CD 서비스 센터 */}
+        <Grid item xs={12} md={6} lg={3}>
+          <Card 
+            sx={{ 
+              height: '100%', 
+              cursor: 'pointer',
+              '&:hover': { boxShadow: 6 },
+              transition: 'all 0.3s ease'
+            }}
+            onClick={() => window.location.href = '/operations/cicd-services'}
+          >
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                <SettingsIcon color="success" sx={{ fontSize: 40 }} />
+                <Box>
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                    CI/CD 서비스 센터
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    서비스 설정, 파이프라인, 배포
+                  </Typography>
+                </Box>
+              </Box>
+              <Typography variant="body2" sx={{ mb: 2 }}>
+                지속적 통합/배포 파이프라인 관리
+              </Typography>
+              <Chip label="3개 도구" color="success" size="small" />
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* 모니터링 센터 */}
+        <Grid item xs={12} md={6} lg={3}>
+          <Card 
+            sx={{ 
+              height: '100%', 
+              cursor: 'pointer',
+              '&:hover': { boxShadow: 6 },
+              transition: 'all 0.3s ease'
+            }}
+            onClick={() => window.location.href = '/operations/monitoring-center'}
+          >
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                <TimelineIcon color="info" sx={{ fontSize: 40 }} />
+                <Box>
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                    모니터링 센터
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    실시간 모니터링, 알림, 로그
+                  </Typography>
+                </Box>
+              </Box>
+              <Typography variant="body2" sx={{ mb: 2 }}>
+                시스템 상태 및 성능 모니터링
+              </Typography>
+              <Chip label="5개 도구" color="info" size="small" />
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* 인프라 관리 센터 */}
+        <Grid item xs={12} md={6} lg={3}>
+          <Card 
+            sx={{ 
+              height: '100%', 
+              cursor: 'pointer',
+              '&:hover': { boxShadow: 6 },
+              transition: 'all 0.3s ease'
+            }}
+            onClick={() => window.location.href = '/operations/infrastructure-center'}
+          >
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                <MemoryIcon color="warning" sx={{ fontSize: 40 }} />
+                <Box>
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                    인프라 관리 센터
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    인프라 설정, 하드웨어 계산
+                  </Typography>
+                </Box>
+              </Box>
+              <Typography variant="body2" sx={{ mb: 2 }}>
+                인프라 리소스 및 보안 관리
+              </Typography>
+              <Chip label="5개 도구" color="warning" size="small" />
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* 운영 도구 센터 */}
+        <Grid item xs={12} md={6} lg={3}>
+          <Card 
+            sx={{ 
+              height: '100%', 
+              cursor: 'pointer',
+              '&:hover': { boxShadow: 6 },
+              transition: 'all 0.3s ease'
+            }}
+            onClick={() => window.location.href = '/operations/tools-center'}
+          >
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                <PlayArrowIcon color="error" sx={{ fontSize: 40 }} />
+                <Box>
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                    운영 도구 센터
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    자동 배포, 서비스 설정, 도구
+                  </Typography>
+                </Box>
+              </Box>
+              <Typography variant="body2" sx={{ mb: 2 }}>
+                운영 효율성을 위한 도구 모음
+              </Typography>
+              <Chip label="5개 도구" color="error" size="small" />
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
     </Box>
   );
 };

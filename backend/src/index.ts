@@ -15,6 +15,8 @@ import { Database } from './utils/database';
 import authRoutes from './routes/auth';
 import organizationRoutes from './routes/organization';
 import catalogRoutes from './routes/catalog';
+import projectRoutes from './routes/projects';
+import testRoutes from './routes/test';
 
 // 미들웨어 임포트
 import { errorHandler } from './middleware/errorHandler';
@@ -98,6 +100,8 @@ app.post('/api/proxy/rdc-calculate', async (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/organization', organizationRoutes);
 app.use('/api/catalog', catalogRoutes);
+app.use('/api/projects', projectRoutes);
+app.use('/api/test', testRoutes);
 
 // 에러 핸들링
 app.use(errorHandler);

@@ -120,7 +120,7 @@ interface DashboardStats {
 
 const TenantManagementCenter: React.FC = () => {
   const navigate = useNavigate();
-  const { isAuthenticated, user, getAuthHeaders } = useJwtAuthStore();
+  const { isAuthenticated, user, token, getAuthHeaders } = useJwtAuthStore();
   const [activeTab, setActiveTab] = useState(0);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
@@ -159,6 +159,7 @@ const TenantManagementCenter: React.FC = () => {
       console.log('🌐 API 요청 시작: /api/operations/tenants');
       const authHeaders = getAuthHeaders();
       console.log('🔑 인증 헤더:', authHeaders);
+      console.log('🔑 JWT 스토어 상태:', { isAuthenticated, user, token: token ? `${token.substring(0, 20)}...` : null });
       
       const tenantsResponse = await fetch('http://localhost:3001/api/operations/tenants', {
         method: 'GET',

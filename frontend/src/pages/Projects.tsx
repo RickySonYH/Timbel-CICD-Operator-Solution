@@ -1,7 +1,7 @@
 // [advice from AI] 프로젝트 관리 페이지
 // 진행 중인 프로젝트들을 관리하고 모니터링할 수 있는 페이지
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -50,68 +50,38 @@ const Projects: React.FC = () => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
 
-  // [advice from AI] 샘플 프로젝트 데이터
-  const projects: Project[] = [
-    {
-      id: '1',
-      name: '모바일 뱅킹 앱 리뉴얼',
-      description: '기존 뱅킹 앱의 UI/UX 개선 및 새로운 기능 추가',
-      status: 'active',
-      progress: 75,
-      team: ['김개발', '박디자인', '이QA'],
-      startDate: '2024-01-15',
-      endDate: '2024-06-30',
-      priority: 'high',
-      tags: ['모바일', '뱅킹', 'React Native'],
-    },
-    {
-      id: '2',
-      name: '이커머스 플랫폼 구축',
-      description: '새로운 이커머스 플랫폼의 프론트엔드 개발',
-      status: 'active',
-      progress: 45,
-      team: ['최프론트', '정백엔드', '한인프라'],
-      startDate: '2024-02-01',
-      endDate: '2024-08-31',
-      priority: 'high',
-      tags: ['이커머스', 'React', 'Node.js'],
-    },
-    {
-      id: '3',
-      name: 'AI 챗봇 서비스',
-      description: '고객 지원을 위한 AI 기반 챗봇 개발',
-      status: 'paused',
-      progress: 30,
-      team: ['박AI', '김백엔드'],
-      startDate: '2024-01-01',
-      priority: 'medium',
-      tags: ['AI', '챗봇', 'Python'],
-    },
-    {
-      id: '4',
-      name: '데이터 분석 대시보드',
-      description: '비즈니스 인사이트를 위한 데이터 시각화 도구',
-      status: 'completed',
-      progress: 100,
-      team: ['이데이터', '최프론트'],
-      startDate: '2023-10-01',
-      endDate: '2024-01-31',
-      priority: 'medium',
-      tags: ['데이터', '대시보드', 'D3.js'],
-    },
-    {
-      id: '5',
-      name: 'API 게이트웨이 구축',
-      description: '마이크로서비스 아키텍처를 위한 API 게이트웨이',
-      status: 'planning',
-      progress: 0,
-      team: ['정아키텍트', '김인프라'],
-      startDate: '2024-04-01',
-      endDate: '2024-07-31',
-      priority: 'high',
-      tags: ['API', '마이크로서비스', 'Kong'],
-    },
-  ];
+  // [advice from AI] 프로젝트 데이터를 API에서 가져오도록 변경
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // [advice from AI] 프로젝트 데이터 로드 함수
+  const loadProjects = async () => {
+    try {
+      setIsLoading(true);
+      const response = await fetch('/api/operations/projects', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setProjects(data);
+      } else {
+        console.error('프로젝트 데이터 로드 실패');
+      }
+    } catch (error) {
+      console.error('프로젝트 데이터 로드 중 오류:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // [advice from AI] 컴포넌트 마운트 시 데이터 로드
+  useEffect(() => {
+    loadProjects();
+  }, []);
 
   // [advice from AI] 상태별 필터링
   const filteredProjects = projects.filter(project => {

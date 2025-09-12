@@ -51,7 +51,7 @@ export const useJwtAuthStore = create<AuthState>()(
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ loginId, password }),
+            body: JSON.stringify({ username: loginId, password }),
           });
 
           if (!response.ok) {

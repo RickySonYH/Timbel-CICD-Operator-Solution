@@ -9,10 +9,22 @@ class JWTAuthMiddleware {
     this.secretKey = process.env.JWT_SECRET || 'timbel-super-secret-jwt-key-change-in-production';
     this.tokenExpiry = process.env.JWT_EXPIRY || '24h';
     
+    // [advice from AI] 계층적 권한 구조 정의
+    this.roleHierarchy = {
+      'admin': ['admin', 'executive', 'po', 'pe', 'qa', 'operations', 'development'],
+      'executive': ['executive', 'po', 'pe', 'qa', 'operations', 'development'],
+      'po': ['po', 'pe', 'qa', 'operations', 'development'],
+      'pe': ['pe'],
+      'qa': ['qa'],
+      'operations': ['operations'],
+      'development': ['development']
+    };
+    
     console.log('🔑 JWT 미들웨어 초기화됨');
     console.log('🔑 환경변수 JWT_SECRET:', process.env.JWT_SECRET);
     console.log('🔑 최종 Secret Key:', this.secretKey);
     console.log('🔑 JWT Expiry:', this.tokenExpiry);
+    console.log('🔑 권한 계층 구조:', this.roleHierarchy);
   }
 
   // [advice from AI] JWT 토큰 생성
@@ -122,7 +134,7 @@ class JWTAuthMiddleware {
     };
   }
 
-  // [advice from AI] 역할 기반 접근 제어
+  // [advice from AI] 계층적 역할 기반 접근 제어
   requireRole = (requiredRole) => {
     return (req, res, next) => {
       if (!req.user) {
@@ -133,16 +145,39 @@ class JWTAuthMiddleware {
         });
       }
 
-      if (req.user.roleType !== requiredRole) {
+      const userRole = req.user.roleType;
+      
+      // [advice from AI] 계층적 권한 검증
+      const hasPermission = this.checkRolePermission(userRole, requiredRole);
+      
+      if (!hasPermission) {
         return res.status(403).json({
           success: false,
           error: 'Forbidden',
-          message: `접근 권한이 없습니다. 필요한 역할: ${requiredRole}, 현재 역할: ${req.user.roleType}`
+          message: `접근 권한이 없습니다. 필요한 역할: ${requiredRole}, 현재 역할: ${userRole}`
         });
       }
 
+      console.log(`✅ 권한 검증 성공: ${userRole} -> ${requiredRole}`);
       next();
     };
+  }
+
+  // [advice from AI] 계층적 권한 검증 메서드
+  checkRolePermission(userRole, requiredRole) {
+    // [advice from AI] 사용자 역할이 계층 구조에 있는지 확인
+    if (!this.roleHierarchy[userRole]) {
+      console.log(`❌ 알 수 없는 사용자 역할: ${userRole}`);
+      return false;
+    }
+
+    // [advice from AI] 사용자 역할이 요구되는 역할에 접근할 수 있는지 확인
+    const allowedRoles = this.roleHierarchy[userRole];
+    const hasPermission = allowedRoles.includes(requiredRole);
+    
+    console.log(`🔍 권한 검증: ${userRole} -> ${requiredRole}, 허용된 역할: ${allowedRoles.join(', ')}, 결과: ${hasPermission}`);
+    
+    return hasPermission;
   }
 }
 

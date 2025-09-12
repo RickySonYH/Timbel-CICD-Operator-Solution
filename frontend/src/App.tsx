@@ -21,6 +21,7 @@ import PODashboard from './pages/po/PODashboard';
 import PEWorkspace from './pages/pe/PEWorkspace';
 import QACenter from './pages/qa/QACenter';
 import OperationsCenter from './pages/operations/OperationsCenter';
+import CompletionChecklist from './pages/completion/CompletionChecklist';
 import RoleAccounts from './pages/RoleAccounts';
 import UserManagement from './pages/executive/UserManagement';
 import TestLogin from './pages/TestLogin';
@@ -38,6 +39,13 @@ import InfrastructurePage from './pages/operations/InfrastructurePage';
 import DeploymentWizard from './components/operations/DeploymentWizard';
 import TenantManagementCenter from './components/operations/TenantManagementCenter';
 import CICDServiceCenter from './components/operations/CICDServiceCenter';
+// [advice from AI] 새로운 운영 센터들
+import MonitoringCenter from './pages/operations/MonitoringCenter';
+import InfrastructureCenter from './pages/operations/InfrastructureCenter';
+import OperationsToolsCenter from './pages/operations/OperationsToolsCenter';
+// [advice from AI] 통합 모니터링 센터
+import IntegratedMonitoringCenter from './pages/monitoring/IntegratedMonitoringCenter';
+import CatalogCenter from './pages/catalog/CatalogCenter';
 
 // [advice from AI] 라우팅 래퍼 컴포넌트
 function AppContent() {
@@ -91,25 +99,35 @@ function AppContent() {
           <Route path="/executive" element={<ExecutiveDashboard />} />
           <Route path="/po-dashboard" element={<PODashboard />} />
           <Route path="/pe-workspace" element={<PEWorkspace />} />
+          <Route path="/completion" element={<CompletionChecklist />} />
           <Route path="/qa-center" element={<QACenter />} />
           <Route path="/operations" element={<OperationsCenter />} />
           {/* [advice from AI] 운영센터 통합 라우트 */}
           <Route path="/operations/tenant-center" element={<TenantManagementCenter />} />
           <Route path="/operations/cicd-services" element={<CICDServiceCenter />} />
+          {/* [advice from AI] 새로운 운영 센터들 */}
+          <Route path="/operations/monitoring-center" element={<MonitoringCenter />} />
+          <Route path="/operations/infrastructure-center" element={<InfrastructureCenter />} />
+          <Route path="/operations/tools-center" element={<OperationsToolsCenter />} />
+          {/* [advice from AI] 통합 모니터링 센터 */}
+          <Route path="/monitoring" element={<IntegratedMonitoringCenter />} />
+        <Route path="/catalog" element={<CatalogCenter />} />
           
           {/* [advice from AI] 기존 분리된 라우트들 → 통합 센터로 리다이렉트 */}
           <Route path="/operations/deployment-wizard" element={<Navigate to="/operations/tenant-center?tab=1" replace />} />
-          <Route path="/operations/multi-tenant" element={<Navigate to="/operations/tenant-center?tab=2" replace />} />
+          <Route path="/operations/multi-tenant" element={<Navigate to="/operations/tools-center?tab=2" replace />} />
           <Route path="/operations/tenant-mgmt" element={<Navigate to="/operations/tenant-center?tab=3" replace />} />
-          <Route path="/operations/hardware-calc" element={<Navigate to="/operations/tenant-center?tab=3" replace />} />
-          <Route path="/operations/service-config" element={<Navigate to="/operations/cicd-services?tab=0" replace />} />
-          <Route path="/operations/auto-deploy" element={<Navigate to="/operations/cicd-services?tab=2" replace />} />
+          <Route path="/operations/hardware-calc" element={<Navigate to="/operations/infrastructure-center?tab=1" replace />} />
+          <Route path="/operations/service-config" element={<Navigate to="/operations/tools-center?tab=1" replace />} />
+          <Route path="/operations/auto-deploy" element={<Navigate to="/operations/tools-center?tab=0" replace />} />
           <Route path="/operations/cicd" element={<Navigate to="/operations/cicd-services?tab=1" replace />} />
+          <Route path="/operations/monitoring" element={<Navigate to="/operations/monitoring-center" replace />} />
+          <Route path="/operations/infrastructure" element={<Navigate to="/operations/infrastructure-center" replace />} />
           
-          {/* [advice from AI] 독립적인 운영 도구들 */}
-          <Route path="/operations/monitoring" element={<MonitoringPage />} />
-          <Route path="/operations/cicd" element={<CICDPage />} />
-          <Route path="/operations/infrastructure" element={<InfrastructurePage />} />
+          {/* [advice from AI] 기존 개별 페이지들 (백워드 호환성) */}
+          <Route path="/operations/monitoring-old" element={<MonitoringPage />} />
+          <Route path="/operations/cicd-old" element={<CICDPage />} />
+          <Route path="/operations/infrastructure-old" element={<InfrastructurePage />} />
           <Route path="/role-accounts" element={<RoleAccounts />} />
           <Route path="/user-management" element={<UserManagement />} />
           <Route path="/test-login" element={<TestLogin />} />

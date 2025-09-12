@@ -53,3 +53,6 @@ export const requirePermission = (minPermissionLevel: PermissionLevel) => {
 
 // [advice from AI] Administrator 전용 미들웨어
 export const requireAdministrator = requirePermission(PermissionLevel.ADMINISTRATOR);
+
+// [advice from AI] 간단한 토큰 인증 미들웨어 (기존 authenticate와 동일)
+export const authenticateToken = authenticate;

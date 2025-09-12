@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -109,8 +109,41 @@ const DefectManager: React.FC = () => {
   const [filterSeverity, setFilterSeverity] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // [advice from AI] 샘플 결함 데이터
-  const [defects] = useState<Defect[]>([
+  // [advice from AI] 결함 데이터를 API에서 가져오도록 변경
+  const [defects, setDefects] = useState<Defect[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // [advice from AI] 결함 데이터 로드 함수
+  const loadDefects = async () => {
+    try {
+      setIsLoading(true);
+      const response = await fetch('/api/bug-reports', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setDefects(data);
+      } else {
+        console.error('결함 데이터 로드 실패');
+      }
+    } catch (error) {
+      console.error('결함 데이터 로드 중 오류:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // [advice from AI] 컴포넌트 마운트 시 데이터 로드
+  useEffect(() => {
+    loadDefects();
+  }, []);
+
+  // [advice from AI] 샘플 결함 데이터 (백업용)
+  const [sampleDefects] = useState<Defect[]>([
     {
       id: 'BUG-001',
       title: '로그인 버튼 클릭 시 오류 발생',
