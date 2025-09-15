@@ -157,6 +157,52 @@ app.post('/api/auth/login', async (req, res) => {
     
     req.session.lastActivity = new Date().toISOString();
 
+    // [advice from AI] JWT 토큰 생성 (데이터베이스의 실제 UUID 사용)
+    const jwt = require('jsonwebtoken');
+    
+    // 데이터베이스에서 실제 사용자 ID 조회
+    const { Pool } = require('pg');
+    const pool = new Pool({
+      user: process.env.DB_USER || 'timbel_user',
+      host: process.env.DB_HOST || 'postgres',
+      database: process.env.DB_NAME || 'timbel_knowledge',
+      password: process.env.DB_PASSWORD || 'timbel_password',
+      port: process.env.DB_PORT || 5432,
+    });
+    
+    const dbResult = await pool.query('SELECT id FROM timbel_users WHERE username = $1', [user.username]);
+    const actualUserId = dbResult.rows[0]?.id || user.id;
+    
+    // [advice from AI] JWT 설정을 데이터베이스에서 동적으로 읽기
+    let jwtSettings = {
+      expiresIn: '30m',
+      issuer: 'timbel-platform',
+      audience: 'timbel-users'
+    };
+    
+    try {
+      const jwtSettingsResult = await pool.query('SELECT settings FROM system_settings WHERE key = $1', ['jwt_security']);
+      if (jwtSettingsResult.rows.length > 0) {
+        const dbJwtSettings = jwtSettingsResult.rows[0].settings;
+        jwtSettings = {
+          expiresIn: `${dbJwtSettings.expiresIn || '30m'}`,
+          issuer: dbJwtSettings.issuer || 'timbel-platform',
+          audience: dbJwtSettings.audience || 'timbel-users'
+        };
+      }
+    } catch (error) {
+      console.warn('JWT 설정을 데이터베이스에서 읽지 못했습니다. 기본값을 사용합니다:', error.message);
+    }
+    
+    const jwtPayload = {
+      userId: actualUserId,
+      email: user.email,
+      permissionLevel: user.permissionLevel,
+      sessionId: req.sessionID
+    };
+    
+    const jwtToken = jwt.sign(jwtPayload, process.env.JWT_SECRET || 'your-secret-key', jwtSettings);
+
     // [advice from AI] 세션 저장 후 응답
     req.session.save((err) => {
       if (err) {
@@ -173,6 +219,8 @@ app.post('/api/auth/login', async (req, res) => {
         data: {
           user: req.session.user,
           sessionId: req.sessionID,
+          jwtToken: jwtToken,
+          tokenType: 'Bearer',
           message: '로그인 성공'
         }
       });
@@ -322,6 +370,26 @@ app.post('/api/proxy/rdc-calculate', async (req, res) => {
 const authJWTRouter = require('./routes/authJWT');
 app.use('/api/auth', authJWTRouter);
 
+// [advice from AI] 카탈로그 시스템 라우트
+const catalogRouter = require('./routes/catalog');
+app.use('/api/catalog', catalogRouter);
+
+// [advice from AI] 시스템 관리 라우트
+const adminRouter = require('./routes/admin');
+app.use('/api/admin', adminRouter);
+
+// [advice from AI] 디자인 자산 라우트
+const designAssetsRouter = require('./routes/designAssets');
+app.use('/api/design-assets', designAssetsRouter);
+
+// [advice from AI] 코드 컴포넌트 라우트
+const codeComponentsRouter = require('./routes/codeComponents');
+app.use('/api/code-components', codeComponentsRouter);
+
+// [advice from AI] 문서/가이드 라우트
+const documentsRouter = require('./routes/documents');
+app.use('/api/documents', documentsRouter);
+
 // [advice from AI] 운영 센터 라우트 추가 (JWT 인증 보호)
 const operationsRouter = require('./routes/operations');
 app.use('/api/operations', operationsRouter);
@@ -336,10 +404,8 @@ app.use('/api/simulator', simulatorRouter);
 
 // [advice from AI] 통합 모니터링 라우트
 const monitoringRouter = require('./routes/monitoring');
-const catalogRouter = require('./routes/catalog');
 const catalogCICDRouter = require('./routes/catalogCICD');
 app.use('/api/monitoring', monitoringRouter);
-app.use('/api/catalog', catalogRouter);
 app.use('/api/catalog/cicd', catalogCICDRouter);
 
 // [advice from AI] 서버 시작

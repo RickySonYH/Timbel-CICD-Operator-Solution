@@ -39,6 +39,8 @@ export class AuthService {
     };
 
     const { accessToken, refreshToken } = SecurityUtils.generateTokens(tokenPayload);
+    console.log('Generated accessToken length:', accessToken.length);
+    console.log('Generated accessToken preview:', accessToken.substring(0, 50) + '...');
     
     // AuthUser 객체 생성
     const authUser = UserModel.toAuthUser(dbUser);

@@ -12,10 +12,36 @@ import LoginJWT from './pages/LoginJWT';
 import Footer from './components/common/Footer';
 import Dashboard from './pages/Dashboard';
 import Catalog from './pages/Catalog';
+// [advice from AI] 카탈로그 하위 메뉴 페이지들
+import CatalogDashboard from './pages/catalog/CatalogDashboard';
+import DomainsPage from './pages/catalog/DomainsPage';
+import SystemsPage from './pages/catalog/SystemsPage';
+import ComponentsPage from './pages/catalog/ComponentsPage';
+import APIsPage from './pages/catalog/APIsPage';
+import ResourcesPage from './pages/catalog/ResourcesPage';
+
+// [advice from AI] 지식 등록 및 관리 페이지들 (독립 메뉴로 이동)
+import KnowledgeManagement from './pages/knowledge/KnowledgeManagement';
+import KnowledgeDashboard from './pages/knowledge/KnowledgeDashboard';
+// [advice from AI] 지식 등록 및 관리 페이지들
+import DesignAssetRegistration from './pages/catalog/knowledge/DesignAssetRegistration';
+import CodeComponentRegistration from './pages/catalog/knowledge/CodeComponentRegistration';
+import DocumentGuideRegistration from './pages/catalog/knowledge/DocumentGuideRegistration';
+import KnowledgeSearchManagement from './pages/catalog/knowledge/KnowledgeSearchManagement';
+import ApprovalWorkflow from './pages/catalog/knowledge/ApprovalWorkflow';
+import DiagramManagement from './pages/catalog/knowledge/DiagramManagement';
 import Projects from './pages/Projects';
 import VibeStudio from './pages/VibeStudio';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import Analytics from './pages/admin/Analytics';
+import GroupManagement from './pages/admin/GroupManagement';
+import PermissionManagement from './pages/admin/PermissionManagement';
+import SystemSettings from './pages/admin/SystemSettings';
+import LogManagement from './pages/admin/LogManagement';
+import BackupRestore from './pages/admin/BackupRestore';
+import NotificationSettings from './pages/admin/NotificationSettings';
+import SecuritySettings from './pages/admin/SecuritySettings';
+import ApiKeyManagement from './pages/admin/ApiKeyManagement';
 import ExecutiveDashboard from './pages/executive/ExecutiveDashboard';
 import PODashboard from './pages/po/PODashboard';
 import PEWorkspace from './pages/pe/PEWorkspace';
@@ -25,8 +51,11 @@ import CompletionChecklist from './pages/completion/CompletionChecklist';
 import RoleAccounts from './pages/RoleAccounts';
 import UserManagement from './pages/executive/UserManagement';
 import TestLogin from './pages/TestLogin';
-import KnowledgeManagement from './pages/pe/KnowledgeManagement';
+import PEKnowledgeManagement from './pages/pe/KnowledgeManagement';
 import CodeRegistration from './pages/pe/CodeRegistration';
+import PEDashboard from './pages/pe/PEDashboard';
+import TaskManagement from './pages/pe/TaskManagement';
+import WeeklyReports from './pages/pe/WeeklyReports';
 // [advice from AI] 운영센터 하위 메뉴 페이지들
 import MultiTenantPage from './pages/operations/MultiTenantPage';
 import ServiceConfigPage from './pages/operations/ServiceConfigPage';
@@ -49,7 +78,7 @@ import CatalogCenter from './pages/catalog/CatalogCenter';
 
 // [advice from AI] 라우팅 래퍼 컴포넌트
 function AppContent() {
-  const { isAuthenticated, logout } = useJwtAuthStore();
+  const { isAuthenticated, logout, checkTokenExpiration } = useJwtAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -57,6 +86,27 @@ function AppContent() {
   // useEffect(() => {
   //   checkAuth();
   // }, [checkAuth]);
+
+  // [advice from AI] 토큰 만료 감지 및 자동 로그아웃
+  useEffect(() => {
+    if (isAuthenticated) {
+      // 토큰 만료 확인
+      if (checkTokenExpiration()) {
+        console.log('⏰ 토큰이 만료되어 자동 로그아웃됩니다');
+        return;
+      }
+
+      // 주기적으로 토큰 만료 확인 (10분마다)
+      const interval = setInterval(() => {
+        if (checkTokenExpiration()) {
+          console.log('⏰ 주기적 토큰 만료 확인 - 자동 로그아웃');
+          clearInterval(interval);
+        }
+      }, 10 * 60 * 1000); // 10분
+
+      return () => clearInterval(interval);
+    }
+  }, [isAuthenticated, checkTokenExpiration]);
 
   // [advice from AI] 로그아웃 후 홈으로 리다이렉트
   useEffect(() => {
@@ -89,12 +139,37 @@ function AppContent() {
       {/* [advice from AI] 백스테이지IO 스타일의 메인 레이아웃 적용 */}
       <BackstageLayout title="Timbel 지식자원 플랫폼">
         <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/catalog" element={<Catalog />} />
+          <Route path="/" element={<IntegratedMonitoringCenter />} />
+            <Route path="/catalog" element={<Catalog />} />
+            {/* [advice from AI] 카탈로그 하위 메뉴 라우트들 */}
+            <Route path="/catalog/dashboard" element={<CatalogDashboard />} />
+            <Route path="/catalog/domains" element={<DomainsPage />} />
+            <Route path="/catalog/systems" element={<SystemsPage />} />
+            <Route path="/catalog/components" element={<ComponentsPage />} />
+            <Route path="/catalog/apis" element={<APIsPage />} />
+            <Route path="/catalog/resources" element={<ResourcesPage />} />
+            {/* [advice from AI] 지식 등록 및 관리 라우트들 (독립 메뉴로 이동) */}
+            <Route path="/knowledge" element={<KnowledgeManagement />} />
+            <Route path="/knowledge/dashboard" element={<KnowledgeDashboard />} />
+            <Route path="/knowledge/design" element={<DesignAssetRegistration />} />
+            <Route path="/knowledge/code" element={<CodeComponentRegistration />} />
+            <Route path="/knowledge/docs" element={<DocumentGuideRegistration />} />
+            <Route path="/knowledge/search" element={<KnowledgeSearchManagement />} />
+            <Route path="/knowledge/approval" element={<ApprovalWorkflow />} />
+            <Route path="/knowledge/diagrams" element={<DiagramManagement />} />
           <Route path="/projects" element={<Projects />} />
           <Route path="/vibe-studio" element={<VibeStudio />} />
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/admin/analytics" element={<Analytics />} />
+          <Route path="/admin/users" element={<UserManagement />} />
+          <Route path="/admin/groups" element={<GroupManagement />} />
+          <Route path="/admin/permissions" element={<PermissionManagement />} />
+          <Route path="/admin/settings" element={<SystemSettings />} />
+          <Route path="/admin/security" element={<SecuritySettings />} />
+          <Route path="/admin/api-keys" element={<ApiKeyManagement />} />
+          <Route path="/admin/logs" element={<LogManagement />} />
+          <Route path="/admin/backup" element={<BackupRestore />} />
+          <Route path="/admin/notifications" element={<NotificationSettings />} />
           {/* [advice from AI] PO-PE-QA-운영팀 구조 역할별 대시보드 라우트 */}
           <Route path="/executive" element={<ExecutiveDashboard />} />
           <Route path="/po-dashboard" element={<PODashboard />} />
@@ -111,7 +186,13 @@ function AppContent() {
           <Route path="/operations/tools-center" element={<OperationsToolsCenter />} />
           {/* [advice from AI] 통합 모니터링 센터 */}
           <Route path="/monitoring" element={<IntegratedMonitoringCenter />} />
-        <Route path="/catalog" element={<CatalogCenter />} />
+          
+          {/* [advice from AI] PE 작업공간 하위 기능들 */}
+          <Route path="/pe-workspace/dashboard" element={<PEDashboard />} />
+          <Route path="/pe-workspace/tasks" element={<TaskManagement />} />
+          <Route path="/pe-workspace/reports" element={<WeeklyReports />} />
+          <Route path="/pe-workspace/knowledge" element={<PEKnowledgeManagement />} />
+          <Route path="/pe-workspace/code-registration" element={<CodeRegistration />} />
           
           {/* [advice from AI] 기존 분리된 라우트들 → 통합 센터로 리다이렉트 */}
           <Route path="/operations/deployment-wizard" element={<Navigate to="/operations/tenant-center?tab=1" replace />} />
@@ -132,8 +213,9 @@ function AppContent() {
           <Route path="/user-management" element={<UserManagement />} />
           <Route path="/test-login" element={<TestLogin />} />
           <Route path="/login-jwt" element={<LoginJWT />} />
-          <Route path="/knowledge-management" element={<KnowledgeManagement />} />
-          <Route path="/code-registration" element={<CodeRegistration />} />
+          {/* [advice from AI] 기존 개별 PE 기능들 → PE 작업공간으로 리다이렉트 */}
+          <Route path="/knowledge-management" element={<Navigate to="/pe-workspace/knowledge" replace />} />
+          <Route path="/code-registration" element={<Navigate to="/pe-workspace/code-registration" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BackstageLayout>

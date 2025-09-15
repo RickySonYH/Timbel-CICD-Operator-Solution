@@ -9,9 +9,10 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api': {
-        target: 'http://backend:3001',
+        target: process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'http://backend:3001',
         changeOrigin: true,
-        secure: false
+        secure: false,
+        rewrite: (path) => path.replace(/^\/api/, '/api')
       }
     }
   }

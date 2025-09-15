@@ -1,7 +1,7 @@
 // [advice from AI] JWT 토큰 기반 로그인 페이지
 // 세션 기반 인증의 문제점을 해결하고 토큰 기반으로 개선
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useJwtAuthStore } from '../store/jwtAuthStore';
 import {
@@ -15,16 +15,27 @@ import {
   CircularProgress,
   Container
 } from '@mui/material';
-import { Login as LoginIcon } from '@mui/icons-material';
+// [advice from AI] 아이콘 사용 최소화 - 텍스트 기반 UI로 변경
 
 const LoginJWT: React.FC = () => {
   const navigate = useNavigate();
-  const { login, isLoading } = useJwtAuthStore();
+  const { login, isLoading, checkTokenExpiration } = useJwtAuthStore();
   const [formData, setFormData] = useState({
     loginId: '',
     password: ''
   });
   const [error, setError] = useState('');
+
+  // [advice from AI] 컴포넌트 마운트 시 토큰 만료 확인
+  useEffect(() => {
+    const checkToken = () => {
+      if (checkTokenExpiration()) {
+        setError('세션이 만료되었습니다. 다시 로그인해주세요.');
+      }
+    };
+
+    checkToken();
+  }, [checkTokenExpiration]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -63,7 +74,7 @@ const LoginJWT: React.FC = () => {
       <Card elevation={3}>
         <CardContent sx={{ p: 4 }}>
           <Box sx={{ textAlign: 'center', mb: 3 }}>
-            <LoginIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
+            {/* [advice from AI] 아이콘 제거 - 텍스트 기반으로 변경 */}
             <Typography variant="h4" component="h1" gutterBottom>
               Timbel 플랫폼 로그인
             </Typography>

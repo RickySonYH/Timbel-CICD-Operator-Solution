@@ -1,4 +1,7 @@
 {
+  "name": "timbel-knowledge-dev",
+  "version": "0.55.0",
+  "description": "Timbel 지식자원 플랫폼 - 개발 버전",
   "dependencies": {
     "axios": "^1.11.0",
     "cors": "^2.8.5",

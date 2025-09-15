@@ -19,6 +19,7 @@ services:
       - REACT_APP_WS_URL=ws://localhost:3001
       - VITE_API_URL=http://localhost:3001
       - CHOKIDAR_USEPOLLING=true
+      - NODE_ENV=development
     depends_on:
       - backend
     networks:

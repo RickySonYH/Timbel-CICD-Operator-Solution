@@ -20,13 +20,18 @@ router.post('/login', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { user, token } = await AuthService.login(req.body);
+    const authResult = await AuthService.login(req.body);
+    console.log('AuthService result structure:', Object.keys(authResult));
     
-    logger.info(`User logged in: ${user.email}`);
+    logger.info(`User logged in: ${authResult.user.email}`);
     
     return res.json({
       success: true,
-      data: { user, token }
+      data: { 
+        user: authResult.user,
+        sessionId: authResult.token, // 기존 호환성 - 실제 JWT 토큰
+        message: '로그인 성공'
+      }
     });
   } catch (error: any) {
     logger.error('Login error:', error);
@@ -36,7 +41,7 @@ router.post('/login', [
   }
 });
 
-// [advice from AI] JWT 기반 로그인 (토큰 반환)
+// [advice from AI] JWT 기반 로그인 (토큰 반환) - AuthService 사용
 router.post('/login-jwt', [
   body('loginId').notEmpty().withMessage('이메일 또는 사용자명을 입력하세요'),
   body('password').isLength({ min: 6 }).withMessage('비밀번호는 최소 6자 이상이어야 합니다')
@@ -47,18 +52,15 @@ router.post('/login-jwt', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { user, token } = await AuthService.login(req.body);
+    const authResult = await AuthService.login(req.body);
     
-    // [advice from AI] JWT 토큰 생성
-    const jwtToken = jwtAuth.generateToken(user);
-    
-    logger.info(`User logged in with JWT: ${user.email}`);
+    logger.info(`User logged in with JWT: ${authResult.user.email}`);
     
     return res.json({
       success: true,
       data: { 
-        user, 
-        token: jwtToken,
+        user: authResult.user, 
+        token: authResult.token,
         tokenType: 'Bearer'
       }
     });

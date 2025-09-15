@@ -407,30 +407,30 @@ const PEDashboard: React.FC = () => {
                 <Button
                   variant="contained"
                   startIcon={<TrendingUpIcon />}
-                  href="/pe/tasks"
+                  onClick={() => window.location.href = '/pe-workspace/tasks'}
                 >
                   업무 관리
                 </Button>
                 <Button
                   variant="outlined"
                   startIcon={<CodeIcon />}
-                  href="/pe/code-registration"
+                  onClick={() => window.location.href = '/pe-workspace/code-registration'}
                 >
                   코드 등록
                 </Button>
                 <Button
                   variant="outlined"
                   startIcon={<TimelineIcon />}
-                  href="/pe/weekly-reports"
+                  onClick={() => window.location.href = '/pe-workspace/reports'}
                 >
                   주간 보고서
                 </Button>
                 <Button
                   variant="outlined"
                   startIcon={<BugReportIcon />}
-                  href="/pe/bug-reports"
+                  onClick={() => window.location.href = '/pe-workspace/knowledge'}
                 >
-                  버그 리포트
+                  지식 관리
                 </Button>
               </Box>
             </CardContent>
