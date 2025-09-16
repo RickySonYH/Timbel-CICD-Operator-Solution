@@ -126,6 +126,8 @@ const IntegratedMonitoringDashboard: React.FC = () => {
     try {
       const authHeaders = getAuthHeaders();
       
+      console.log('📊 통합 모니터링 데이터 로딩 시작');
+      
       // [advice from AI] 1. 전체 시스템 메트릭 수집
       const systemResponse = await fetch('http://localhost:3001/api/monitoring/integrated/overview', {
         method: 'GET',
@@ -138,76 +140,19 @@ const IntegratedMonitoringDashboard: React.FC = () => {
 
       if (systemResponse.ok) {
         const systemData = await systemResponse.json();
-        setIntegratedMetrics(systemData.data.metrics || integratedMetrics);
-        setPhaseMetrics(systemData.data.phaseMetrics || []);
-        setSystemAlerts(systemData.data.alerts || []);
+        console.log('✅ 통합 모니터링 데이터 로딩 성공:', systemData);
+        
+        if (systemData.success) {
+          setIntegratedMetrics(systemData.data.metrics);
+          setPhaseMetrics(systemData.data.phaseMetrics);
+          setSystemAlerts(systemData.data.alerts);
+        }
+      } else {
+        console.error('❌ 통합 모니터링 API 응답 실패:', systemResponse.status);
+        throw new Error(`API 응답 실패: ${systemResponse.status}`);
       }
 
-      // [advice from AI] 2. 각 Phase별 상세 메트릭 수집
-      const phaseData = await Promise.all([
-        fetch('http://localhost:3001/api/projects', { headers: authHeaders }),
-        fetch('http://localhost:3001/api/operations/tenants', { headers: authHeaders }),
-        fetch('http://localhost:3001/api/qa/test-cases', { headers: authHeaders }),
-        fetch('http://localhost:3001/api/qa/bug-reports', { headers: authHeaders })
-      ]);
-
-      // [advice from AI] Phase별 데이터 처리
-      const processedPhaseMetrics: PhaseMetrics[] = [
-        {
-          phase: 'Phase 1-2',
-          name: '프로젝트/PO 관리',
-          status: 'healthy',
-          metrics: {
-            activeItems: 0,
-            completionRate: 0,
-            errorRate: 0,
-            lastActivity: new Date().toISOString()
-          },
-          alerts: 0,
-          trends: { direction: 'stable', percentage: 0 }
-        },
-        {
-          phase: 'Phase 3-4',
-          name: 'PE/완료 시스템',
-          status: 'healthy',
-          metrics: {
-            activeItems: 0,
-            completionRate: 0,
-            errorRate: 0,
-            lastActivity: new Date().toISOString()
-          },
-          alerts: 0,
-          trends: { direction: 'stable', percentage: 0 }
-        },
-        {
-          phase: 'Phase 5',
-          name: 'QA/QC 시스템',
-          status: 'healthy',
-          metrics: {
-            activeItems: 0,
-            completionRate: 0,
-            errorRate: 0,
-            lastActivity: new Date().toISOString()
-          },
-          alerts: 0,
-          trends: { direction: 'stable', percentage: 0 }
-        },
-        {
-          phase: 'Phase 6',
-          name: '운영 시스템',
-          status: 'healthy',
-          metrics: {
-            activeItems: 0,
-            completionRate: 0,
-            errorRate: 0,
-            lastActivity: new Date().toISOString()
-          },
-          alerts: 0,
-          trends: { direction: 'stable', percentage: 0 }
-        }
-      ];
-
-      setPhaseMetrics(processedPhaseMetrics);
+      // [advice from AI] 데이터 로딩 완료 - 모든 데이터는 백엔드 API에서 처리됨
       setLastUpdated(new Date());
       
     } catch (error) {

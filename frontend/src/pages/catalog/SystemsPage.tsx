@@ -30,12 +30,7 @@ import {
   Select
 } from '@mui/material';
 import {
-  Add as AddIcon,
-  Edit as EditIcon,
-  Delete as DeleteIcon,
-  MoreVert as MoreVertIcon,
-  Settings as SystemIcon,
-  Visibility as ViewIcon
+  Add as AddIcon
 } from '@mui/icons-material';
 import { useJwtAuthStore } from '../../store/jwtAuthStore';
 
@@ -309,12 +304,9 @@ const SystemsPage: React.FC = () => {
                 {systems.map((system) => (
                   <TableRow key={system.id}>
                     <TableCell>
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <SystemIcon sx={{ mr: 1, color: '#388e3c' }} />
-                        <Typography variant="subtitle2" sx={{ fontWeight: 500 }}>
-                          {system.name}
-                        </Typography>
-                      </Box>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 500 }}>
+                        {system.name}
+                      </Typography>
                     </TableCell>
                     <TableCell>
                       <Typography variant="body2">
@@ -354,14 +346,16 @@ const SystemsPage: React.FC = () => {
                       </Typography>
                     </TableCell>
                     <TableCell align="center">
-                      <IconButton
+                      <Button
+                        variant="outlined"
+                        size="small"
                         onClick={(e) => {
                           setAnchorEl(e.currentTarget);
                           setSelectedSystem(system);
                         }}
                       >
-                        <MoreVertIcon />
-                      </IconButton>
+                        작업
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -378,15 +372,9 @@ const SystemsPage: React.FC = () => {
         onClose={() => setAnchorEl(null)}
       >
         <MenuItem onClick={() => selectedSystem && handleEdit(selectedSystem)}>
-          <ListItemIcon>
-            <EditIcon fontSize="small" />
-          </ListItemIcon>
           <ListItemText>수정</ListItemText>
         </MenuItem>
         <MenuItem onClick={() => selectedSystem && handleDelete(selectedSystem)}>
-          <ListItemIcon>
-            <DeleteIcon fontSize="small" />
-          </ListItemIcon>
           <ListItemText>삭제</ListItemText>
         </MenuItem>
       </Menu>

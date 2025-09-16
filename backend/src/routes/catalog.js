@@ -5,16 +5,19 @@ const express = require('express');
 const { Pool } = require('pg');
 const router = express.Router();
 
-// [advice from AI] 데이터베이스 연결 설정
+// [advice from AI] 데이터베이스 연결 설정 (통일된 설정)
 const pool = new Pool({
   user: process.env.DB_USER || 'timbel_user',
-  host: process.env.DB_HOST || 'postgres',
-  database: process.env.DB_NAME || 'timbel_knowledge',
+  host: process.env.DB_HOST || 'localhost',
+  database: process.env.DB_NAME || 'timbel_db',
   password: process.env.DB_PASSWORD || 'timbel_password',
-  port: process.env.DB_PORT || 5432,
+  port: process.env.DB_PORT || 5434,
 });
 
-// [advice from AI] JWT 인증 미들웨어
+// [advice from AI] JWT 인증 미들웨어 import
+const jwtAuth = require('../middleware/jwtAuth');
+
+// [advice from AI] 기존 authenticateToken 함수 (호환성을 위해 유지)
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -175,7 +178,7 @@ router.get('/systems', authenticateToken, checkPermission('systems', 'read'), as
     const result = await pool.query(`
       SELECT s.*, d.name as domain_name, u.full_name as owner_name, u.role_type as owner_role
       FROM systems s
-      LEFT JOIN domains d ON s.domain_id = d.id
+      LEFT JOIN catalog_domains d ON s.domain_id = d.id
       LEFT JOIN timbel_users u ON s.owner_id = u.id
       ORDER BY s.created_at DESC
     `);
@@ -253,21 +256,55 @@ router.delete('/systems/:id', authenticateToken, checkPermission('systems', 'del
 });
 
 // [advice from AI] 컴포넌트 관련 API
-router.get('/components', authenticateToken, checkPermission('components', 'read'), async (req, res) => {
+router.get('/components', jwtAuth.verifyToken, async (req, res) => {
   try {
+    // [advice from AI] 실제 테이블 스키마에 맞는 정확한 쿼리
     const result = await pool.query(`
-      SELECT c.*, s.name as system_name, d.name as domain_name, u.full_name as owner_name
-      FROM components c
-      LEFT JOIN systems s ON c.system_id = s.id
-      LEFT JOIN domains d ON s.domain_id = d.id
-      LEFT JOIN timbel_users u ON c.owner_id = u.id
+      SELECT 
+        c.id,
+        c.name,
+        c.title,
+        c.description,
+        c.type,
+        c.system_id,
+        c.owner_group,
+        c.lifecycle,
+        c.source_location,
+        c.deployment_info,
+        c.performance_metrics,
+        c.reuse_stats,
+        c.created_at,
+        c.updated_at,
+        s.name as system_name,
+        s.title as system_title,
+        d.name as domain_name,
+        d.title as domain_title
+      FROM catalog_components c
+      LEFT JOIN catalog_systems s ON c.system_id = s.id
+      LEFT JOIN catalog_domains d ON s.domain_id = d.id
       ORDER BY c.created_at DESC
     `);
     
-    res.json({ success: true, data: result.rows });
+    console.log(`✅ 컴포넌트 목록 조회 성공: ${result.rows.length}개`);
+    res.json({ 
+      success: true, 
+      data: result.rows,
+      total: result.rows.length,
+      message: '컴포넌트 목록을 성공적으로 조회했습니다.'
+    });
   } catch (error) {
-    console.error('Get components error:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch components' });
+    console.error('❌ 컴포넌트 조회 실패:', {
+      error: error.message,
+      code: error.code,
+      detail: error.detail,
+      query: 'SELECT catalog_components'
+    });
+    res.status(500).json({ 
+      success: false, 
+      error: 'Database Error',
+      message: '컴포넌트 데이터를 불러올 수 없습니다. 관리자에게 문의하세요.',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 
@@ -340,7 +377,7 @@ router.get('/apis', authenticateToken, checkPermission('apis', 'read'), async (r
       SELECT a.*, s.name as system_name, d.name as domain_name, u.full_name as owner_name
       FROM apis a
       LEFT JOIN systems s ON a.system_id = s.id
-      LEFT JOIN domains d ON s.domain_id = d.id
+      LEFT JOIN catalog_domains d ON s.domain_id = d.id
       LEFT JOIN timbel_users u ON a.owner_id = u.id
       ORDER BY a.created_at DESC
     `);

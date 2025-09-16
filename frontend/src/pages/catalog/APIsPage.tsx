@@ -34,14 +34,7 @@ import {
   Tooltip
 } from '@mui/material';
 import {
-  Add as AddIcon,
-  Edit as EditIcon,
-  Delete as DeleteIcon,
-  MoreVert as MoreVertIcon,
-  Visibility as ViewIcon,
-  Link as LinkIcon,
-  Code as CodeIcon,
-  Description as DescriptionIcon
+  Add as AddIcon
 } from '@mui/icons-material';
 import { useJwtAuthStore } from '../../store/jwtAuthStore';
 
@@ -366,12 +359,9 @@ const APIsPage: React.FC = () => {
                       </Box>
                     </TableCell>
                     <TableCell>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <LinkIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
-                        <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                          {api.endpoint}
-                        </Typography>
-                      </Box>
+                      <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                        {api.endpoint}
+                      </Typography>
                     </TableCell>
                     <TableCell>
                       <Chip
@@ -397,14 +387,13 @@ const APIsPage: React.FC = () => {
                       </Typography>
                     </TableCell>
                     <TableCell align="right">
-                      <Tooltip title="작업 메뉴">
-                        <IconButton
-                          onClick={(e) => handleMenuOpen(e, api)}
-                          size="small"
-                        >
-                          <MoreVertIcon />
-                        </IconButton>
-                      </Tooltip>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={(e) => handleMenuOpen(e, api)}
+                      >
+                        작업
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -414,7 +403,6 @@ const APIsPage: React.FC = () => {
 
           {apis.length === 0 && (
             <Box sx={{ textAlign: 'center', py: 4 }}>
-              <CodeIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
               <Typography variant="h6" color="text.secondary" gutterBottom>
                 등록된 API가 없습니다
               </Typography>
@@ -443,9 +431,6 @@ const APIsPage: React.FC = () => {
           handleMenuClose();
           handleOpenDialog(selectedApi!);
         }}>
-          <ListItemIcon>
-            <EditIcon fontSize="small" />
-          </ListItemIcon>
           <ListItemText>수정</ListItemText>
         </MenuItem>
         <MenuItem onClick={() => {
@@ -454,9 +439,6 @@ const APIsPage: React.FC = () => {
             window.open(selectedApi.documentation_url, '_blank');
           }
         }}>
-          <ListItemIcon>
-            <DescriptionIcon fontSize="small" />
-          </ListItemIcon>
           <ListItemText>문서 보기</ListItemText>
         </MenuItem>
         <MenuItem onClick={() => {
@@ -465,9 +447,6 @@ const APIsPage: React.FC = () => {
             handleDelete(selectedApi);
           }
         }} sx={{ color: 'error.main' }}>
-          <ListItemIcon>
-            <DeleteIcon fontSize="small" color="error" />
-          </ListItemIcon>
           <ListItemText>삭제</ListItemText>
         </MenuItem>
       </Menu>

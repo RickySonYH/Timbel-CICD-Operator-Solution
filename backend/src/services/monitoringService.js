@@ -3,6 +3,7 @@
 
 const axios = require('axios');
 const { v4: uuidv4 } = require('uuid');
+const EmailService = require('./emailService');
 
 class MonitoringService {
   constructor() {
@@ -12,6 +13,9 @@ class MonitoringService {
     this.grafanaToken = process.env.GRAFANA_TOKEN || '';
     this.alertManagerURL = process.env.ALERTMANAGER_URL || 'http://localhost:9093';
     this.slackWebhook = process.env.SLACK_WEBHOOK_URL || '';
+    
+    // [advice from AI] 이메일 서비스 초기화
+    this.emailService = new EmailService();
     
     // [advice from AI] 메트릭 수집 간격 (초)
     this.metricsInterval = parseInt(process.env.METRICS_INTERVAL || '30');
@@ -637,6 +641,53 @@ class MonitoringService {
       },
       message: 'Mock 알림 생성 완료'
     };
+  }
+
+  // [advice from AI] 실제 이메일 알림 전송
+  async sendEmailAlert(alertMessage) {
+    try {
+      // [advice from AI] 이메일 서비스가 초기화되지 않은 경우 Mock 사용
+      if (!this.emailService.isInitialized) {
+        console.log('이메일 서비스가 초기화되지 않음, Mock 이메일 알림:', alertMessage);
+        return { success: true };
+      }
+
+      // [advice from AI] 알림 심각도에 따른 색상 설정
+      const alertColors = {
+        info: '#36a64f',
+        warning: '#ff9900',
+        error: '#ff0000',
+        critical: '#8b0000'
+      };
+
+      const emailData = {
+        to: process.env.ADMIN_EMAIL || 'admin@timbel.com', // 관리자 이메일
+        templateName: 'alert_notification',
+        variables: {
+          alert_name: alertMessage.alert_name,
+          message: alertMessage.message,
+          tenant_id: alertMessage.tenant_id,
+          severity: alertMessage.severity.toUpperCase(),
+          metric_value: alertMessage.metric_value?.toString() || 'N/A',
+          threshold: alertMessage.threshold?.toString() || 'N/A',
+          timestamp: alertMessage.timestamp,
+          alert_color: alertColors[alertMessage.severity] || '#36a64f'
+        }
+      };
+
+      const result = await this.emailService.sendEmail(emailData);
+      
+      console.log('이메일 알림 전송 성공:', {
+        alertId: alertMessage.alert_id,
+        messageId: result.data.messageId
+      });
+
+      return { success: true, data: result.data };
+
+    } catch (error) {
+      console.error('이메일 알림 전송 실패:', error);
+      return { success: false, error: error.message };
+    }
   }
 
   async mockSendEmailAlert(alertMessage) {

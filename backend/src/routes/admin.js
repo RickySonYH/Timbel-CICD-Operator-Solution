@@ -538,6 +538,19 @@ router.put('/notifications/email', authenticateToken, requireAdmin, async (req, 
   try {
     const settings = req.body;
     
+    // [advice from AI] 이메일 설정 검증
+    if (settings.enabled) {
+      const requiredFields = ['smtpHost', 'smtpPort', 'smtpUser', 'smtpPassword', 'fromEmail', 'fromName'];
+      for (const field of requiredFields) {
+        if (!settings[field]) {
+          return res.status(400).json({ 
+            success: false, 
+            error: `필수 이메일 설정이 누락되었습니다: ${field}` 
+          });
+        }
+      }
+    }
+    
     await pool.query(`
       INSERT INTO system_settings (key, settings, updated_by, updated_at)
       VALUES ('email_notifications', $1, $2, NOW())
@@ -549,6 +562,67 @@ router.put('/notifications/email', authenticateToken, requireAdmin, async (req, 
   } catch (error) {
     console.error('Save email settings error:', error);
     res.status(500).json({ success: false, error: 'Failed to save email settings' });
+  }
+});
+
+// 이메일 서비스 초기화
+router.post('/notifications/email/initialize', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    // [advice from AI] 이메일 설정 조회
+    const settingsResult = await pool.query(`
+      SELECT settings FROM system_settings 
+      WHERE key = 'email_notifications'
+    `);
+    
+    if (settingsResult.rows.length === 0) {
+      return res.status(400).json({ success: false, error: 'Email settings not configured' });
+    }
+
+    const emailSettings = settingsResult.rows[0].settings;
+    
+    if (!emailSettings.enabled) {
+      return res.status(400).json({ success: false, error: 'Email notifications are disabled' });
+    }
+
+    // [advice from AI] 이메일 서비스 초기화
+    const EmailService = require('../services/emailService');
+    const emailService = new EmailService();
+    
+    try {
+      // 이메일 서비스 초기화
+      const initResult = await emailService.initialize(emailSettings);
+      
+      // 기본 템플릿 로드
+      const templateResult = await emailService.loadDefaultTemplates();
+      
+      // 서비스 상태 확인
+      const status = emailService.getStatus();
+      
+      res.json({ 
+        success: true, 
+        message: 'Email service initialized successfully',
+        data: {
+          initialization: initResult,
+          templates: templateResult,
+          status: status
+        }
+      });
+      
+    } catch (emailError) {
+      console.error('Email service initialization error:', emailError);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Failed to initialize email service',
+        details: emailError.message
+      });
+    } finally {
+      // 이메일 서비스 정리
+      await emailService.close();
+    }
+    
+  } catch (error) {
+    console.error('Initialize email service error:', error);
+    res.status(500).json({ success: false, error: 'Failed to initialize email service' });
   }
 });
 
@@ -776,17 +850,71 @@ router.post('/notifications/email/test', authenticateToken, requireAdmin, async 
   try {
     const { email } = req.body;
     
-    // 실제 이메일 전송 로직은 여기에 구현
-    // 현재는 로그만 남김
-    console.log(`Test email sent to: ${email}`);
+    if (!email) {
+      return res.status(400).json({ success: false, error: 'Email address is required' });
+    }
+
+    // [advice from AI] 이메일 설정 조회
+    const settingsResult = await pool.query(`
+      SELECT settings FROM system_settings 
+      WHERE key = 'email_notifications'
+    `);
     
-    // 알림 로그에 기록
-    await pool.query(`
-      INSERT INTO notification_logs (type, recipient, subject, status, sent_at)
-      VALUES ('email', $1, 'Test Email', 'sent', NOW())
-    `, [email]);
+    if (settingsResult.rows.length === 0) {
+      return res.status(400).json({ success: false, error: 'Email settings not configured' });
+    }
+
+    const emailSettings = settingsResult.rows[0].settings;
     
-    res.json({ success: true, message: 'Test email sent successfully' });
+    if (!emailSettings.enabled) {
+      return res.status(400).json({ success: false, error: 'Email notifications are disabled' });
+    }
+
+    // [advice from AI] 이메일 서비스 초기화 및 테스트
+    const EmailService = require('../services/emailService');
+    const emailService = new EmailService();
+    
+    try {
+      // 이메일 서비스 초기화
+      await emailService.initialize(emailSettings);
+      
+      // 기본 템플릿 로드
+      await emailService.loadDefaultTemplates();
+      
+      // 테스트 이메일 전송
+      const result = await emailService.sendTestEmail(email, emailSettings);
+      
+      // 알림 로그에 기록
+      await pool.query(`
+        INSERT INTO notification_logs (type, recipient, subject, status, sent_at, metadata)
+        VALUES ('email', $1, 'Test Email', 'sent', NOW(), $2)
+      `, [email, JSON.stringify({ messageId: result.data.messageId })]);
+      
+      res.json({ 
+        success: true, 
+        message: 'Test email sent successfully',
+        data: result.data
+      });
+      
+    } catch (emailError) {
+      console.error('Email service error:', emailError);
+      
+      // 실패 로그 기록
+      await pool.query(`
+        INSERT INTO notification_logs (type, recipient, subject, status, sent_at, error_message)
+        VALUES ('email', $1, 'Test Email', 'failed', NOW(), $2)
+      `, [email, emailError.message]);
+      
+      res.status(500).json({ 
+        success: false, 
+        error: 'Failed to send test email',
+        details: emailError.message
+      });
+    } finally {
+      // 이메일 서비스 정리
+      await emailService.close();
+    }
+    
   } catch (error) {
     console.error('Send test email error:', error);
     res.status(500).json({ success: false, error: 'Failed to send test email' });

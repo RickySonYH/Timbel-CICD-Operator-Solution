@@ -53,6 +53,9 @@ import UserManagement from './pages/executive/UserManagement';
 import TestLogin from './pages/TestLogin';
 import PEKnowledgeManagement from './pages/pe/KnowledgeManagement';
 import CodeRegistration from './pages/pe/CodeRegistration';
+import MessageCenterTest from './components/notifications/MessageCenterTest';
+import ApprovalDashboard from './pages/approvals/ApprovalDashboard';
+import ApprovalDashboardTest from './components/approvals/ApprovalDashboardTest';
 import PEDashboard from './pages/pe/PEDashboard';
 import TaskManagement from './pages/pe/TaskManagement';
 import WeeklyReports from './pages/pe/WeeklyReports';
@@ -213,6 +216,11 @@ function AppContent() {
           <Route path="/user-management" element={<UserManagement />} />
           <Route path="/test-login" element={<TestLogin />} />
           <Route path="/login-jwt" element={<LoginJWT />} />
+          {/* [advice from AI] 메시지 센터 테스트 페이지 */}
+          <Route path="/test/message-center" element={<MessageCenterTest />} />
+          {/* [advice from AI] 승인 대시보드 */}
+          <Route path="/approvals/dashboard" element={<ApprovalDashboard />} />
+          <Route path="/test/approval-dashboard" element={<ApprovalDashboardTest />} />
           {/* [advice from AI] 기존 개별 PE 기능들 → PE 작업공간으로 리다이렉트 */}
           <Route path="/knowledge-management" element={<Navigate to="/pe-workspace/knowledge" replace />} />
           <Route path="/code-registration" element={<Navigate to="/pe-workspace/code-registration" replace />} />

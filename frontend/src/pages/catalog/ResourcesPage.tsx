@@ -37,18 +37,7 @@ import {
 } from '@mui/material';
 import {
   Add as AddIcon,
-  Edit as EditIcon,
-  Delete as DeleteIcon,
-  MoreVert as MoreVertIcon,
-  Download as DownloadIcon,
-  CloudUpload as UploadIcon,
-  Image as ImageIcon,
-  Description as DocumentIcon,
-  Code as CodeIcon,
-  VideoLibrary as VideoIcon,
-  AudioFile as AudioIcon,
-  Archive as ArchiveIcon,
-  Folder as FolderIcon
+  Download as DownloadIcon
 } from '@mui/icons-material';
 import { useJwtAuthStore } from '../../store/jwtAuthStore';
 
@@ -89,13 +78,13 @@ const ResourcesPage: React.FC = () => {
 
   // [advice from AI] 리소스 타입 옵션
   const resourceTypes = [
-    { value: 'document', label: '문서', icon: DocumentIcon, color: '#1976d2' },
-    { value: 'image', label: '이미지', icon: ImageIcon, color: '#388e3c' },
-    { value: 'video', label: '비디오', icon: VideoIcon, color: '#d32f2f' },
-    { value: 'audio', label: '오디오', icon: AudioIcon, color: '#7b1fa2' },
-    { value: 'code', label: '코드', icon: CodeIcon, color: '#f57c00' },
-    { value: 'archive', label: '아카이브', icon: ArchiveIcon, color: '#5d4037' },
-    { value: 'other', label: '기타', icon: FolderIcon, color: '#616161' }
+    { value: 'document', label: '문서', color: '#1976d2' },
+    { value: 'image', label: '이미지', color: '#388e3c' },
+    { value: 'video', label: '비디오', color: '#d32f2f' },
+    { value: 'audio', label: '오디오', color: '#7b1fa2' },
+    { value: 'code', label: '코드', color: '#f57c00' },
+    { value: 'archive', label: '아카이브', color: '#5d4037' },
+    { value: 'other', label: '기타', color: '#616161' }
   ];
 
   // [advice from AI] 컴포넌트 마운트 시 데이터 로드
@@ -368,14 +357,15 @@ const ResourcesPage: React.FC = () => {
               <TableBody>
                 {resources.map((resource) => {
                   const typeInfo = getResourceTypeInfo(resource.type);
-                  const TypeIcon = typeInfo.icon;
                   
                   return (
                     <TableRow key={resource.id} hover>
                       <TableCell>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                           <Avatar sx={{ bgcolor: typeInfo.color, width: 40, height: 40 }}>
-                            <TypeIcon />
+                            <Typography variant="caption" sx={{ color: 'white', fontWeight: 'bold' }}>
+                              {typeInfo.label.charAt(0)}
+                            </Typography>
                           </Avatar>
                           <Box>
                             <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
@@ -420,14 +410,13 @@ const ResourcesPage: React.FC = () => {
                         </Typography>
                       </TableCell>
                       <TableCell align="right">
-                        <Tooltip title="작업 메뉴">
-                          <IconButton
-                            onClick={(e) => handleMenuOpen(e, resource)}
-                            size="small"
-                          >
-                            <MoreVertIcon />
-                          </IconButton>
-                        </Tooltip>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          onClick={(e) => handleMenuOpen(e, resource)}
+                        >
+                          작업
+                        </Button>
                       </TableCell>
                     </TableRow>
                   );
@@ -438,7 +427,6 @@ const ResourcesPage: React.FC = () => {
 
           {resources.length === 0 && (
             <Box sx={{ textAlign: 'center', py: 4 }}>
-              <UploadIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
               <Typography variant="h6" color="text.secondary" gutterBottom>
                 등록된 리소스가 없습니다
               </Typography>
@@ -467,9 +455,6 @@ const ResourcesPage: React.FC = () => {
           handleMenuClose();
           handleOpenDialog(selectedResource!);
         }}>
-          <ListItemIcon>
-            <EditIcon fontSize="small" />
-          </ListItemIcon>
           <ListItemText>수정</ListItemText>
         </MenuItem>
         <MenuItem onClick={() => {
@@ -479,9 +464,6 @@ const ResourcesPage: React.FC = () => {
             console.log('Download:', selectedResource.file_path);
           }
         }}>
-          <ListItemIcon>
-            <DownloadIcon fontSize="small" />
-          </ListItemIcon>
           <ListItemText>다운로드</ListItemText>
         </MenuItem>
         <MenuItem onClick={() => {
@@ -490,9 +472,6 @@ const ResourcesPage: React.FC = () => {
             handleDelete(selectedResource);
           }
         }} sx={{ color: 'error.main' }}>
-          <ListItemIcon>
-            <DeleteIcon fontSize="small" color="error" />
-          </ListItemIcon>
           <ListItemText>삭제</ListItemText>
         </MenuItem>
       </Menu>
@@ -531,10 +510,7 @@ const ResourcesPage: React.FC = () => {
                 >
                   {resourceTypes.map((type) => (
                     <MenuItem key={type.value} value={type.value}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <type.icon sx={{ color: type.color }} />
-                        {type.label}
-                      </Box>
+                      {type.label}
                     </MenuItem>
                   ))}
                 </Select>

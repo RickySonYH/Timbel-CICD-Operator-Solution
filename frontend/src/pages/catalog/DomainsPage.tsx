@@ -28,13 +28,7 @@ import {
   ListItemText
 } from '@mui/material';
 import {
-  Add as AddIcon,
-  Edit as EditIcon,
-  Delete as DeleteIcon,
-  MoreVert as MoreVertIcon,
-  Domain as DomainIcon,
-  Visibility as ViewIcon,
-  Settings as SettingsIcon
+  Add as AddIcon
 } from '@mui/icons-material';
 import { useJwtAuthStore } from '../../store/jwtAuthStore';
 
@@ -270,12 +264,9 @@ const DomainsPage: React.FC = () => {
                 {domains.map((domain) => (
                   <TableRow key={domain.id}>
                     <TableCell>
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <DomainIcon sx={{ mr: 1, color: '#1976d2' }} />
-                        <Typography variant="subtitle2" sx={{ fontWeight: 500 }}>
-                          {domain.name}
-                        </Typography>
-                      </Box>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 500 }}>
+                        {domain.name}
+                      </Typography>
                     </TableCell>
                     <TableCell>
                       <Typography variant="body2" color="text.secondary">
@@ -303,14 +294,16 @@ const DomainsPage: React.FC = () => {
                       </Typography>
                     </TableCell>
                     <TableCell align="center">
-                      <IconButton
+                      <Button
+                        variant="outlined"
+                        size="small"
                         onClick={(e) => {
                           setAnchorEl(e.currentTarget);
                           setSelectedDomain(domain);
                         }}
                       >
-                        <MoreVertIcon />
-                      </IconButton>
+                        작업
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -327,15 +320,9 @@ const DomainsPage: React.FC = () => {
         onClose={() => setAnchorEl(null)}
       >
         <MenuItem onClick={() => selectedDomain && handleEdit(selectedDomain)}>
-          <ListItemIcon>
-            <EditIcon fontSize="small" />
-          </ListItemIcon>
           <ListItemText>수정</ListItemText>
         </MenuItem>
         <MenuItem onClick={() => selectedDomain && handleDelete(selectedDomain)}>
-          <ListItemIcon>
-            <DeleteIcon fontSize="small" />
-          </ListItemIcon>
           <ListItemText>삭제</ListItemText>
         </MenuItem>
       </Menu>

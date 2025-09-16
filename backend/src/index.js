@@ -165,7 +165,7 @@ app.post('/api/auth/login', async (req, res) => {
     const pool = new Pool({
       user: process.env.DB_USER || 'timbel_user',
       host: process.env.DB_HOST || 'postgres',
-      database: process.env.DB_NAME || 'timbel_knowledge',
+      database: process.env.DB_NAME || 'timbel_db',
       password: process.env.DB_PASSWORD || 'timbel_password',
       port: process.env.DB_PORT || 5432,
     });
@@ -198,10 +198,11 @@ app.post('/api/auth/login', async (req, res) => {
       userId: actualUserId,
       email: user.email,
       permissionLevel: user.permissionLevel,
+      roleType: user.roleType,
       sessionId: req.sessionID
     };
     
-    const jwtToken = jwt.sign(jwtPayload, process.env.JWT_SECRET || 'your-secret-key', jwtSettings);
+    const jwtToken = jwt.sign(jwtPayload, process.env.JWT_SECRET || 'timbel-super-secret-jwt-key-change-in-production', jwtSettings);
 
     // [advice from AI] 세션 저장 후 응답
     req.session.save((err) => {
@@ -407,6 +408,10 @@ const monitoringRouter = require('./routes/monitoring');
 const catalogCICDRouter = require('./routes/catalogCICD');
 app.use('/api/monitoring', monitoringRouter);
 app.use('/api/catalog/cicd', catalogCICDRouter);
+
+// [advice from AI] 승인 및 의사결정 라우트
+const approvalsRouter = require('./routes/approvals');
+app.use('/api/approvals', approvalsRouter);
 
 // [advice from AI] 서버 시작
 app.listen(PORT, () => {

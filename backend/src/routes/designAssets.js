@@ -6,16 +6,19 @@ const { Pool } = require('pg');
 
 const router = express.Router();
 
-// [advice from AI] 데이터베이스 연결 설정
+// [advice from AI] 데이터베이스 연결 설정 (통일된 설정)
 const pool = new Pool({
   user: process.env.DB_USER || 'timbel_user',
-  host: process.env.DB_HOST || 'postgres',
-  database: process.env.DB_NAME || 'timbel_knowledge',
+  host: process.env.DB_HOST || 'localhost',
+  database: process.env.DB_NAME || 'timbel_db',
   password: process.env.DB_PASSWORD || 'timbel_password',
-  port: process.env.DB_PORT || 5432,
+  port: process.env.DB_PORT || 5434,
 });
 
-// [advice from AI] JWT 인증 미들웨어
+// [advice from AI] JWT 인증 미들웨어 import
+const jwtAuth = require('../middleware/jwtAuth');
+
+// [advice from AI] 기존 authenticateToken 함수 (호환성을 위해 유지)
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -25,8 +28,9 @@ const authenticateToken = (req, res, next) => {
   }
 
   const jwt = require('jsonwebtoken');
-  jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key', (err, user) => {
+  jwt.verify(token, process.env.JWT_SECRET || 'timbel-super-secret-jwt-key-change-in-production', (err, user) => {
     if (err) {
+      console.error('❌ JWT 토큰 검증 실패:', err.message);
       return res.status(403).json({ success: false, error: 'Invalid token' });
     }
     req.user = user;
