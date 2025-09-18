@@ -44,7 +44,9 @@ import {
   Help as HelpIcon,
   Save as SaveIcon
 } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 import { useJwtAuthStore } from '../../../store/jwtAuthStore';
+import KnowledgeAssetDetail from '../../../components/knowledge/KnowledgeAssetDetail';
 
 interface Document {
   id: string;
@@ -73,6 +75,7 @@ interface Document {
 
 const DocumentGuideRegistration: React.FC = () => {
   const { token } = useJwtAuthStore();
+  const navigate = useNavigate();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,6 +104,10 @@ const DocumentGuideRegistration: React.FC = () => {
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
   const [showDocumentDialog, setShowDocumentDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [selectedAsset, setSelectedAsset] = useState<{
+    type: 'document';
+    id: string;
+  } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -126,7 +133,7 @@ const DocumentGuideRegistration: React.FC = () => {
       if (selectedType) params.append('type', selectedType);
       if (selectedStatus) params.append('status', selectedStatus);
 
-      const response = await fetch(`http://localhost:3001/api/documents?${params}`, {
+      const response = await fetch(`/api/documents?${params}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -166,7 +173,7 @@ const DocumentGuideRegistration: React.FC = () => {
         formData.append('file', selectedFile);
       }
 
-      const response = await fetch('http://localhost:3001/api/documents', {
+      const response = await fetch('/api/documents', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -214,7 +221,7 @@ const DocumentGuideRegistration: React.FC = () => {
 
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:3001/api/documents/${documentId}`, {
+      const response = await fetch(`/api/documents/${documentId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -241,7 +248,7 @@ const DocumentGuideRegistration: React.FC = () => {
     if (!doc.file_info) return;
 
     try {
-      const response = await fetch(`http://localhost:3001/api/documents/${doc.id}/download`, {
+      const response = await fetch(`/api/documents/${doc.id}/download`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -310,16 +317,25 @@ const DocumentGuideRegistration: React.FC = () => {
       {/* [advice from AI] 헤더 */}
       <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="h4" component="h1" gutterBottom>
-          📚 문서/가이드 등록 및 관리
+          📚 문서/가이드 카탈로그
         </Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => setTabValue(1)}
-          sx={{ bgcolor: 'primary.main' }}
-        >
-          새 문서 등록
-        </Button>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <Button
+            variant="outlined"
+            onClick={() => navigate('/knowledge/auto-registration')}
+            color="secondary"
+          >
+            자동 등록
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => setTabValue(1)}
+            sx={{ bgcolor: 'primary.main' }}
+          >
+            새 문서 등록
+          </Button>
+        </Box>
       </Box>
 
       {/* [advice from AI] 에러 메시지 */}
@@ -490,7 +506,11 @@ const DocumentGuideRegistration: React.FC = () => {
                         </Box>
                         
                         <Box sx={{ display: 'flex', gap: 0.5 }}>
-                          <IconButton size="small" onClick={() => setShowDocumentDialog(true)}>
+                          <IconButton 
+                            size="small" 
+                            onClick={() => setSelectedAsset({ type: 'document', id: document.id })}
+                            title="상세 보기"
+                          >
                             <ViewIcon />
                           </IconButton>
                           <IconButton size="small">
@@ -798,6 +818,16 @@ const DocumentGuideRegistration: React.FC = () => {
           <Button onClick={() => setShowDocumentDialog(false)}>닫기</Button>
         </DialogActions>
       </Dialog>
+
+      {/* 상세 보기 다이얼로그 */}
+      {selectedAsset && (
+        <KnowledgeAssetDetail
+          open={!!selectedAsset}
+          onClose={() => setSelectedAsset(null)}
+          assetType={selectedAsset.type}
+          assetId={selectedAsset.id}
+        />
+      )}
     </Box>
   );
 };

@@ -122,9 +122,9 @@ const ApprovalFlowVisualization: React.FC<ApprovalFlowVisualizationProps> = ({
 
   useEffect(() => {
     loadFlowData();
-    // 30초마다 데이터 새로고침
-    const interval = setInterval(loadFlowData, 30000);
-    return () => clearInterval(interval);
+    // [advice from AI] 자동 갱신 제거 - 무한 루프 방지
+    // const interval = setInterval(loadFlowData, 30000);
+    // return () => clearInterval(interval);
   }, [token, requestId]);
 
   // [advice from AI] 상태별 아이콘

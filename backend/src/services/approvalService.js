@@ -42,9 +42,8 @@ class ApprovalService {
         description,
         type,
         category,
-        amount,
-        currency = 'KRW',
         priority = 'medium',
+        requesterId,
         requester_id,
         department_id,
         project_id,
@@ -52,47 +51,49 @@ class ApprovalService {
         approvers = [],
         metadata = {}
       } = requestData;
+      
+      const finalRequesterId = requesterId || requester_id;
 
-      // [advice from AI] 승인 요청 생성
+      // [advice from AI] 승인 요청 생성 - amount 컴럼 제거
       const requestResult = await client.query(`
         INSERT INTO approval_requests (
-          title, description, type, category, amount, currency, priority,
+          title, description, type, category, priority,
           requester_id, department_id, project_id, due_date, metadata
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         RETURNING id, request_id, created_at
       `, [
-        title, description, type, category, amount, currency, priority,
-        requester_id, department_id, project_id, due_date, JSON.stringify(metadata)
+        title, description, type, category, priority,
+        finalRequesterId, department_id, project_id, due_date, JSON.stringify(metadata)
       ]);
 
       const request = requestResult.rows[0];
 
       // [advice from AI] 워크플로우 엔진을 통한 승인자 자동 할당
       const workflowResult = await this.workflowEngine.createApprovalWorkflow({
-        amount,
-        currency,
-        project_type: type,
-        requester_id,
+        approval_type: type,
+        requester_id: finalRequesterId,
         department_id,
         project_id,
         priority
       });
 
+      // [advice from AI] 워크플로우 실행은 트랜잭션 커밋 후 진행
+      let workflowSteps = null;
       if (workflowResult.success) {
-        // [advice from AI] 워크플로우 실행
-        await this.workflowEngine.executeWorkflow(request.request_id, workflowResult.data.workflowSteps);
+        workflowSteps = workflowResult.data.workflowSteps;
       } else {
         // [advice from AI] 수동 승인자 할당 (워크플로우 생성 실패 시)
         for (let i = 0; i < approvers.length; i++) {
           const approver = approvers[i];
           await client.query(`
             INSERT INTO approval_assignments (
-              request_id, approver_id, level, approver_config
-            ) VALUES ($1, $2, $3, $4)
+              request_id, approver_id, level, timeout_hours, escalation_config
+            ) VALUES ($1, $2, $3, $4, $5)
           `, [
             request.request_id,
             approver.user_id,
             i + 1,
+            24,
             JSON.stringify(approver.config || {})
           ]);
         }
@@ -104,11 +105,21 @@ class ApprovalService {
         VALUES ($1, 'created', $2, $3)
       `, [
         request.request_id,
-        requester_id,
-        JSON.stringify({ title, type, amount })
+        finalRequesterId,
+        JSON.stringify({ title, type, priority })
       ]);
 
       await client.query('COMMIT');
+
+      // [advice from AI] 트랜잭션 커밋 후 워크플로우 실행
+      if (workflowSteps) {
+        try {
+          await this.workflowEngine.executeWorkflow(request.request_id, workflowSteps);
+        } catch (workflowError) {
+          console.error('워크플로우 실행 실패:', workflowError);
+          // 워크플로우 실행 실패해도 승인 요청은 성공으로 처리
+        }
+      }
 
       // [advice from AI] 알림 전송
       await this.sendApprovalNotifications(request.request_id, 'request_created');
@@ -222,6 +233,94 @@ class ApprovalService {
       await client.query('ROLLBACK');
       console.error('승인 응답 처리 실패:', error);
       throw new Error(`승인 응답 처리 실패: ${error.message}`);
+    } finally {
+      client.release();
+    }
+  }
+
+  // [advice from AI] 승인 처리 (승인/거부)
+  async processApproval(approvalData) {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const { requestId, approverId, action, comment, metadata = {} } = approvalData;
+
+      console.log('승인 처리 시작:', { requestId, approverId, action });
+
+      // [advice from AI] 승인 할당 업데이트
+      const updateResult = await client.query(`
+        UPDATE approval_assignments 
+        SET 
+          status = $1,
+          response_comment = $2,
+          responded_at = NOW(),
+          response_metadata = $3,
+          updated_at = NOW()
+        WHERE request_id = $4 AND approver_id = $5 AND status = 'pending'
+        RETURNING *
+      `, [action === 'approve' ? 'approved' : 'rejected', comment, JSON.stringify(metadata), requestId, approverId]);
+
+      if (updateResult.rows.length === 0) {
+        throw new Error('승인 할당을 찾을 수 없거나 이미 처리되었습니다');
+      }
+
+      const assignment = updateResult.rows[0];
+
+      // [advice from AI] 승인 로그 기록
+      await client.query(`
+        INSERT INTO approval_logs (request_id, action, actor_id, details)
+        VALUES ($1, $2, $3, $4)
+      `, [
+        requestId,
+        action === 'approve' ? 'approved' : 'rejected',
+        approverId,
+        JSON.stringify({ comment, level: assignment.level, metadata })
+      ]);
+
+      // [advice from AI] 전체 승인 상태 확인
+      const allAssignmentsResult = await client.query(`
+        SELECT status, level FROM approval_assignments 
+        WHERE request_id = $1 
+        ORDER BY level ASC
+      `, [requestId]);
+
+      const assignments = allAssignmentsResult.rows;
+      let overallStatus = 'pending';
+
+      // 거부가 하나라도 있으면 전체 거부
+      if (assignments.some(a => a.status === 'rejected')) {
+        overallStatus = 'rejected';
+      }
+      // 모든 단계가 승인되면 전체 승인
+      else if (assignments.every(a => a.status === 'approved')) {
+        overallStatus = 'approved';
+      }
+
+      // [advice from AI] 승인 요청 상태 업데이트
+      await client.query(`
+        UPDATE approval_requests 
+        SET 
+          status = $1,
+          updated_at = NOW()
+        WHERE request_id = $2
+      `, [overallStatus, requestId]);
+
+      await client.query('COMMIT');
+
+      console.log(`✅ 승인 처리 완료: ${requestId} → ${action} (전체 상태: ${overallStatus})`);
+
+      return {
+        success: true,
+        assignment: assignment,
+        overallStatus: overallStatus,
+        message: `${action === 'approve' ? '승인' : '거부'} 처리가 완료되었습니다`
+      };
+
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('승인 처리 실패:', error);
+      throw new Error(`승인 처리 실패: ${error.message}`);
     } finally {
       client.release();
     }
@@ -504,6 +603,17 @@ class ApprovalService {
                 url: `/approvals/${request_id}`,
                 data: { request_id, type: 'approval_request' }
               });
+              // [advice from AI] 메신저 알림 추가
+              await this.sendMessage({
+                request_id: request_id,
+                request_type: 'approval',
+                sender_id: request.requester_id,
+                recipient_id: approver.approver_id,
+                subject: `[승인 요청] ${request.title}`,
+                content: `${request.requester_name}님이 "${request.title}"에 대한 승인을 요청했습니다.\n\n설명: ${request.description}`,
+                message_type: 'request',
+                priority: request.priority
+              });
             }
           }
           break;
@@ -597,8 +707,7 @@ class ApprovalService {
           recipient_name: recipient.full_name,
           request_title: request.title,
           request_type: request.type,
-          amount: request.amount,
-          currency: request.currency,
+          priority: request.priority,
           requester_name: request.requester_name,
           due_date: request.due_date,
           ...additionalData

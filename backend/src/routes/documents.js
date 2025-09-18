@@ -3,16 +3,17 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
 const { Pool } = require('pg');
+const jwtAuth = require('../middleware/jwtAuth');
 
 const router = express.Router();
 
 // [advice from AI] 데이터베이스 연결 설정
 const pool = new Pool({
   user: process.env.DB_USER || 'timbel_user',
-  host: process.env.DB_HOST || 'postgres',
-  database: process.env.DB_NAME || 'timbel_knowledge',
+  host: process.env.DB_HOST || 'localhost',
+  database: process.env.DB_NAME || 'timbel_db',
   password: process.env.DB_PASSWORD || 'timbel_password',
-  port: process.env.DB_PORT || 5432,
+  port: process.env.DB_PORT || 5434,
 });
 
 // [advice from AI] JWT 인증 미들웨어
@@ -25,7 +26,7 @@ const authenticateToken = (req, res, next) => {
   }
 
   const jwt = require('jsonwebtoken');
-  jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key', (err, user) => {
+  jwt.verify(token, process.env.JWT_SECRET || 'timbel-super-secret-jwt-key-change-in-production', (err, user) => {
     if (err) {
       return res.status(403).json({ success: false, error: 'Invalid token' });
     }
@@ -108,13 +109,13 @@ const upload = multer({
 });
 
 // [advice from AI] 문서 목록 조회
-router.get('/', authenticateToken, checkPermission('documents', 'read'), async (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
     const { category, type, search } = req.query;
     let query = `
-      SELECT d.*, u.full_name as creator_name
+      SELECT d.*, u.full_name as author_name
       FROM documents d
-      LEFT JOIN timbel_users u ON d.creator_id = u.id
+      LEFT JOIN timbel_users u ON d.author_id = u.id
       WHERE 1=1
     `;
     const params = [];
@@ -128,7 +129,7 @@ router.get('/', authenticateToken, checkPermission('documents', 'read'), async (
 
     if (type) {
       paramCount++;
-      query += ` AND d.type = $${paramCount}`;
+      query += ` AND d.format = $${paramCount}`;
       params.push(type);
     }
 
@@ -156,7 +157,7 @@ router.get('/', authenticateToken, checkPermission('documents', 'read'), async (
 });
 
 // [advice from AI] 문서 상세 조회
-router.get('/:id', authenticateToken, checkPermission('documents', 'read'), async (req, res) => {
+router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT d.*, u.full_name as creator_name
@@ -185,8 +186,8 @@ router.get('/:id', authenticateToken, checkPermission('documents', 'read'), asyn
   }
 });
 
-// [advice from AI] 문서 생성 (파일 업로드 또는 온라인 작성)
-router.post('/', authenticateToken, checkPermission('documents', 'create'), upload.single('file'), async (req, res) => {
+// [advice from AI] 문서 생성 - Admin, PO, PE만 가능
+router.post('/', jwtAuth.verifyToken, jwtAuth.requireRole(['admin', 'po', 'pe']), upload.single('file'), async (req, res) => {
   try {
     const { 
       title, content, category, type, tags, version, status, is_public 
@@ -240,8 +241,8 @@ router.post('/', authenticateToken, checkPermission('documents', 'create'), uplo
   }
 });
 
-// [advice from AI] 문서 수정
-router.put('/:id', authenticateToken, checkPermission('documents', 'update'), async (req, res) => {
+// [advice from AI] 문서 수정 - Admin, PO, PE만 가능
+router.put('/:id', jwtAuth.verifyToken, jwtAuth.requireRole(['admin', 'po', 'pe']), async (req, res) => {
   try {
     const { title, content, category, type, tags, version, status, is_public } = req.body;
     
@@ -280,8 +281,8 @@ router.put('/:id', authenticateToken, checkPermission('documents', 'update'), as
   }
 });
 
-// [advice from AI] 문서 삭제
-router.delete('/:id', authenticateToken, checkPermission('documents', 'delete'), async (req, res) => {
+// [advice from AI] 문서 삭제 - Admin만 가능
+router.delete('/:id', jwtAuth.verifyToken, jwtAuth.requireRole(['admin']), async (req, res) => {
   try {
     const result = await pool.query(`
       DELETE FROM documents 

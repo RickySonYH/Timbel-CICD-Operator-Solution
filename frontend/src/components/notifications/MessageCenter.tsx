@@ -72,6 +72,18 @@ const MessageCenter: React.FC = () => {
   const navigate = useNavigate();
   const { user, token } = useJwtAuthStore();
 
+  // [advice from AI] 동적 API URL 결정 로직
+  const getApiUrl = (): string => {
+    const currentHost = window.location.host;
+    if (currentHost === 'localhost:3000' || currentHost === '127.0.0.1:3000') {
+      // 내부 접속 - 직접 백엔드 포트로
+      return 'http://localhost:3001';
+    } else {
+      // 외부 접속 - Nginx 프록시를 통해
+      return '';  // 상대 경로 사용
+    }
+  };
+
   const open = Boolean(anchorEl);
 
   // [advice from AI] 알림 통계 및 최근 알림 로드
@@ -84,13 +96,13 @@ const MessageCenter: React.FC = () => {
 
       // [advice from AI] 병렬로 데이터 로드
       const [statsResponse, notificationsResponse] = await Promise.all([
-        fetch('http://localhost:3001/api/approvals/dashboard/stats', {
+        fetch('/api/approvals/dashboard/stats', {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           }
         }),
-        fetch('http://localhost:3001/api/approvals/messages?limit=10&is_read=false', {
+        fetch(`${getApiUrl()}/api/approvals/messages?limit=10&is_read=false`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
@@ -119,15 +131,21 @@ const MessageCenter: React.FC = () => {
     }
   };
 
-  // [advice from AI] 컴포넌트 마운트 시 데이터 로드
+  // [advice from AI] 컴포넌트 마운트 시 데이터 로드 - 오류 처리 개선한 자동 갱신
   useEffect(() => {
+    if (!user || !token) return;
+    
     loadNotificationData();
     
-    // [advice from AI] 30초마다 자동 갱신
-    const interval = setInterval(loadNotificationData, 30000);
+    // [advice from AI] 60초마다 자동 갱신 (오류 시에도 계속 시도하지만 로그만 남김)
+    const interval = setInterval(() => {
+      if (user && token) {
+        loadNotificationData();
+      }
+    }, 60000); // 30초 → 60초로 늘려서 부하 감소
     
     return () => clearInterval(interval);
-  }, [user]);
+  }, [user, token]);
 
   // [advice from AI] 메뉴 열기/닫기
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
@@ -283,8 +301,8 @@ const MessageCenter: React.FC = () => {
           </Box>
         </Box>
 
-        {/* [advice from AI] 최근 알림 목록 */}
-        <Box sx={{ maxHeight: 300, overflow: 'auto' }}>
+        {/* [advice from AI] Phase 4: 최근 알림 목록 (3개만 표시) */}
+        <Box sx={{ maxHeight: 200, overflow: 'auto' }}>
           {loading ? (
             <Box sx={{ p: 2, textAlign: 'center' }}>
               <Typography variant="body2" color="text.secondary">
@@ -293,7 +311,7 @@ const MessageCenter: React.FC = () => {
             </Box>
           ) : recentNotifications.length > 0 ? (
             <List sx={{ py: 0 }}>
-                {recentNotifications.map((notification: NotificationItem, index: number) => (
+                {recentNotifications.slice(0, 3).map((notification: NotificationItem, index: number) => (
                 <React.Fragment key={notification.id}>
                   <ListItem
                     button
@@ -384,7 +402,7 @@ const MessageCenter: React.FC = () => {
             variant="outlined"
             onClick={() => {
               handleClose();
-              navigate('/approvals/dashboard');
+              navigate('/admin/approvals/dashboard');
             }}
           >
             전체 승인 대시보드 보기

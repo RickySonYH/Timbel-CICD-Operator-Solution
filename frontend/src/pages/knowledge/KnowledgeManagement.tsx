@@ -1,5 +1,5 @@
-// [advice from AI] 지식 등록 및 관리 메인 페이지
-// 지식 등록 및 관리의 진입점 역할
+// [advice from AI] 지식자원 카탈로그 메인 페이지
+// 지식자원 카탈로그의 진입점 역할
 
 import React from 'react';
 import { Box, Typography } from '@mui/material';
@@ -16,7 +16,7 @@ const KnowledgeManagement: React.FC = () => {
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h4" component="h1" gutterBottom>
-        지식 등록 및 관리
+        지식자원 카탈로그
       </Typography>
       <Typography variant="body1" color="text.secondary">
         지식 관리 대시보드로 이동 중...

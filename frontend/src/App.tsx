@@ -11,31 +11,35 @@ import LoginForm from './components/auth/LoginForm';
 import LoginJWT from './pages/LoginJWT';
 import Footer from './components/common/Footer';
 import Dashboard from './pages/Dashboard';
-import Catalog from './pages/Catalog';
-// [advice from AI] 카탈로그 하위 메뉴 페이지들
-import CatalogDashboard from './pages/catalog/CatalogDashboard';
-import DomainsPage from './pages/catalog/DomainsPage';
-import SystemsPage from './pages/catalog/SystemsPage';
-import ComponentsPage from './pages/catalog/ComponentsPage';
-import APIsPage from './pages/catalog/APIsPage';
-import ResourcesPage from './pages/catalog/ResourcesPage';
+// [advice from AI] Phase 1: 카탈로그 페이지들 제거됨 - 지식 관리로 통합
 
 // [advice from AI] 지식 등록 및 관리 페이지들 (독립 메뉴로 이동)
 import KnowledgeManagement from './pages/knowledge/KnowledgeManagement';
 import KnowledgeDashboard from './pages/knowledge/KnowledgeDashboard';
+import AutoKnowledgeRegistration from './pages/knowledge/AutoKnowledgeRegistration';
 // [advice from AI] 지식 등록 및 관리 페이지들
 import DesignAssetRegistration from './pages/catalog/knowledge/DesignAssetRegistration';
 import CodeComponentRegistration from './pages/catalog/knowledge/CodeComponentRegistration';
 import DocumentGuideRegistration from './pages/catalog/knowledge/DocumentGuideRegistration';
-import KnowledgeSearchManagement from './pages/catalog/knowledge/KnowledgeSearchManagement';
 import ApprovalWorkflow from './pages/catalog/knowledge/ApprovalWorkflow';
 import DiagramManagement from './pages/catalog/knowledge/DiagramManagement';
-import Projects from './pages/Projects';
+import SystemManagement from './pages/knowledge/SystemManagement';
+import DomainManagement from './pages/knowledge/DomainManagement';
+import ProjectManagement from './pages/knowledge/ProjectManagement';
+import SystemRepositoryView from './pages/systems/SystemRepositoryView';
+// [advice from AI] Phase 1: 카탈로그 관련 컴포넌트들 제거됨
+import SystemApprovalPending from './pages/admin/approvals/SystemApprovalPending';
+import AssetApprovalPending from './pages/admin/approvals/AssetApprovalPending';
+import ApprovedAssetsManagement from './pages/admin/approvals/ApprovedAssetsManagement';
+import DiagramEditor from './pages/knowledge/DiagramEditor';
+import MyPendingApprovals from './pages/knowledge/MyPendingApprovals';
 import VibeStudio from './pages/VibeStudio';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import Analytics from './pages/admin/Analytics';
 import GroupManagement from './pages/admin/GroupManagement';
 import PermissionManagement from './pages/admin/PermissionManagement';
+import PermissionSettings from './pages/admin/PermissionSettings';
+import MembersList from './pages/admin/MembersList';
 import SystemSettings from './pages/admin/SystemSettings';
 import LogManagement from './pages/admin/LogManagement';
 import BackupRestore from './pages/admin/BackupRestore';
@@ -111,11 +115,11 @@ function AppContent() {
     }
   }, [isAuthenticated, checkTokenExpiration]);
 
-  // [advice from AI] 로그아웃 후 홈으로 리다이렉트
+  // [advice from AI] 로그아웃 후 로그인 페이지로 리다이렉트
   useEffect(() => {
-    if (!isAuthenticated && location.pathname !== '/') {
-      console.log('🔒 인증되지 않음 - 홈으로 리다이렉트');
-      navigate('/', { replace: true });
+    if (!isAuthenticated && location.pathname !== '/login' && location.pathname !== '/') {
+      console.log('🔒 인증되지 않음 - 로그인 페이지로 리다이렉트');
+      navigate('/login', { replace: true });
     }
   }, [isAuthenticated, location.pathname, navigate]);
 
@@ -132,7 +136,7 @@ function AppContent() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [logout]);
 
-  // [advice from AI] 로그인되지 않은 경우 기존 로그인 폼 표시 (JWT 로그인은 별도 페이지)
+  // [advice from AI] 인증되지 않은 경우 기존 로그인 폼 표시
   if (!isAuthenticated) {
     return <LoginForm />;
   }
@@ -143,30 +147,45 @@ function AppContent() {
       <BackstageLayout title="Timbel 지식자원 플랫폼">
         <Routes>
           <Route path="/" element={<IntegratedMonitoringCenter />} />
-            <Route path="/catalog" element={<Catalog />} />
-            {/* [advice from AI] 카탈로그 하위 메뉴 라우트들 */}
-            <Route path="/catalog/dashboard" element={<CatalogDashboard />} />
-            <Route path="/catalog/domains" element={<DomainsPage />} />
-            <Route path="/catalog/systems" element={<SystemsPage />} />
-            <Route path="/catalog/components" element={<ComponentsPage />} />
-            <Route path="/catalog/apis" element={<APIsPage />} />
-            <Route path="/catalog/resources" element={<ResourcesPage />} />
+            {/* [advice from AI] Phase 1: 카탈로그 라우트를 지식 관리로 통합 리다이렉트 */}
+            <Route path="/catalog" element={<Navigate to="/knowledge/dashboard" replace />} />
+            <Route path="/catalog/dashboard" element={<Navigate to="/knowledge/dashboard" replace />} />
+            <Route path="/catalog/domains" element={<Navigate to="/knowledge/domains" replace />} />
+            <Route path="/catalog/systems" element={<Navigate to="/knowledge/systems" replace />} />
+            <Route path="/catalog/design-assets" element={<Navigate to="/knowledge/design" replace />} />
+            <Route path="/catalog/code-components" element={<Navigate to="/knowledge/code" replace />} />
+            <Route path="/catalog/documents" element={<Navigate to="/knowledge/docs" replace />} />
             {/* [advice from AI] 지식 등록 및 관리 라우트들 (독립 메뉴로 이동) */}
             <Route path="/knowledge" element={<KnowledgeManagement />} />
             <Route path="/knowledge/dashboard" element={<KnowledgeDashboard />} />
+            <Route path="/knowledge/auto-registration" element={<AutoKnowledgeRegistration />} />
+            <Route path="/knowledge/domains" element={<DomainManagement />} />
+            <Route path="/knowledge/projects" element={<ProjectManagement />} />
+            <Route path="/knowledge/systems" element={<SystemManagement />} />
             <Route path="/knowledge/design" element={<DesignAssetRegistration />} />
             <Route path="/knowledge/code" element={<CodeComponentRegistration />} />
             <Route path="/knowledge/docs" element={<DocumentGuideRegistration />} />
-            <Route path="/knowledge/search" element={<KnowledgeSearchManagement />} />
-            <Route path="/knowledge/approval" element={<ApprovalWorkflow />} />
-            <Route path="/knowledge/diagrams" element={<DiagramManagement />} />
-          <Route path="/projects" element={<Projects />} />
+              <Route path="/knowledge/diagram-editor" element={<DiagramEditor />} />
+              <Route path="/knowledge/my-approvals" element={<MyPendingApprovals />} />
+            
+            {/* 시스템 상세 뷰 */}
+            <Route path="/systems/:systemId" element={<SystemRepositoryView />} />
+            
+            {/* [advice from AI] 관계 시각화는 지식 관리 내부 탭으로 통합 예정 */}
+            <Route path="/catalog/relationships" element={<Navigate to="/knowledge/dashboard" replace />} />
+            
+            {/* 관리자 승인 관리 라우트 */}
+            <Route path="/admin/approvals/dashboard" element={<ApprovalWorkflow />} />
+            <Route path="/admin/approvals/systems-pending" element={<SystemApprovalPending />} />
+            <Route path="/admin/approvals/assets-pending" element={<AssetApprovalPending />} />
+            <Route path="/admin/approvals/approved-assets" element={<ApprovedAssetsManagement />} />
           <Route path="/vibe-studio" element={<VibeStudio />} />
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/admin/analytics" element={<Analytics />} />
           <Route path="/admin/users" element={<UserManagement />} />
+          <Route path="/admin/members" element={<MembersList />} />
           <Route path="/admin/groups" element={<GroupManagement />} />
-          <Route path="/admin/permissions" element={<PermissionManagement />} />
+          <Route path="/admin/permissions" element={<PermissionSettings />} />
           <Route path="/admin/settings" element={<SystemSettings />} />
           <Route path="/admin/security" element={<SecuritySettings />} />
           <Route path="/admin/api-keys" element={<ApiKeyManagement />} />

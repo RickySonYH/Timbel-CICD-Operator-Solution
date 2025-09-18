@@ -14,9 +14,20 @@ class ApiClient {
   private baseUrl: string;
 
   constructor() {
-    this.baseUrl = process.env.NODE_ENV === 'development' 
-      ? 'http://localhost:3001' 
-      : 'http://backend:3001';
+    // [advice from AI] 동적 API URL 감지 - 내부/외부 접속 자동 구분
+    this.baseUrl = this.getApiUrl();
+  }
+
+  // [advice from AI] 동적 API URL 결정 로직
+  private getApiUrl(): string {
+    const currentHost = window.location.host;
+    if (currentHost === 'localhost:3000' || currentHost === '127.0.0.1:3000') {
+      // 내부 접속 - 직접 백엔드 포트로
+      return 'http://localhost:3001';
+    } else {
+      // 외부 접속 - Nginx 프록시를 통해
+      return '';  // 상대 경로 사용
+    }
   }
 
   // [advice from AI] 인증 헤더 생성

@@ -1,37 +1,27 @@
-// [advice from AI] CRACO 설정으로 source-map-loader 문제 해결
 module.exports = {
   webpack: {
     configure: (webpackConfig) => {
-      // [advice from AI] source-map-loader 완전 제거
-      webpackConfig.module.rules = webpackConfig.module.rules.map(rule => {
-        if (rule.enforce === 'pre' && rule.test && rule.test.toString().includes('\\.(js|mjs|jsx|ts|tsx|css)$')) {
-          // source-map-loader 규칙을 찾아서 비활성화
-          rule.use = rule.use.filter(loader => {
-            return !loader.loader || !loader.loader.includes('source-map-loader');
-          });
-        }
-        return rule;
-      });
-
-      // [advice from AI] 소스맵 생성 완전 비활성화
-      webpackConfig.devtool = false;
+      // ESLint 플러그인 제거
+      webpackConfig.plugins = webpackConfig.plugins.filter(
+        plugin => plugin.constructor.name !== 'ESLintWebpackPlugin'
+      );
       
-      // [advice from AI] 모듈 해결 설정 개선
-      webpackConfig.resolve.fallback = {
-        ...webpackConfig.resolve.fallback,
-        "path": false,
-        "fs": false,
-        "os": false
-      };
-
+      // WebSocket 관련 설정 완전 비활성화
+      if (webpackConfig.devServer) {
+        webpackConfig.devServer.client = {
+          webSocketTransport: 'sockjs',
+          webSocketURL: undefined
+        };
+        webpackConfig.devServer.hot = false;
+        webpackConfig.devServer.liveReload = false;
+      }
+      
       return webpackConfig;
     }
   },
   devServer: {
-    // [advice from AI] 개발 서버 설정
-    overlay: {
-      warnings: false,
-      errors: false
-    }
+    client: false, // 클라이언트 WebSocket 완전 비활성화
+    hot: false,
+    liveReload: false
   }
 };

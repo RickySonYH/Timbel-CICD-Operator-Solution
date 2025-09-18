@@ -53,6 +53,13 @@ class ApprovalWorkflowEngine {
         priority: 'urgent',
         timeout_hours: 24
       },
+      // 시스템 등록 승인
+      'system_registration': {
+        requiredApprovers: ['qa_manager', 'po', 'admin'],
+        description: '새로운 시스템 등록 및 지식 자산 승인',
+        priority: 'medium',
+        timeout_hours: 48
+      },
       // 버그 수정 승인
       'bug_fix': {
         requiredApprovers: ['qa_manager'],
@@ -109,10 +116,9 @@ class ApprovalWorkflowEngine {
 
       // [advice from AI] 요청자 정보 조회
       const requesterResult = await this.pool.query(`
-        SELECT u.*, d.name as department_name, p.name as project_name
+        SELECT u.*, d.name as department_name
         FROM timbel_users u
         LEFT JOIN departments d ON u.department_id = d.id
-        LEFT JOIN projects p ON u.project_id = p.id
         WHERE u.id = $1
       `, [requester_id]);
 
@@ -234,7 +240,7 @@ class ApprovalWorkflowEngine {
           WHERE u.permission_level = 2 
           AND u.role_type = 'pe'
           AND u.department_id = $1
-          AND u.is_active = true
+          AND u.status = 'active'
           ORDER BY u.created_at ASC
           LIMIT 1
         `;
@@ -249,7 +255,7 @@ class ApprovalWorkflowEngine {
           LEFT JOIN departments d ON u.department_id = d.id
           WHERE u.permission_level = 3 
           AND u.role_type = 'qa'
-          AND u.is_active = true
+          AND u.status = 'active'
           ORDER BY u.created_at ASC
           LIMIT 1
         `;
@@ -263,7 +269,7 @@ class ApprovalWorkflowEngine {
           LEFT JOIN departments d ON u.department_id = d.id
           WHERE u.permission_level = 1 
           AND u.role_type = 'po'
-          AND u.is_active = true
+          AND u.status = 'active'
           ORDER BY u.created_at ASC
           LIMIT 1
         `;
@@ -277,7 +283,7 @@ class ApprovalWorkflowEngine {
           LEFT JOIN departments d ON u.department_id = d.id
           WHERE u.permission_level = 0 
           AND u.role_type = 'admin'
-          AND u.is_active = true
+          AND u.status = 'active'
           ORDER BY u.created_at ASC
           LIMIT 1
         `;
@@ -291,7 +297,7 @@ class ApprovalWorkflowEngine {
           LEFT JOIN departments d ON u.department_id = d.id
           WHERE u.permission_level = 4 
           AND u.role_type = 'ops'
-          AND u.is_active = true
+          AND u.status = 'active'
           ORDER BY u.created_at ASC
           LIMIT 1
         `;
@@ -312,7 +318,7 @@ class ApprovalWorkflowEngine {
       FROM timbel_users u
       LEFT JOIN departments d ON u.department_id = d.id
       WHERE (u.role_type = 'admin' OR u.permission_level <= 1)
-      AND u.is_active = true
+      AND u.status = 'active'
       AND (u.full_name ILIKE '%재무%' OR u.full_name ILIKE '%finance%' OR d.name ILIKE '%재무%')
       ORDER BY u.permission_level ASC
       LIMIT 1
@@ -527,12 +533,13 @@ class ApprovalWorkflowEngine {
         for (const step of workflowSteps) {
           await client.query(`
             INSERT INTO approval_assignments (
-              request_id, approver_id, level, approver_config
-            ) VALUES ($1, $2, $3, $4)
+              request_id, approver_id, level, timeout_hours, escalation_config
+            ) VALUES ($1, $2, $3, $4, $5)
           `, [
             request_id,
             step.approver_id,
             step.step_order,
+            step.timeout_hours || 24,
             JSON.stringify({
               step_id: step.step_id,
               step_name: step.step_name,

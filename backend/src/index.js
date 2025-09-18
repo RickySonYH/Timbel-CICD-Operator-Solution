@@ -7,12 +7,23 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const dotenv = require('dotenv');
 const axios = require('axios');
+const bcrypt = require('bcrypt');
+const { Pool } = require('pg');
 
 // [advice from AI] 세션 기반 인증 미들웨어
 const SessionAuthMiddleware = require('./middleware/sessionAuth');
 
 // 미들웨어 설정
 dotenv.config();
+
+// [advice from AI] PostgreSQL 연결 설정
+const pool = new Pool({
+  user: process.env.DB_USER || 'timbel_user',
+  host: process.env.DB_HOST || 'localhost',
+  database: process.env.DB_NAME || 'timbel_db',
+  password: process.env.DB_PASSWORD || 'timbel_password',
+  port: process.env.DB_PORT || 5434,
+});
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -78,128 +89,83 @@ app.get('/api/auth/me', (req, res) => {
 });
 
 app.post('/api/auth/login', async (req, res) => {
-  const { loginId, password } = req.body;
-  
-  // [advice from AI] PO-PE-QA-운영팀 구조 역할별 계정 인증
-  const roleUsers = {
-    'admin': {
-      id: 'admin-001',
-      username: 'admin',
-      email: 'admin@timbel.net',
-      fullName: '시스템 관리자',
-      permissionLevel: 0,
-      roleType: 'admin',
-      password: '1q2w3e4r'
-    },
-    'executive': {
-      id: 'exec-001',
-      username: 'executive',
-      email: 'executive@timbel.com',
-      fullName: '최고 관리자',
-      permissionLevel: 0,
-      roleType: 'executive',
-      password: '1q2w3e4r'
-    },
-    'po': {
-      id: 'po-001',
-      username: 'pouser',
-      email: 'po@timbel.com',
-      fullName: 'PO 사용자',
-      permissionLevel: 1,
-      roleType: 'po',
-      password: '1q2w3e4r'
-    },
-    'pe': {
-      id: 'pe-001',
-      username: 'peuser',
-      email: 'pe@timbel.com',
-      fullName: 'PE 사용자',
-      permissionLevel: 2,
-      roleType: 'pe',
-      password: '1q2w3e4r'
-    },
-    'qa': {
-      id: 'qa-001',
-      username: 'qauser',
-      email: 'qa@timbel.com',
-      fullName: 'QA 사용자',
-      permissionLevel: 3,
-      roleType: 'qa',
-      password: '1q2w3e4r'
-    },
-    'operations': {
-      id: 'op-001',
-      username: 'opuser',
-      email: 'operations@timbel.com',
-      fullName: '운영팀 사용자',
-      permissionLevel: 4,
-      roleType: 'operations',
-      password: '1q2w3e4r'
+  try {
+    const { email, username, loginId, password } = req.body;
+    
+    // [advice from AI] 로그인 ID 결정 (email, username, loginId 중 하나)
+    const identifier = email || username || loginId;
+    
+    if (!identifier || !password) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing credentials',
+        message: '이메일/사용자명과 비밀번호를 입력해주세요'
+      });
     }
-  };
 
-  // [advice from AI] 계정 확인
-  const user = Object.values(roleUsers).find(u => 
-    (u.username === loginId || u.email === loginId) && u.password === password
-  );
+    console.log(`🔐 로그인 시도: ${identifier}`);
 
-  if (user) {
+    // [advice from AI] 데이터베이스에서 사용자 조회
+    const result = await pool.query(`
+      SELECT id, username, email, password_hash, full_name, role_type, permission_level, work_permissions
+      FROM timbel_users 
+      WHERE username = $1 OR email = $1
+    `, [identifier]);
+
+    if (result.rows.length === 0) {
+      console.log(`❌ 사용자 없음: ${identifier}`);
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid credentials',
+        message: '아이디 또는 비밀번호가 잘못되었습니다'
+      });
+    }
+
+    const user = result.rows[0];
+    console.log(`👤 사용자 찾음: ${user.username} (${user.email})`);
+    
+    // [advice from AI] 비밀번호 검증
+    const isValidPassword = await bcrypt.compare(password, user.password_hash);
+    
+    if (!isValidPassword) {
+      console.log(`❌ 비밀번호 불일치: ${identifier}`);
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid credentials',
+        message: '아이디 또는 비밀번호가 잘못되었습니다'
+      });
+    }
+
+    console.log(`✅ 로그인 성공: ${user.username}`);
+
     // [advice from AI] 세션에 사용자 정보 저장
     req.session.user = {
       id: user.id,
       username: user.username,
       email: user.email,
-      fullName: user.fullName,
-      permissionLevel: user.permissionLevel,
-      roleType: user.roleType,
+      fullName: user.full_name,
+      permissionLevel: user.permission_level,
+      roleType: user.role_type,
       loginTime: new Date().toISOString()
     };
     
     req.session.lastActivity = new Date().toISOString();
 
-    // [advice from AI] JWT 토큰 생성 (데이터베이스의 실제 UUID 사용)
+    // [advice from AI] JWT 토큰 생성 (간단하게 정리)
     const jwt = require('jsonwebtoken');
     
-    // 데이터베이스에서 실제 사용자 ID 조회
-    const { Pool } = require('pg');
-    const pool = new Pool({
-      user: process.env.DB_USER || 'timbel_user',
-      host: process.env.DB_HOST || 'postgres',
-      database: process.env.DB_NAME || 'timbel_db',
-      password: process.env.DB_PASSWORD || 'timbel_password',
-      port: process.env.DB_PORT || 5432,
-    });
-    
-    const dbResult = await pool.query('SELECT id FROM timbel_users WHERE username = $1', [user.username]);
-    const actualUserId = dbResult.rows[0]?.id || user.id;
-    
-    // [advice from AI] JWT 설정을 데이터베이스에서 동적으로 읽기
-    let jwtSettings = {
-      expiresIn: '30m',
-      issuer: 'timbel-platform',
-      audience: 'timbel-users'
+    const jwtPayload = {
+      userId: user.id,
+      email: user.email,
+      permissionLevel: user.permission_level,
+      roleType: user.role_type,
+      sessionId: req.sessionID
     };
     
-    try {
-      const jwtSettingsResult = await pool.query('SELECT settings FROM system_settings WHERE key = $1', ['jwt_security']);
-      if (jwtSettingsResult.rows.length > 0) {
-        const dbJwtSettings = jwtSettingsResult.rows[0].settings;
-        jwtSettings = {
-          expiresIn: `${dbJwtSettings.expiresIn || '30m'}`,
-          issuer: dbJwtSettings.issuer || 'timbel-platform',
-          audience: dbJwtSettings.audience || 'timbel-users'
-        };
-      }
-    } catch (error) {
-      console.warn('JWT 설정을 데이터베이스에서 읽지 못했습니다. 기본값을 사용합니다:', error.message);
-    }
-    
-    const jwtPayload = {
-      userId: actualUserId,
-      email: user.email,
-      permissionLevel: user.permissionLevel,
-      roleType: user.roleType,
-      sessionId: req.sessionID
+    const jwtSettings = {
+      expiresIn: '24h',
+      issuer: 'timbel-platform',
+      audience: 'timbel-users'
     };
     
     const jwtToken = jwt.sign(jwtPayload, process.env.JWT_SECRET || 'timbel-super-secret-jwt-key-change-in-production', jwtSettings);
@@ -226,11 +192,12 @@ app.post('/api/auth/login', async (req, res) => {
         }
       });
     });
-  } else {
-    return res.status(401).json({ 
+  } catch (error) {
+    console.error('❌ 로그인 처리 오류:', error);
+    return res.status(500).json({
       success: false,
-      error: 'Invalid credentials',
-      message: '아이디 또는 비밀번호가 잘못되었습니다' 
+      error: 'Internal Server Error',
+      message: '로그인 처리 중 오류가 발생했습니다'
     });
   }
 });
@@ -384,8 +351,6 @@ const designAssetsRouter = require('./routes/designAssets');
 app.use('/api/design-assets', designAssetsRouter);
 
 // [advice from AI] 코드 컴포넌트 라우트
-const codeComponentsRouter = require('./routes/codeComponents');
-app.use('/api/code-components', codeComponentsRouter);
 
 // [advice from AI] 문서/가이드 라우트
 const documentsRouter = require('./routes/documents');
@@ -413,16 +378,64 @@ app.use('/api/catalog/cicd', catalogCICDRouter);
 const approvalsRouter = require('./routes/approvals');
 app.use('/api/approvals', approvalsRouter);
 
-// [advice from AI] 서버 시작
-app.listen(PORT, () => {
+// [advice from AI] 지식 추출 라우트
+const knowledgeExtractionRouter = require('./routes/knowledgeExtraction');
+app.use('/api/knowledge-extraction', knowledgeExtractionRouter);
+
+// [advice from AI] 시스템 관리 라우트
+const systemsRouter = require('./routes/systems');
+const relationshipsRouter = require('./routes/relationships');
+const domainsRouter = require('./routes/domains');
+const codeComponentsRouter = require('./routes/codeComponents');
+app.use('/api/systems', systemsRouter);
+app.use('/api/relationships', relationshipsRouter);
+app.use('/api/domains', domainsRouter);
+// [advice from AI] 코드 컴포넌트 등록 관리용 API (모든 상태 조회)
+app.use('/api/code-components', codeComponentsRouter);
+
+// [advice from AI] 전역 에러 핸들러 추가
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  console.error('스택 트레이스:', error.stack);
+  // 서버를 안전하게 종료하지 않고 로그만 기록
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  // 서버를 안전하게 종료하지 않고 로그만 기록
+});
+
+// [advice from AI] 프로젝트 API 라우터 등록 (간단한 버전)
+const projectsRouter = require('./routes/projects-simple');
+app.use('/api/projects', projectsRouter);
+
+// [advice from AI] 포트 사용 중 에러 처리
+const server = app.listen(PORT, () => {
   console.log(`🚀 Timbel 플랫폼 서버가 포트 ${PORT}에서 실행 중입니다`);
   console.log(`📊 환경: ${process.env.NODE_ENV}`);
   console.log(`🔗 헬스체크: http://localhost:${PORT}/health`);
   console.log(`🚀 운영 센터 API: http://localhost:${PORT}/api/operations`);
+  console.log(`📁 프로젝트 API: http://localhost:${PORT}/api/projects`);
 });
 
-// Graceful shutdown
-process.on('SIGINT', () => {
-  console.log('Shutting down server...');
-  process.exit(0);
+server.on('error', (error) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(`❌ 포트 ${PORT}가 이미 사용 중입니다. 다른 포트를 사용하거나 기존 프로세스를 종료하세요.`);
+    process.exit(1);
+  } else {
+    console.error('❌ 서버 오류:', error);
+    throw error;
+  }
 });
+
+// [advice from AI] 안전한 서버 종료 처리
+const gracefulShutdown = () => {
+  console.log('🔄 서버 종료 신호를 받았습니다. 안전하게 종료 중...');
+  server.close(() => {
+    console.log('✅ 서버가 안전하게 종료되었습니다.');
+    process.exit(0);
+  });
+};
+
+process.on('SIGTERM', gracefulShutdown);
+process.on('SIGINT', gracefulShutdown);

@@ -123,9 +123,9 @@ const TeamApprovalStatus: React.FC = () => {
 
   useEffect(() => {
     loadTeamStats();
-    // 1분마다 데이터 새로고침
-    const interval = setInterval(loadTeamStats, 60000);
-    return () => clearInterval(interval);
+    // [advice from AI] 자동 갱신 제거 - 무한 루프 방지
+    // const interval = setInterval(loadTeamStats, 60000);
+    // return () => clearInterval(interval);
   }, [token]);
 
   // [advice from AI] 상태별 색상

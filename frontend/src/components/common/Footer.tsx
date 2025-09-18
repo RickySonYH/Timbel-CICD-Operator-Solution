@@ -26,7 +26,7 @@ const Footer: React.FC = () => {
               (주)팀벨 Timeless Label
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              대표: 윤종우
+              대표: 윤종후
             </Typography>
             <Typography variant="body2" color="text.secondary">
               서울 강남구 강남대로 94길 66, 신동빌딩 3-5층

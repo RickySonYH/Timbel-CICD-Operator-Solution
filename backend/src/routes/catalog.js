@@ -1,531 +1,495 @@
-// [advice from AI] 카탈로그 시스템 API 라우트
-// 도메인, 시스템, 컴포넌트, API, 리소스 관리
-
+// [advice from AI] 카탈로그 API - 승인된 지식 자산 조회 및 통계
 const express = require('express');
 const { Pool } = require('pg');
-const router = express.Router();
-
-// [advice from AI] 데이터베이스 연결 설정 (통일된 설정)
-const pool = new Pool({
-  user: process.env.DB_USER || 'timbel_user',
-  host: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_NAME || 'timbel_db',
-  password: process.env.DB_PASSWORD || 'timbel_password',
-  port: process.env.DB_PORT || 5434,
-});
-
-// [advice from AI] JWT 인증 미들웨어 import
 const jwtAuth = require('../middleware/jwtAuth');
 
-// [advice from AI] 기존 authenticateToken 함수 (호환성을 위해 유지)
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+const router = express.Router();
 
-  if (!token) {
-    return res.status(401).json({ success: false, error: 'Access token required' });
-  }
+// PostgreSQL 연결
+const pool = new Pool({
+  host: process.env.DB_HOST || 'localhost',
+  port: process.env.DB_PORT || 5432,
+  database: process.env.DB_NAME || 'timbel_db',
+  user: process.env.DB_USER || 'timbel_user',
+  password: process.env.DB_PASSWORD || 'your_password'
+});
 
-  const jwt = require('jsonwebtoken');
-  jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key', (err, user) => {
-    if (err) {
-      return res.status(403).json({ success: false, error: 'Invalid token' });
-    }
-    req.user = user;
-    next();
-  });
-};
-
-// [advice from AI] 권한 확인 미들웨어
-const checkPermission = (resource, action) => {
-  return async (req, res, next) => {
-    try {
-      const permissionName = `${resource}.${action}`;
-      console.log('Permission check - req.user:', req.user);
-      console.log('Permission check - userId:', req.user.userId || req.user.id);
-      
-      const result = await pool.query(`
-        SELECT p.id 
-        FROM permissions p
-        JOIN group_permissions gp ON p.id = gp.permission_id
-        JOIN user_group_memberships ugm ON gp.group_id = ugm.group_id
-        WHERE p.name = $1 AND ugm.user_id = $2
-      `, [permissionName, req.user.userId || req.user.id]);
-
-      if (result.rows.length === 0) {
-        return res.status(403).json({ 
-          success: false, 
-          error: `Permission required: ${permissionName}` 
-        });
-      }
-      next();
-    } catch (error) {
-      console.error('Permission check error:', error);
-      res.status(500).json({ success: false, error: 'Permission check failed' });
-    }
-  };
-};
-
-// [advice from AI] 카탈로그 대시보드 통계 조회
-router.get('/dashboard', authenticateToken, async (req, res) => {
+// [advice from AI] 카탈로그 통계 조회 - 실제 데이터베이스 연동
+router.get('/stats', jwtAuth.verifyToken, async (req, res) => {
   try {
-    const stats = await pool.query(`
+    const client = await pool.connect();
+    
+    // 승인된 도메인 수
+    const domainsResult = await client.query(`
+      SELECT COUNT(*) as count FROM domains
+    `);
+    
+    // 승인된 시스템 수
+    const systemsResult = await client.query(`
+      SELECT COUNT(*) as count FROM systems WHERE approval_status = 'approved'
+    `);
+    
+    // 자산별 통계 (승인된 것만)
+    const assetsStats = await client.query(`
       SELECT 
-        (SELECT COUNT(*) FROM domains) as total_domains,
-        (SELECT COUNT(*) FROM systems) as total_systems,
-        (SELECT COUNT(*) FROM components) as total_components,
-        (SELECT COUNT(*) FROM apis) as total_apis,
-        (SELECT COUNT(*) FROM resources) as total_resources,
-        (SELECT COUNT(*) FROM knowledge_assets) as total_knowledge_assets,
-        (SELECT COUNT(*) FROM approval_workflows WHERE status = 'pending') as pending_approvals
+        'code' as type, COUNT(*) as count FROM code_components WHERE status = 'active'
+      UNION ALL
+      SELECT 
+        'design' as type, COUNT(*) as count FROM design_assets WHERE status = 'active'
+      UNION ALL
+      SELECT 
+        'document' as type, COUNT(*) as count FROM documents WHERE status = 'active'
+      UNION ALL
+      SELECT 
+        'catalog' as type, COUNT(*) as count FROM catalog_components WHERE status = 'active'
     `);
-
-    res.json({ 
-      success: true, 
-      data: stats.rows[0] 
+    
+    // 최근 등록된 자산 (승인된 것만, 시스템 정보 포함)
+    const recentAssets = await client.query(`
+      SELECT 
+        cc.id, cc.name, 'code' as type, cc.created_at,
+        COALESCE(s.title, 'Unknown System') as systemName,
+        COALESCE(d.name, 'Unknown Domain') as domainName
+      FROM code_components cc
+      LEFT JOIN systems s ON cc.created_by = s.created_by
+      LEFT JOIN domains d ON s.domain_id = d.id
+      WHERE cc.status = 'active'
+      UNION ALL
+      SELECT 
+        da.id, da.name, 'design' as type, da.created_at,
+        COALESCE(s.title, 'Unknown System') as systemName,
+        COALESCE(d.name, 'Unknown Domain') as domainName
+      FROM design_assets da
+      LEFT JOIN systems s ON da.created_by = s.created_by
+      LEFT JOIN domains d ON s.domain_id = d.id
+      WHERE da.status = 'active'
+      UNION ALL
+      SELECT 
+        doc.id, doc.title as name, 'document' as type, doc.created_at,
+        COALESCE(s.title, 'Unknown System') as systemName,
+        COALESCE(d.name, 'Unknown Domain') as domainName
+      FROM documents doc
+      LEFT JOIN systems s ON doc.author_id = s.created_by
+      LEFT JOIN domains d ON s.domain_id = d.id
+      WHERE doc.status = 'active'
+      ORDER BY created_at DESC
+      LIMIT 10
+    `);
+    
+    // 인기 자산 (사용 횟수 기준, 실제 usage_count 활용)
+    const popularAssets = await client.query(`
+      SELECT 
+        cc.id, cc.name, 'code' as type, cc.usage_count, cc.rating,
+        COALESCE(s.title, 'Unknown System') as systemName,
+        COALESCE(d.name, 'Unknown Domain') as domainName
+      FROM code_components cc
+      LEFT JOIN systems s ON cc.created_by = s.created_by
+      LEFT JOIN domains d ON s.domain_id = d.id
+      WHERE cc.status = 'active' AND cc.usage_count > 0
+      ORDER BY cc.usage_count DESC, cc.rating DESC NULLS LAST
+      LIMIT 10
+    `);
+    
+    client.release();
+    
+    // 데이터 가공
+    const assetsByType = {
+      code: 0,
+      design: 0,
+      document: 0,
+      catalog: 0
+    };
+    
+    assetsStats.rows.forEach(row => {
+      assetsByType[row.type] = parseInt(row.count);
     });
+    
+    const totalAssets = Object.values(assetsByType).reduce((sum, count) => sum + count, 0);
+    
+    const stats = {
+      totalDomains: parseInt(domainsResult.rows[0].count),
+      totalSystems: parseInt(systemsResult.rows[0].count),
+      totalAssets: totalAssets,
+      assetsByType: assetsByType,
+      recentAssets: recentAssets.rows,
+      popularAssets: popularAssets.rows
+    };
+    
+    console.log('카탈로그 통계:', stats); // [advice from AI] 디버깅용 로그
+    
+    res.json({
+      success: true,
+      data: stats
+    });
+    
   } catch (error) {
-    console.error('Dashboard stats error:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch dashboard stats' });
+    console.error('카탈로그 통계 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch catalog stats',
+      message: error.message
+    });
   }
 });
 
-// [advice from AI] 도메인 관련 API
-router.get('/domains', authenticateToken, checkPermission('domains', 'read'), async (req, res) => {
+// [advice from AI] 통합 검색
+router.get('/search', jwtAuth.verifyToken, async (req, res) => {
   try {
-    const result = await pool.query(`
-      SELECT d.*, u.full_name as owner_name, u.role_type as owner_role
+    const { q } = req.query;
+    
+    if (!q || q.trim().length < 2) {
+      return res.json({
+        success: true,
+        data: [],
+        message: '검색어는 2글자 이상 입력해주세요.'
+      });
+    }
+    
+    const searchTerm = `%${q.trim()}%`;
+    const client = await pool.connect();
+    
+    // 통합 검색 (코드 컴포넌트, 디자인 자산, 문서)
+    const searchResults = await client.query(`
+      SELECT 
+        cc.id, cc.name, cc.title as description, 'code' as type,
+        cc.usage_count, cc.created_at as last_used,
+        'Unknown System' as systemName, 'Unknown Domain' as domainName,
+        '/catalog/code-components' as path
+      FROM code_components cc
+      WHERE cc.status = 'active' 
+        AND (cc.name ILIKE $1 OR cc.title ILIKE $1 OR cc.description ILIKE $1)
+      
+      UNION ALL
+      
+      SELECT 
+        da.id, da.name, da.description, 'design' as type,
+        0 as usage_count, da.created_at as last_used,
+        'Unknown System' as systemName, 'Unknown Domain' as domainName,
+        '/catalog/design-assets' as path
+      FROM design_assets da
+      WHERE da.status = 'active'
+        AND (da.name ILIKE $1 OR da.description ILIKE $1)
+      
+      UNION ALL
+      
+      SELECT 
+        d.id, d.title as name, d.content as description, 'document' as type,
+        0 as usage_count, d.created_at as last_used,
+        'Unknown System' as systemName, 'Unknown Domain' as domainName,
+        '/catalog/documents' as path
+      FROM documents d
+      WHERE d.status = 'active'
+        AND (d.title ILIKE $1 OR d.content ILIKE $1)
+      
+      ORDER BY usage_count DESC, last_used DESC
+      LIMIT 50
+    `, [searchTerm]);
+    
+    client.release();
+    
+    res.json({
+      success: true,
+      data: searchResults.rows
+    });
+    
+  } catch (error) {
+    console.error('통합 검색 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Search failed'
+    });
+  }
+});
+
+// [advice from AI] 도메인 목록 조회 - 실제 데이터베이스 연동
+router.get('/domains', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    const client = await pool.connect();
+    
+    const domainsResult = await client.query(`
+      SELECT 
+        d.id, d.name, d.description, d.business_area, d.region,
+        d.contact_person, d.contact_email, d.priority_level,
+        d.created_at, d.updated_at, d.total_systems, d.active_systems,
+        COUNT(s.id) as approved_systems_count,
+        u.full_name as created_by_name
       FROM domains d
-      LEFT JOIN timbel_users u ON d.owner_id = u.id
-      ORDER BY d.created_at DESC
+      LEFT JOIN systems s ON d.id = s.domain_id AND s.approval_status = 'approved'
+      LEFT JOIN timbel_users u ON d.created_by = u.id
+      GROUP BY d.id, d.name, d.description, d.business_area, d.region,
+               d.contact_person, d.contact_email, d.priority_level,
+               d.created_at, d.updated_at, d.total_systems, d.active_systems,
+               u.full_name
+      ORDER BY 
+        CASE d.priority_level 
+          WHEN 'critical' THEN 1 
+          WHEN 'high' THEN 2 
+          WHEN 'medium' THEN 3 
+          ELSE 4 
+        END, 
+        d.name
     `);
     
-    res.json({ success: true, data: result.rows });
-  } catch (error) {
-    console.error('Get domains error:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch domains' });
-  }
-});
-
-router.post('/domains', authenticateToken, checkPermission('domains', 'write'), async (req, res) => {
-  try {
-    const { name, description } = req.body;
+    client.release();
     
-    const result = await pool.query(`
-      INSERT INTO domains (name, description, owner_id)
-      VALUES ($1, $2, $3)
-      RETURNING *
-    `, [name, description, req.user.id]);
-
-    res.status(201).json({ success: true, data: result.rows[0] });
-  } catch (error) {
-    console.error('Create domain error:', error);
-    if (error.code === '23505') {
-      res.status(400).json({ success: false, error: 'Domain name already exists' });
-    } else {
-      res.status(500).json({ success: false, error: 'Failed to create domain' });
-    }
-  }
-});
-
-router.put('/domains/:id', authenticateToken, checkPermission('domains', 'write'), async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { name, description, status } = req.body;
+    console.log(`도메인 조회 완료: ${domainsResult.rows.length}개`); // [advice from AI] 디버깅용 로그
     
-    const result = await pool.query(`
-      UPDATE domains 
-      SET name = $1, description = $2, status = $3, updated_at = NOW()
-      WHERE id = $4
-      RETURNING *
-    `, [name, description, status, id]);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Domain not found' });
-    }
-
-    res.json({ success: true, data: result.rows[0] });
-  } catch (error) {
-    console.error('Update domain error:', error);
-    res.status(500).json({ success: false, error: 'Failed to update domain' });
-  }
-});
-
-router.delete('/domains/:id', authenticateToken, checkPermission('domains', 'delete'), async (req, res) => {
-  try {
-    const { id } = req.params;
+    res.json({
+      success: true,
+      data: domainsResult.rows
+    });
     
-    const result = await pool.query(`
-      DELETE FROM domains 
-      WHERE id = $1
-      RETURNING *
-    `, [id]);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Domain not found' });
-    }
-
-    res.json({ success: true, data: result.rows[0] });
   } catch (error) {
-    console.error('Delete domain error:', error);
-    res.status(500).json({ success: false, error: 'Failed to delete domain' });
+    console.error('도메인 목록 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch domains',
+      message: error.message
+    });
   }
 });
 
-// [advice from AI] 시스템 관련 API
-router.get('/systems', authenticateToken, checkPermission('systems', 'read'), async (req, res) => {
+// [advice from AI] 시스템 목록 조회 - 실제 데이터베이스 연동
+router.get('/systems', jwtAuth.verifyToken, async (req, res) => {
   try {
-    const result = await pool.query(`
-      SELECT s.*, d.name as domain_name, u.full_name as owner_name, u.role_type as owner_role
+    const { domain_id } = req.query;
+    const client = await pool.connect();
+    
+    let query = `
+      SELECT 
+        s.id, s.name, s.title, s.description, s.version, s.category,
+        s.tech_stack, s.programming_languages, s.frameworks, s.databases,
+        s.lifecycle, s.deployment_status, s.owner_group,
+        s.total_code_components, s.total_documents, s.total_design_assets, s.total_catalog_components,
+        s.code_quality_score, s.documentation_coverage, s.test_coverage, s.security_score,
+        s.created_at, s.updated_at, s.last_accessed_at,
+        d.name as domain_name, d.business_area,
+        pc.full_name as primary_contact_name,
+        tl.full_name as technical_lead_name,
+        bo.full_name as business_owner_name,
+        cb.full_name as created_by_name
       FROM systems s
-      LEFT JOIN catalog_domains d ON s.domain_id = d.id
-      LEFT JOIN timbel_users u ON s.owner_id = u.id
-      ORDER BY s.created_at DESC
-    `);
+      LEFT JOIN domains d ON s.domain_id = d.id
+      LEFT JOIN timbel_users pc ON s.primary_contact = pc.id
+      LEFT JOIN timbel_users tl ON s.technical_lead = tl.id
+      LEFT JOIN timbel_users bo ON s.business_owner = bo.id
+      LEFT JOIN timbel_users cb ON s.created_by = cb.id
+      WHERE s.approval_status = 'approved'
+    `;
     
-    res.json({ success: true, data: result.rows });
-  } catch (error) {
-    console.error('Get systems error:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch systems' });
-  }
-});
-
-router.post('/systems', authenticateToken, checkPermission('systems', 'write'), async (req, res) => {
-  try {
-    const { name, description, domain_id, version } = req.body;
+    const params = [];
     
-    const result = await pool.query(`
-      INSERT INTO systems (name, description, domain_id, owner_id, version)
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING *
-    `, [name, description, domain_id, req.user.id, version || '1.0.0']);
-
-    res.status(201).json({ success: true, data: result.rows[0] });
-  } catch (error) {
-    console.error('Create system error:', error);
-    if (error.code === '23505') {
-      res.status(400).json({ success: false, error: 'System name already exists' });
-    } else {
-      res.status(500).json({ success: false, error: 'Failed to create system' });
+    if (domain_id) {
+      query += ' AND s.domain_id = $1';
+      params.push(domain_id);
     }
-  }
-});
-
-router.put('/systems/:id', authenticateToken, checkPermission('systems', 'write'), async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { name, description, domain_id, status, version } = req.body;
     
-    const result = await pool.query(`
-      UPDATE systems 
-      SET name = $1, description = $2, domain_id = $3, status = $4, version = $5, updated_at = NOW()
-      WHERE id = $6
-      RETURNING *
-    `, [name, description, domain_id, status, version, id]);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'System not found' });
-    }
-
-    res.json({ success: true, data: result.rows[0] });
-  } catch (error) {
-    console.error('Update system error:', error);
-    res.status(500).json({ success: false, error: 'Failed to update system' });
-  }
-});
-
-router.delete('/systems/:id', authenticateToken, checkPermission('systems', 'delete'), async (req, res) => {
-  try {
-    const { id } = req.params;
+    query += ' ORDER BY s.code_quality_score DESC NULLS LAST, s.created_at DESC';
     
-    const result = await pool.query(`
-      DELETE FROM systems 
-      WHERE id = $1
-      RETURNING *
-    `, [id]);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'System not found' });
-    }
-
-    res.json({ success: true, data: result.rows[0] });
+    const systemsResult = await client.query(query, params);
+    
+    client.release();
+    
+    console.log(`시스템 조회 완료: ${systemsResult.rows.length}개 (domain_id: ${domain_id || 'all'})`); // [advice from AI] 디버깅용 로그
+    
+    res.json({
+      success: true,
+      data: systemsResult.rows
+    });
+    
   } catch (error) {
-    console.error('Delete system error:', error);
-    res.status(500).json({ success: false, error: 'Failed to delete system' });
+    console.error('시스템 목록 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch systems',
+      message: error.message
+    });
   }
 });
 
-// [advice from AI] 컴포넌트 관련 API
+// [advice from AI] 컴포넌트 목록 조회 (타입별 필터링 지원)
 router.get('/components', jwtAuth.verifyToken, async (req, res) => {
   try {
-    // [advice from AI] 실제 테이블 스키마에 맞는 정확한 쿼리
-    const result = await pool.query(`
-      SELECT 
-        c.id,
-        c.name,
-        c.title,
-        c.description,
-        c.type,
-        c.system_id,
-        c.owner_group,
-        c.lifecycle,
-        c.source_location,
-        c.deployment_info,
-        c.performance_metrics,
-        c.reuse_stats,
-        c.created_at,
-        c.updated_at,
-        s.name as system_name,
-        s.title as system_title,
-        d.name as domain_name,
-        d.title as domain_title
-      FROM catalog_components c
-      LEFT JOIN catalog_systems s ON c.system_id = s.id
-      LEFT JOIN catalog_domains d ON s.domain_id = d.id
-      ORDER BY c.created_at DESC
-    `);
+    const { type, system_id, limit = 50, offset = 0 } = req.query;
+    const client = await pool.connect();
     
-    console.log(`✅ 컴포넌트 목록 조회 성공: ${result.rows.length}개`);
-    res.json({ 
-      success: true, 
-      data: result.rows,
-      total: result.rows.length,
-      message: '컴포넌트 목록을 성공적으로 조회했습니다.'
+    let results = [];
+    
+    // 타입별 또는 전체 컴포넌트 조회
+    if (!type || type === 'code') {
+      const codeQuery = `
+        SELECT 
+          cc.id, cc.name, cc.title, cc.description, cc.type, cc.language, cc.framework,
+          cc.complexity_score, cc.line_count, cc.usage_count, cc.rating,
+          cc.created_at, cc.updated_at, cc.approval_status, 'code' as asset_type,
+          u.full_name as created_by_name
+        FROM code_components cc
+        LEFT JOIN timbel_users u ON cc.created_by = u.id
+        WHERE cc.status = 'active'
+        ORDER BY 
+          CASE cc.approval_status 
+            WHEN 'approved' THEN 1 
+            WHEN 'pending' THEN 2 
+            WHEN 'draft' THEN 3 
+            ELSE 4 
+          END,
+          cc.usage_count DESC, cc.rating DESC
+        LIMIT $1 OFFSET $2
+      `;
+      
+      const codeResult = await client.query(codeQuery, [limit, offset]);
+      results = results.concat(codeResult.rows);
+    }
+    
+    if (!type || type === 'design') {
+      const designQuery = `
+        SELECT 
+          da.id, da.name, da.name as title, da.description, da.category as type, 
+          da.file_type as language, '' as framework,
+          0 as complexity_score, 0 as line_count, 0 as usage_count, 0 as rating,
+          da.created_at, da.updated_at, da.approval_status, 'design' as asset_type,
+          u.full_name as created_by_name
+        FROM design_assets da
+        LEFT JOIN timbel_users u ON da.created_by = u.id
+        WHERE da.status = 'active'
+        ORDER BY 
+          CASE da.approval_status 
+            WHEN 'approved' THEN 1 
+            WHEN 'pending' THEN 2 
+            WHEN 'draft' THEN 3 
+            ELSE 4 
+          END,
+          da.created_at DESC
+        LIMIT $1 OFFSET $2
+      `;
+      
+      const designResult = await client.query(designQuery, [limit, offset]);
+      results = results.concat(designResult.rows);
+    }
+    
+    if (!type || type === 'document') {
+      const docQuery = `
+        SELECT 
+          d.id, d.title as name, d.title, d.content as description, d.category as type,
+          d.format as language, '' as framework,
+          0 as complexity_score, d.word_count as line_count, 0 as usage_count, 0 as rating,
+          d.created_at, d.updated_at, d.approval_status, 'document' as asset_type,
+          u.full_name as created_by_name
+        FROM documents d
+        LEFT JOIN timbel_users u ON d.author_id = u.id
+        WHERE d.status = 'active'
+        ORDER BY 
+          CASE d.approval_status 
+            WHEN 'approved' THEN 1 
+            WHEN 'pending' THEN 2 
+            WHEN 'draft' THEN 3 
+            ELSE 4 
+          END,
+          d.created_at DESC
+        LIMIT $1 OFFSET $2
+      `;
+      
+      const docResult = await client.query(docQuery, [limit, offset]);
+      results = results.concat(docResult.rows);
+    }
+    
+    client.release();
+    
+    // 정렬 (사용횟수 > 평점 > 생성일)
+    results.sort((a, b) => {
+      if (b.usage_count !== a.usage_count) return b.usage_count - a.usage_count;
+      if (b.rating !== a.rating) return b.rating - a.rating;
+      return new Date(b.created_at) - new Date(a.created_at);
     });
-  } catch (error) {
-    console.error('❌ 컴포넌트 조회 실패:', {
-      error: error.message,
-      code: error.code,
-      detail: error.detail,
-      query: 'SELECT catalog_components'
+    
+    res.json({
+      success: true,
+      data: results.slice(0, limit)
     });
-    res.status(500).json({ 
-      success: false, 
-      error: 'Database Error',
-      message: '컴포넌트 데이터를 불러올 수 없습니다. 관리자에게 문의하세요.',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    
+  } catch (error) {
+    console.error('컴포넌트 목록 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch components'
     });
   }
 });
 
-router.post('/components', authenticateToken, checkPermission('components', 'write'), async (req, res) => {
-  try {
-    const { name, description, system_id, type, version, repository_url, documentation_url } = req.body;
-    
-    const result = await pool.query(`
-      INSERT INTO components (name, description, system_id, owner_id, type, version, repository_url, documentation_url)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      RETURNING *
-    `, [name, description, system_id, req.user.id, type, version || '1.0.0', repository_url, documentation_url]);
-
-    res.status(201).json({ success: true, data: result.rows[0] });
-  } catch (error) {
-    console.error('Create component error:', error);
-    res.status(500).json({ success: false, error: 'Failed to create component' });
-  }
-});
-
-router.put('/components/:id', authenticateToken, checkPermission('components', 'write'), async (req, res) => {
+// [advice from AI] 자산 사용 기록 - 실제 데이터베이스 연동
+router.post('/assets/:id/use', jwtAuth.verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, system_id, type, status, version, repository_url, documentation_url } = req.body;
+    const { action, asset_type } = req.body; // 'view', 'download', 'copy', 'clone', 'use'
+    const userId = req.user.userId;
     
-    const result = await pool.query(`
-      UPDATE components 
-      SET name = $1, description = $2, system_id = $3, type = $4, status = $5, 
-          version = $6, repository_url = $7, documentation_url = $8, updated_at = NOW()
-      WHERE id = $9
-      RETURNING *
-    `, [name, description, system_id, type, status, version, repository_url, documentation_url, id]);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Component not found' });
+    const client = await pool.connect();
+    
+    // 자산 타입 자동 감지 (asset_type이 없는 경우)
+    let detectedType = asset_type;
+    if (!detectedType) {
+      const typeCheck = await client.query(`
+        SELECT 'code' as type FROM code_components WHERE id = $1
+        UNION ALL
+        SELECT 'design' as type FROM design_assets WHERE id = $1
+        UNION ALL
+        SELECT 'document' as type FROM documents WHERE id = $1
+        UNION ALL
+        SELECT 'catalog' as type FROM catalog_components WHERE id = $1
+        LIMIT 1
+      `, [id]);
+      
+      if (typeCheck.rows.length > 0) {
+        detectedType = typeCheck.rows[0].type;
+      }
     }
-
-    res.json({ success: true, data: result.rows[0] });
-  } catch (error) {
-    console.error('Update component error:', error);
-    res.status(500).json({ success: false, error: 'Failed to update component' });
-  }
-});
-
-router.delete('/components/:id', authenticateToken, checkPermission('components', 'delete'), async (req, res) => {
-  try {
-    const { id } = req.params;
     
-    const result = await pool.query(`
-      DELETE FROM components 
-      WHERE id = $1
-      RETURNING *
+    // 사용 기록 저장
+    await client.query(`
+      INSERT INTO asset_usage_logs (asset_id, asset_type, user_id, action, metadata, created_at)
+      VALUES ($1, $2, $3, $4, $5, NOW())
+    `, [
+      id, 
+      detectedType || 'unknown', 
+      userId, 
+      action, 
+      JSON.stringify({
+        ip: req.ip,
+        userAgent: req.get('User-Agent'),
+        timestamp: new Date().toISOString()
+      })
+    ]);
+    
+    // 타입별 usage_count 증가
+    if (detectedType === 'code') {
+      await client.query(`
+        UPDATE code_components 
+        SET usage_count = COALESCE(usage_count, 0) + 1, updated_at = NOW()
+        WHERE id = $1 AND approval_status = 'approved'
     `, [id]);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Component not found' });
     }
-
-    res.json({ success: true, data: result.rows[0] });
-  } catch (error) {
-    console.error('Delete component error:', error);
-    res.status(500).json({ success: false, error: 'Failed to delete component' });
-  }
-});
-
-// [advice from AI] API 관련 API
-router.get('/apis', authenticateToken, checkPermission('apis', 'read'), async (req, res) => {
-  try {
-    const result = await pool.query(`
-      SELECT a.*, s.name as system_name, d.name as domain_name, u.full_name as owner_name
-      FROM apis a
-      LEFT JOIN systems s ON a.system_id = s.id
-      LEFT JOIN catalog_domains d ON s.domain_id = d.id
-      LEFT JOIN timbel_users u ON a.owner_id = u.id
-      ORDER BY a.created_at DESC
-    `);
     
-    res.json({ success: true, data: result.rows });
-  } catch (error) {
-    console.error('Get APIs error:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch APIs' });
-  }
-});
-
-router.post('/apis', authenticateToken, checkPermission('apis', 'write'), async (req, res) => {
-  try {
-    const { name, description, system_id, endpoint, method, version, documentation_url } = req.body;
+    client.release();
     
-    const result = await pool.query(`
-      INSERT INTO apis (name, description, system_id, owner_id, endpoint, method, version, documentation_url)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      RETURNING *
-    `, [name, description, system_id, req.user.id, endpoint, method, version || '1.0.0', documentation_url]);
-
-    res.status(201).json({ success: true, data: result.rows[0] });
-  } catch (error) {
-    console.error('Create API error:', error);
-    res.status(500).json({ success: false, error: 'Failed to create API' });
-  }
-});
-
-router.put('/apis/:id', authenticateToken, checkPermission('apis', 'write'), async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { name, description, system_id, endpoint, method, status, version, documentation_url } = req.body;
+    console.log(`자산 사용 기록: ${detectedType} ${id} - ${action} by ${userId}`); // [advice from AI] 디버깅용 로그
     
-    const result = await pool.query(`
-      UPDATE apis 
-      SET name = $1, description = $2, system_id = $3, endpoint = $4, method = $5, 
-          status = $6, version = $7, documentation_url = $8, updated_at = NOW()
-      WHERE id = $9
-      RETURNING *
-    `, [name, description, system_id, endpoint, method, status, version, documentation_url, id]);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'API not found' });
-    }
-
-    res.json({ success: true, data: result.rows[0] });
-  } catch (error) {
-    console.error('Update API error:', error);
-    res.status(500).json({ success: false, error: 'Failed to update API' });
-  }
-});
-
-router.delete('/apis/:id', authenticateToken, checkPermission('apis', 'delete'), async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const result = await pool.query(`
-      DELETE FROM apis 
-      WHERE id = $1
-      RETURNING *
-    `, [id]);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'API not found' });
-    }
-
-    res.json({ success: true, data: result.rows[0] });
-  } catch (error) {
-    console.error('Delete API error:', error);
-    res.status(500).json({ success: false, error: 'Failed to delete API' });
-  }
-});
-
-// [advice from AI] 리소스 관련 API
-router.get('/resources', authenticateToken, checkPermission('resources', 'read'), async (req, res) => {
-  try {
-    const result = await pool.query(`
-      SELECT r.*, u.full_name as owner_name
-      FROM resources r
-      LEFT JOIN timbel_users u ON r.owner_id = u.id
-      ORDER BY r.created_at DESC
-    `);
+    res.json({
+      success: true,
+      message: '사용 기록이 저장되었습니다.',
+      data: {
+        asset_id: id,
+        asset_type: detectedType,
+        action: action
+      }
+    });
     
-    res.json({ success: true, data: result.rows });
   } catch (error) {
-    console.error('Get resources error:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch resources' });
-  }
-});
-
-router.post('/resources', authenticateToken, checkPermission('resources', 'write'), async (req, res) => {
-  try {
-    const { name, description, type, file_path, file_size, mime_type } = req.body;
-    
-    const result = await pool.query(`
-      INSERT INTO resources (name, description, type, owner_id, file_path, file_size, mime_type)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
-      RETURNING *
-    `, [name, description, type, req.user.id, file_path, file_size, mime_type]);
-
-    res.status(201).json({ success: true, data: result.rows[0] });
-  } catch (error) {
-    console.error('Create resource error:', error);
-    res.status(500).json({ success: false, error: 'Failed to create resource' });
-  }
-});
-
-router.put('/resources/:id', authenticateToken, checkPermission('resources', 'write'), async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { name, description, type, status } = req.body;
-    
-    const result = await pool.query(`
-      UPDATE resources 
-      SET name = $1, description = $2, type = $3, status = $4, updated_at = NOW()
-      WHERE id = $5
-      RETURNING *
-    `, [name, description, type, status, id]);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Resource not found' });
-    }
-
-    res.json({ success: true, data: result.rows[0] });
-  } catch (error) {
-    console.error('Update resource error:', error);
-    res.status(500).json({ success: false, error: 'Failed to update resource' });
-  }
-});
-
-router.delete('/resources/:id', authenticateToken, checkPermission('resources', 'delete'), async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    const result = await pool.query(`
-      DELETE FROM resources 
-      WHERE id = $1
-      RETURNING *
-    `, [id]);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Resource not found' });
-    }
-
-    res.json({ success: true, data: result.rows[0] });
-  } catch (error) {
-    console.error('Delete resource error:', error);
-    res.status(500).json({ success: false, error: 'Failed to delete resource' });
+    console.error('자산 사용 기록 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to record asset usage',
+      message: error.message
+    });
   }
 });
 

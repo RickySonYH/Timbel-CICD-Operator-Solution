@@ -18,7 +18,8 @@ import {
   useMediaQuery,
   Collapse,
   Tooltip,
-  Button
+  Button,
+  Chip
 } from '@mui/material';
 // [advice from AI] 접기/펼치기 아이콘만 복원
 import { ExpandLess as ExpandLessIcon, ExpandMore as ExpandMoreIcon } from '@mui/icons-material';
@@ -31,33 +32,31 @@ import MessageCenter from '../notifications/MessageCenter';
 // [advice from AI] 백스테이지IO 스타일의 사이드바 너비
 const DRAWER_WIDTH = 240;
 
-// [advice from AI] PO-PE-QA-운영팀 구조 기반 네비게이션 메뉴
+// [advice from AI] Phase 2: 통합된 네비게이션 메뉴 (지식자원 카탈로그로 명칭 변경)
 const navigationItems = [
   { text: '홈', path: '/' },
-  { text: '지식자원 카탈로그', path: '/catalog', hasSubMenu: true },
-  { text: '프로젝트 관리', path: '/projects' },
+  { text: '지식자원 카탈로그', path: '/knowledge', hasSubMenu: true },
   { text: 'VibeStudio', path: '/vibe-studio' },
 ];
 
-// [advice from AI] 카탈로그 하위 메뉴 구조 (첨부 이미지 기반)
-const catalogSubMenus = [
-  { text: '대시보드', path: '/catalog/dashboard' },
-  { text: 'Domains', path: '/catalog/domains' },
-  { text: 'Systems', path: '/catalog/systems' },
-  { text: 'Components', path: '/catalog/components' },
-  { text: 'APIs', path: '/catalog/apis' },
-  { text: 'Resources', path: '/catalog/resources' }
-];
-
-// [advice from AI] 지식 등록 및 관리 하위 메뉴
+// [advice from AI] Phase 1: 통합된 지식자원 관리 하위 메뉴 (권한 기반 기능 차등 제공 예정)
 const knowledgeSubMenus = [
   { text: '대시보드', path: '/knowledge/dashboard' },
-  { text: '디자인 자산 등록', path: '/knowledge/design' },
-  { text: '코드/컴포넌트 등록', path: '/knowledge/code' },
-  { text: '문서/가이드 등록', path: '/knowledge/docs' },
-  { text: '지식 검색 및 관리', path: '/knowledge/search' },
-  { text: '승인 워크플로우', path: '/knowledge/approval' },
-  { text: '다이어그램 관리', path: '/knowledge/diagrams' }
+  { text: '도메인 (영업처)', path: '/knowledge/domains' },
+  { text: '프로젝트 (기획)', path: '/knowledge/projects', badge: 'NEW' },
+  { text: '시스템 (솔루션)', path: '/knowledge/systems', hasAutoRegistration: true },
+  { text: '코드 컴포넌트', path: '/knowledge/code' },
+  { text: '디자인 자산', path: '/knowledge/design' },
+  { text: '문서/가이드', path: '/knowledge/docs' }
+];
+
+// [advice from AI] 관리자 전용 승인 관리 메뉴
+const adminApprovalSubMenus = [
+  { text: '승인 대시보드', path: '/admin/approvals/dashboard' },
+  { text: '시스템 승인 대기', path: '/admin/approvals/systems-pending', badge: 'NEW' },
+  { text: '지식 자산 승인 대기', path: '/admin/approvals/assets-pending', badge: 'NEW' },
+  { text: '승인된 자산 관리', path: '/admin/approvals/approved-assets' },
+  { text: '승인 히스토리', path: '/admin/approvals/history' }
 ];
 
 
@@ -90,16 +89,23 @@ const operationsSubMenus = [
 // [advice from AI] 시스템 관리 하위 메뉴
 const adminSubMenus = [
   { text: '대시보드', path: '/admin' },
-  { text: '권한 관리', path: '/admin/permissions' },
+  { text: '회원 리스트', path: '/admin/members' },
+  { text: '권한 설정', path: '/admin/permissions', hasSubMenu: true },
   { text: '시스템 설정', path: '/admin/settings' },
   { text: '보안 설정', path: '/admin/security' },
   { text: 'API 키 관리', path: '/admin/api-keys' },
   { text: '알림 설정', path: '/admin/notifications' },
   { text: '로그 관리', path: '/admin/logs' },
   { text: '백업 및 복원', path: '/admin/backup' },
-  { text: '사용자 관리', path: '/admin/users' },
-  { text: '그룹 관리', path: '/admin/groups' },
   { text: '분석', path: '/admin/analytics' },
+];
+
+// [advice from AI] 권한 설정 하위 메뉴
+const permissionsSubMenus = [
+  { text: '사용자 관리', path: '/admin/permissions/users' },
+  { text: '그룹 관리', path: '/admin/permissions/groups' },
+  { text: '역할 배정', path: '/admin/permissions/roles' },
+  { text: '권한 매트릭스', path: '/admin/permissions/matrix' }
 ];
 
 
@@ -119,8 +125,8 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
   const [mobileOpen, setMobileOpen] = useState(false);
   const [operationsOpen, setOperationsOpen] = useState(false);
   const [peWorkspaceOpen, setPeWorkspaceOpen] = useState(false);
-  const [catalogOpen, setCatalogOpen] = useState(false);
   const [knowledgeOpen, setKnowledgeOpen] = useState(false);
+  const [approvalOpen, setApprovalOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
   const { user } = useJwtAuthStore();
 
@@ -256,21 +262,21 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
           // [advice from AI] 메인 메뉴는 모든 사용자가 접근 가능하도록 설정
           const hasAccess = true; // 메인 메뉴는 기본적으로 모든 사용자 접근 가능
           
-          // [advice from AI] 카탈로그는 하위 메뉴가 있음
-          if (item.path === '/catalog' && item.hasSubMenu) {
+          // [advice from AI] Phase 1: 지식자원 관리는 하위 메뉴가 있음
+          if (item.path === '/knowledge' && item.hasSubMenu) {
             return (
               <React.Fragment key={item.text}>
                 <ListItem disablePadding>
                   <ListItemButton
                     onClick={() => {
-                      if (catalogOpen) {
-                        setCatalogOpen(false);
+                      if (knowledgeOpen) {
+                        setKnowledgeOpen(false);
                       } else {
-                        setCatalogOpen(true);
+                        setKnowledgeOpen(true);
                         handleNavigation(item.path);
                       }
                     }}
-                    selected={location.pathname === item.path || location.pathname.startsWith('/catalog/')}
+                    selected={location.pathname === item.path || location.pathname.startsWith('/knowledge/')}
                     sx={{
                       mx: 1,
                       borderRadius: 1,
@@ -290,16 +296,16 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
                       primary={item.text}
                       primaryTypographyProps={{
                         fontSize: '0.875rem',
-                        fontWeight: location.pathname === item.path || location.pathname.startsWith('/catalog/') ? 600 : 400,
+                        fontWeight: location.pathname === item.path || location.pathname.startsWith('/knowledge/') ? 600 : 400,
                       }}
                       sx={{ pl: 1 }}
                     />
-                    {catalogOpen ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                    {knowledgeOpen ? <ExpandLessIcon /> : <ExpandMoreIcon />}
                   </ListItemButton>
                 </ListItem>
-                <Collapse in={catalogOpen} timeout="auto" unmountOnExit>
+                <Collapse in={knowledgeOpen} timeout="auto" unmountOnExit>
                   <List component="div" disablePadding>
-                    {catalogSubMenus.map((subItem) => {
+                    {knowledgeSubMenus.map((subItem) => {
                       const hasSubAccess = canAccess(subItem.path);
                       const subAccessInfo = getMenuAccessInfo(subItem.path);
                       
@@ -309,8 +315,11 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
                             title={hasSubAccess ? '' : subAccessInfo.description}
                             placement="right"
                             arrow
+                            componentsProps={{
+                              tooltip: { sx: { display: hasSubAccess ? 'none' : 'block' } }
+                            }}
                           >
-                            <span>
+                            <Box component="span" sx={{ width: '100%' }}>
                               <ListItemButton
                                 onClick={() => hasSubAccess && handleNavigation(subItem.path)}
                                 selected={hasSubAccess && location.pathname === subItem.path}
@@ -347,7 +356,7 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
                                   sx={{ pl: 1 }}
                                 />
                               </ListItemButton>
-                            </span>
+                            </Box>
                           </Tooltip>
                         </ListItem>
                       );
@@ -742,84 +751,100 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
       </Box>
       
       <List>
-        <ListItem disablePadding>
-          <ListItemButton
-            onClick={() => setKnowledgeOpen(!knowledgeOpen)}
-            sx={{
-              mx: 1,
-              borderRadius: 1,
-              '&.Mui-selected': {
-                backgroundColor: theme.palette.primary.light + '20',
-                '& .MuiListItemText-primary': {
-                  color: theme.palette.primary.main,
-                  fontWeight: 600,
-                },
-              },
-              '&:hover': {
-                backgroundColor: theme.palette.action.hover,
-              },
-            }}
-          >
-            <ListItemText 
-              primary="지식 등록 및 관리"
-              primaryTypographyProps={{
-                fontSize: '0.9rem',
-                fontWeight: location.pathname === '/knowledge' || location.pathname.startsWith('/knowledge/') ? 600 : 400,
-              }}
-            />
-            {knowledgeOpen ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-          </ListItemButton>
-        </ListItem>
-        <Collapse in={knowledgeOpen} timeout="auto" unmountOnExit>
-          <List component="div" disablePadding>
-            {knowledgeSubMenus.map((subItem) => {
-              const hasSubAccess = canAccess(subItem.path);
-              const subAccessInfo = getMenuAccessInfo(subItem.path);
-              
-              return (
-                <ListItem key={subItem.text} disablePadding>
-                  <Tooltip 
-                    title={hasSubAccess ? '' : `접근 권한 없음: ${subAccessInfo.description}`}
-                    placement="right"
-                    arrow
-                  >
-                    <span style={{ width: '100%' }}>
-                      <ListItemButton
-                        onClick={() => hasSubAccess && handleNavigation(subItem.path)}
-                        selected={hasSubAccess && location.pathname === subItem.path}
-                        disabled={!hasSubAccess}
-                        sx={{
-                          pl: 4,
-                          borderRadius: 1,
-                          opacity: hasSubAccess ? 1 : 0.5,
-                          '&.Mui-selected': {
-                            backgroundColor: theme.palette.primary.light + '20',
-                            '& .MuiListItemText-primary': {
-                              color: theme.palette.primary.main,
-                              fontWeight: 600,
+        {/* [advice from AI] 승인 관리 메뉴 (관리자 전용) */}
+        {(user?.roleType === 'admin' || user?.roleType === 'executive') && (
+          <>
+            <ListItem disablePadding sx={{ mt: 1 }}>
+              <ListItemButton
+                onClick={() => setApprovalOpen(!approvalOpen)}
+                sx={{
+                  mx: 1,
+                  borderRadius: 1,
+                  '&.Mui-selected': {
+                    backgroundColor: theme.palette.warning.light + '20',
+                    '& .MuiListItemText-primary': {
+                      color: theme.palette.warning.main,
+                      fontWeight: 600,
+                    },
+                  },
+                  '&:hover': {
+                    backgroundColor: theme.palette.action.hover,
+                  },
+                }}
+              >
+                <ListItemText 
+                  primary="승인 관리"
+                  primaryTypographyProps={{
+                    fontSize: '0.9rem',
+                    fontWeight: location.pathname.startsWith('/admin/approvals') ? 600 : 400,
+                  }}
+                />
+                {approvalOpen ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+              </ListItemButton>
+            </ListItem>
+            <Collapse in={approvalOpen} timeout="auto" unmountOnExit>
+              <List component="div" disablePadding>
+                {adminApprovalSubMenus.map((subItem) => (
+                  <ListItem key={subItem.path} disablePadding>
+                    <Tooltip
+                      title={`승인 관리: ${subItem.text}`}
+                      placement="right"
+                      arrow
+                    >
+                      <span style={{ width: '100%' }}>
+                        <ListItemButton
+                          onClick={() => navigate(subItem.path)}
+                          selected={location.pathname === subItem.path}
+                          sx={{
+                            pl: 4,
+                            mx: 1,
+                            borderRadius: 1,
+                            '&.Mui-selected': {
+                              backgroundColor: theme.palette.warning.light + '20',
+                              '& .MuiListItemText-primary': {
+                                color: theme.palette.warning.main,
+                                fontWeight: 600,
+                              },
                             },
-                          },
-                          '&:hover': {
-                            backgroundColor: theme.palette.action.hover,
-                          },
-                        }}
-                      >
-                        <ListItemText 
-                          primary={subItem.text}
-                          primaryTypographyProps={{
-                            fontSize: '0.875rem',
-                            fontWeight: hasSubAccess && location.pathname === subItem.path ? 600 : 400,
+                            '&:hover': {
+                              backgroundColor: theme.palette.action.hover,
+                            },
                           }}
-                          sx={{ pl: 1 }}
-                        />
-                      </ListItemButton>
-                    </span>
-                  </Tooltip>
-                </ListItem>
-              );
-            })}
-          </List>
-        </Collapse>
+                        >
+                          <ListItemText 
+                            primary={subItem.text}
+                            primaryTypographyProps={{
+                              fontSize: '0.875rem',
+                              fontWeight: location.pathname === subItem.path ? 600 : 400,
+                            }}
+                            sx={{ pl: 1 }}
+                          />
+                          {(subItem as any).badge && (
+                            <Chip
+                              label={(subItem as any).badge}
+                              size="small"
+                              color="warning"
+                              sx={{
+                                height: '16px',
+                                fontSize: '0.65rem',
+                                fontWeight: 600,
+                                mr: 1,
+                                '& .MuiChip-label': {
+                                  px: 0.5
+                                }
+                              }}
+                            />
+                          )}
+                        </ListItemButton>
+                      </span>
+                    </Tooltip>
+                  </ListItem>
+                ))}
+              </List>
+            </Collapse>
+          </>
+        )}
+
         {/* [advice from AI] 시스템 관리 메뉴 - 지식 등록 관리와 통합 */}
         <ListItem disablePadding sx={{ mt: 1 }}>
           <ListItemButton

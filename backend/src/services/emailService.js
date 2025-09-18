@@ -172,7 +172,7 @@ class EmailService {
               <div style="background-color: #e3f2fd; padding: 20px; border-left: 4px solid #1976d2; margin: 20px 0;">
                 <h3 style="margin-top: 0; color: #1976d2;">{{request_title}}</h3>
                 <p><strong>요청 유형:</strong> {{request_type}}</p>
-                <p><strong>금액:</strong> {{amount}} {{currency}}</p>
+                <p><strong>우선순위:</strong> {{priority}}</p>
                 <p><strong>요청자:</strong> {{requester_name}}</p>
                 <p><strong>마감일:</strong> {{due_date}}</p>
                 <p><strong>설명:</strong> {{description}}</p>

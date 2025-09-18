@@ -540,10 +540,11 @@ const MonitoringDashboard: React.FC = () => {
   };
 
   // [advice from AI] 자동 새로고침 (30초마다)
-  useEffect(() => {
-    const interval = setInterval(refreshData, 30000);
-    return () => clearInterval(interval);
-  }, []);
+  // [advice from AI] 자동 갱신 제거 - 무한 루프 방지
+  // useEffect(() => {
+  //   const interval = setInterval(refreshData, 30000);
+  //   return () => clearInterval(interval);
+  // }, []);
 
   return (
     <Box>

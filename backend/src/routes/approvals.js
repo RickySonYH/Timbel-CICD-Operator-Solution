@@ -1,1067 +1,876 @@
-// [advice from AI] 승인 및 의사결정 API 라우트
-// 협업을 위한 승인 요청, 의사결정, 메시지 관리 API
+// [advice from AI] 승인 관리 API 라우터
 
 const express = require('express');
-const router = express.Router();
 const ApprovalService = require('../services/approvalService');
-const ApprovalWorkflowEngine = require('../services/approvalWorkflowEngine');
+const jwtAuth = require('../middleware/jwtAuth');
 
-// [advice from AI] JWT 인증 미들웨어
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+const router = express.Router();
 
-  if (!token) {
-    return res.status(401).json({ success: false, error: 'Access token required' });
-  }
-
-  const jwt = require('jsonwebtoken');
-  jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key', (err, user) => {
-    if (err) {
-      return res.status(403).json({ success: false, error: 'Invalid token' });
-    }
-    req.user = {
-      id: user.userId || user.id,
-      roleType: user.roleType || 'user',
-      permissionLevel: user.permissionLevel || 0
-    };
-    next();
-  });
-};
-
-// [advice from AI] 승인 서비스 인스턴스
-const approvalService = new ApprovalService();
-const workflowEngine = new ApprovalWorkflowEngine();
-
-// [advice from AI] 승인 요청 API
-
-// 승인 요청 목록 조회
-router.get('/requests', authenticateToken, async (req, res) => {
+// [advice from AI] 승인 요청 생성
+router.post('/request', jwtAuth.verifyToken, async (req, res) => {
   try {
-    const { 
-      page = 1, 
-      limit = 20, 
-      status = '', 
-      type = '', 
-      priority = '',
-      my_requests = false,
-      my_approvals = false,
-      include_processed = false
-    } = req.query;
+    const approvalService = new ApprovalService();
+    
+    const approvalData = {
+      title: req.body.title || `시스템 등록 승인: ${req.body.systemName}`,
+      description: req.body.description || req.body.reason || '승인 요청',
+      type: req.body.type || 'system_registration',
+      category: req.body.category || 'system',
+      priority: req.body.priority || 'medium',
+      requesterId: req.user.userId,
+      department_id: req.body.department_id,
+      project_id: req.body.project_id,
+      due_date: req.body.duration ? new Date(Date.now() + parseInt(req.body.duration) * 24 * 60 * 60 * 1000) : null,
+      metadata: req.body.metadata || {},
+      approvers: [
+        ...(req.body.selectedQA ? [{ user_id: req.body.selectedQA, role: 'qa', order: 1 }] : []),
+        ...(req.body.selectedPO ? [{ user_id: req.body.selectedPO, role: 'po', order: 2 }] : []),
+        ...(req.body.selectedExecutive ? [{ user_id: req.body.selectedExecutive, role: 'admin', order: 3 }] : [])
+      ]
+    };
 
-    const offset = (page - 1) * limit;
-    let query = `
-      SELECT ar.*, u.full_name as requester_name, u.email as requester_email,
-             d.name as department_name, p.name as project_name
-      FROM approval_requests ar
-      JOIN timbel_users u ON ar.requester_id = u.id
-      LEFT JOIN departments d ON ar.department_id = d.id
-      LEFT JOIN projects p ON ar.project_id = p.id
-    `;
-
-    const conditions = [];
-    const params = [];
-    let paramCount = 0;
-
-    // [advice from AI] 내가 요청한 승인만 조회
-    if (my_requests === 'true') {
-      paramCount++;
-      conditions.push(`ar.requester_id = $${paramCount}`);
-      params.push(req.user.id);
+    const result = await approvalService.createApprovalRequest(approvalData);
+    
+    // [advice from AI] 메신저 알림 전송
+    try {
+      await approvalService.sendApprovalNotifications(
+        result.request_id, 
+        'request_created',
+        {
+          requesterName: req.user.fullName || req.user.username,
+          systemName: approvalData.title,
+          priority: approvalData.priority
+        }
+      );
+      console.log('✅ 승인 요청 알림 전송 완료');
+    } catch (notificationError) {
+      console.warn('⚠️ 알림 전송 실패:', notificationError.message);
     }
-
-    // [advice from AI] 승인 처리 목록 조회 (처리된 항목 포함 가능)
-    if (my_approvals === 'true') {
-      paramCount++;
-      if (include_processed === 'true') {
-        // 처리된 항목도 포함
-        conditions.push(`EXISTS (
-          SELECT 1 FROM approval_assignments aa 
-          WHERE aa.request_id = ar.request_id 
-          AND aa.approver_id = $${paramCount}
-        )`);
-      } else {
-        // 대기 중인 항목만
-        conditions.push(`EXISTS (
-          SELECT 1 FROM approval_assignments aa 
-          WHERE aa.request_id = ar.request_id 
-          AND aa.approver_id = $${paramCount} 
-          AND aa.status = 'pending'
-        )`);
-      }
-      params.push(req.user.id);
-    }
-
-    if (status) {
-      paramCount++;
-      conditions.push(`ar.status = $${paramCount}`);
-      params.push(status);
-    }
-
-    if (type) {
-      paramCount++;
-      conditions.push(`ar.type = $${paramCount}`);
-      params.push(type);
-    }
-
-    if (priority) {
-      paramCount++;
-      conditions.push(`ar.priority = $${paramCount}`);
-      params.push(priority);
-    }
-
-    if (conditions.length > 0) {
-      query += ` WHERE ${conditions.join(' AND ')}`;
-    }
-
-    query += ` ORDER BY ar.created_at DESC`;
-
-    // [advice from AI] 전체 개수 조회
-    let countQuery = `SELECT COUNT(*) as total FROM approval_requests ar`;
-    if (conditions.length > 0) {
-      countQuery += ` WHERE ${conditions.join(' AND ')}`;
-    }
-
-    const [requestsResult, countResult] = await Promise.all([
-      approvalService.pool.query(query + ` LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`, [...params, limit, offset]),
-      approvalService.pool.query(countQuery, params)
-    ]);
-
+    
     res.json({
       success: true,
-      data: requestsResult.rows,
-      pagination: {
-        total: parseInt(countResult.rows[0].total),
-        page: parseInt(page),
-        limit: parseInt(limit),
-        totalPages: Math.ceil(countResult.rows[0].total / limit)
-      }
+      data: result,
+      message: '승인 요청이 성공적으로 생성되고 알림이 전송되었습니다.'
     });
 
   } catch (error) {
-    console.error('Get approval requests error:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch approval requests' });
+    console.error('승인 요청 생성 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Approval Request Failed',
+      message: error.message || '승인 요청 생성 중 오류가 발생했습니다.'
+    });
   }
 });
 
-// 승인 요청 상세 조회
-router.get('/requests/:request_id', authenticateToken, async (req, res) => {
+// [advice from AI] 승인 대기 목록 조회
+router.get('/pending', jwtAuth.verifyToken, async (req, res) => {
   try {
-    const { request_id } = req.params;
+    const approvalService = new ApprovalService();
+    const { type, status = 'pending' } = req.query;
+    
+    const pendingApprovals = await approvalService.getPendingApprovals({
+      type,
+      status,
+      approverId: req.user.userId,
+      userRole: req.user.roleType
+    });
+    
+    res.json({
+      success: true,
+      data: pendingApprovals,
+      message: '승인 대기 목록을 조회했습니다.'
+    });
 
-    // [advice from AI] 요청 정보 조회
-    const requestResult = await approvalService.pool.query(`
-      SELECT ar.*, u.full_name as requester_name, u.email as requester_email,
-             d.name as department_name, p.name as project_name
-      FROM approval_requests ar
-      JOIN timbel_users u ON ar.requester_id = u.id
-      LEFT JOIN departments d ON ar.department_id = d.id
-      LEFT JOIN projects p ON ar.project_id = p.id
-      WHERE ar.request_id = $1
-    `, [request_id]);
+  } catch (error) {
+    console.error('승인 대기 목록 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Query Failed',
+      message: error.message || '승인 대기 목록 조회 중 오류가 발생했습니다.'
+    });
+  }
+});
 
-    if (requestResult.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Approval request not found' });
+// [advice from AI] 승인 처리 (승인/거부)
+router.post('/:requestId/approve', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    const approvalService = new ApprovalService();
+    const { requestId } = req.params;
+    const { action, comment } = req.body; // action: 'approve' | 'reject'
+    
+    const result = await approvalService.processApproval({
+      requestId,
+      approverId: req.user.userId,
+      action,
+      comment,
+      metadata: req.body.metadata || {}
+    });
+    
+    // [advice from AI] 승인 처리 알림 전송
+    try {
+      await approvalService.sendApprovalNotifications(
+        requestId,
+        action === 'approve' ? 'request_approved' : 'request_rejected',
+        {
+          approverName: req.user.fullName || req.user.username,
+          action: action,
+          comment: comment
+        }
+      );
+      console.log(`✅ 승인 ${action} 알림 전송 완료`);
+    } catch (notificationError) {
+      console.warn('⚠️ 알림 전송 실패:', notificationError.message);
     }
+    
+    res.json({
+      success: true,
+      data: result,
+      message: `승인 요청이 ${action === 'approve' ? '승인' : '거부'}되었고 알림이 전송되었습니다.`
+    });
 
-    // [advice from AI] 승인자 목록 조회
-    const approversResult = await approvalService.pool.query(`
-      SELECT aa.*, u.full_name, u.email, u.role_type
-      FROM approval_assignments aa
-      JOIN timbel_users u ON aa.approver_id = u.id
-      WHERE aa.request_id = $1
-      ORDER BY aa.level
-    `, [request_id]);
+  } catch (error) {
+    console.error('승인 처리 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Approval Process Failed',
+      message: error.message || '승인 처리 중 오류가 발생했습니다.'
+    });
+  }
+});
 
-    // [advice from AI] 댓글 조회
-    const commentsResult = await approvalService.pool.query(`
-      SELECT ac.*, u.full_name as author_name
-      FROM approval_comments ac
-      JOIN timbel_users u ON ac.author_id = u.id
-      WHERE ac.request_id = $1 AND ac.request_type = 'approval'
-      ORDER BY ac.created_at ASC
-    `, [request_id]);
-
-    // [advice from AI] 로그 조회
-    const logsResult = await approvalService.pool.query(`
-      SELECT al.*, u.full_name as actor_name
-      FROM approval_logs al
-      JOIN timbel_users u ON al.actor_id = u.id
-      WHERE al.request_id = $1
-      ORDER BY al.created_at DESC
-    `, [request_id]);
-
+// [advice from AI] 사용자별 승인자 목록 조회
+router.get('/approvers', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    const { Pool } = require('pg');
+    const pool = new Pool({
+      user: process.env.DB_USER || 'timbel_user',
+      host: process.env.DB_HOST || 'postgres',
+      database: process.env.DB_NAME || 'timbel_db',
+      password: process.env.DB_PASSWORD || 'timbel_password',
+      port: process.env.DB_PORT || 5432,
+    });
+    
+    // PO 목록
+    const poResult = await pool.query(`
+      SELECT id, username, full_name, email 
+      FROM timbel_users 
+      WHERE role_type = 'po' AND (is_active = true OR is_active IS NULL)
+    `);
+    
+    // QA/QC 목록
+    const qaResult = await pool.query(`
+      SELECT id, username, full_name, email 
+      FROM timbel_users 
+      WHERE role_type = 'qa' AND (is_active = true OR is_active IS NULL)
+    `);
+    
+    // 경영진 목록
+    const executiveResult = await pool.query(`
+      SELECT id, username, full_name, email 
+      FROM timbel_users 
+      WHERE role_type IN ('admin', 'executive') AND (is_active = true OR is_active IS NULL)
+    `);
+    
     res.json({
       success: true,
       data: {
-        request: requestResult.rows[0],
-        approvers: approversResult.rows,
-        comments: commentsResult.rows,
-        logs: logsResult.rows
-      }
+        pos: poResult.rows,
+        qas: qaResult.rows,
+        executives: executiveResult.rows
+      },
+      message: '승인자 목록을 조회했습니다.'
     });
 
   } catch (error) {
-    console.error('Get approval request error:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch approval request' });
-  }
-});
-
-// 승인 요청 생성
-router.post('/requests', authenticateToken, async (req, res) => {
-  try {
-    const requestData = {
-      ...req.body,
-      requester_id: req.user.id
-    };
-
-    const result = await approvalService.createApprovalRequest(requestData);
-    res.status(201).json(result);
-
-  } catch (error) {
-    console.error('Create approval request error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// 승인 응답
-router.post('/requests/:request_id/respond', authenticateToken, async (req, res) => {
-  try {
-    const { request_id } = req.params;
-    const responseData = {
-      ...req.body,
-      approver_id: req.user.id
-    };
-
-    const result = await approvalService.respondToApproval(request_id, req.user.id, responseData);
-    res.json(result);
-
-  } catch (error) {
-    console.error('Respond to approval error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// [advice from AI] 의사결정 요청 API
-
-// 의사결정 요청 목록 조회
-router.get('/decisions', authenticateToken, async (req, res) => {
-  try {
-    const { 
-      page = 1, 
-      limit = 20, 
-      status = '', 
-      type = '', 
-      priority = '',
-      my_requests = false,
-      my_participations = false
-    } = req.query;
-
-    const offset = (page - 1) * limit;
-    let query = `
-      SELECT dr.*, u.full_name as requester_name, u.email as requester_email,
-             d.name as department_name, p.name as project_name
-      FROM decision_requests dr
-      JOIN timbel_users u ON dr.requester_id = u.id
-      LEFT JOIN departments d ON dr.department_id = d.id
-      LEFT JOIN projects p ON dr.project_id = p.id
-    `;
-
-    const conditions = [];
-    const params = [];
-    let paramCount = 0;
-
-    // [advice from AI] 내가 요청한 의사결정만 조회
-    if (my_requests === 'true') {
-      paramCount++;
-      conditions.push(`dr.requester_id = $${paramCount}`);
-      params.push(req.user.id);
-    }
-
-    // [advice from AI] 내가 참여하는 의사결정만 조회
-    if (my_participations === 'true') {
-      paramCount++;
-      conditions.push(`EXISTS (
-        SELECT 1 FROM decision_participants dp 
-        WHERE dp.request_id = dr.request_id 
-        AND dp.participant_id = $${paramCount}
-      )`);
-      params.push(req.user.id);
-    }
-
-    if (status) {
-      paramCount++;
-      conditions.push(`dr.status = $${paramCount}`);
-      params.push(status);
-    }
-
-    if (type) {
-      paramCount++;
-      conditions.push(`dr.type = $${paramCount}`);
-      params.push(type);
-    }
-
-    if (priority) {
-      paramCount++;
-      conditions.push(`dr.priority = $${paramCount}`);
-      params.push(priority);
-    }
-
-    if (conditions.length > 0) {
-      query += ` WHERE ${conditions.join(' AND ')}`;
-    }
-
-    query += ` ORDER BY dr.created_at DESC`;
-
-    // [advice from AI] 전체 개수 조회
-    let countQuery = `SELECT COUNT(*) as total FROM decision_requests dr`;
-    if (conditions.length > 0) {
-      countQuery += ` WHERE ${conditions.join(' AND ')}`;
-    }
-
-    const [decisionsResult, countResult] = await Promise.all([
-      approvalService.pool.query(query + ` LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`, [...params, limit, offset]),
-      approvalService.pool.query(countQuery, params)
-    ]);
-
-    res.json({
-      success: true,
-      data: decisionsResult.rows,
-      pagination: {
-        total: parseInt(countResult.rows[0].total),
-        page: parseInt(page),
-        limit: parseInt(limit),
-        totalPages: Math.ceil(countResult.rows[0].total / limit)
-      }
+    console.error('승인자 목록 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Query Failed',
+      message: error.message || '승인자 목록 조회 중 오류가 발생했습니다.'
     });
-
-  } catch (error) {
-    console.error('Get decision requests error:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch decision requests' });
   }
 });
 
-// 의사결정 요청 상세 조회
-router.get('/decisions/:request_id', authenticateToken, async (req, res) => {
+// [advice from AI] 메시지 센터용 승인 메시지 조회
+router.get('/messages', jwtAuth.verifyToken, async (req, res) => {
   try {
-    const { request_id } = req.params;
-
-    // [advice from AI] 요청 정보 조회
-    const requestResult = await approvalService.pool.query(`
-      SELECT dr.*, u.full_name as requester_name, u.email as requester_email,
-             d.name as department_name, p.name as project_name
-      FROM decision_requests dr
-      JOIN timbel_users u ON dr.requester_id = u.id
-      LEFT JOIN departments d ON dr.department_id = d.id
-      LEFT JOIN projects p ON dr.project_id = p.id
-      WHERE dr.request_id = $1
-    `, [request_id]);
-
-    if (requestResult.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Decision request not found' });
-    }
-
-    // [advice from AI] 참여자 목록 조회
-    const participantsResult = await approvalService.pool.query(`
-      SELECT dp.*, u.full_name, u.email, u.role_type
-      FROM decision_participants dp
-      JOIN timbel_users u ON dp.participant_id = u.id
-      WHERE dp.request_id = $1
-      ORDER BY dp.role, dp.invited_at
-    `, [request_id]);
-
-    // [advice from AI] 투표 결과 조회
-    const votesResult = await approvalService.pool.query(`
-      SELECT dv.*, u.full_name as voter_name
-      FROM decision_votes dv
-      JOIN timbel_users u ON dv.participant_id = u.id
-      WHERE dv.request_id = $1
-      ORDER BY dv.voted_at
-    `, [request_id]);
-
-    // [advice from AI] 댓글 조회
-    const commentsResult = await approvalService.pool.query(`
-      SELECT ac.*, u.full_name as author_name
-      FROM approval_comments ac
-      JOIN timbel_users u ON ac.author_id = u.id
-      WHERE ac.request_id = $1 AND ac.request_type = 'decision'
-      ORDER BY ac.created_at ASC
-    `, [request_id]);
-
-    res.json({
-      success: true,
-      data: {
-        request: requestResult.rows[0],
-        participants: participantsResult.rows,
-        votes: votesResult.rows,
-        comments: commentsResult.rows
-      }
+    const { limit = 10, is_read } = req.query;
+    const userId = req.user.userId;
+    
+    const { Pool } = require('pg');
+    const pool = new Pool({
+      user: process.env.DB_USER || 'timbel_user',
+      host: process.env.DB_HOST || 'postgres',
+      database: process.env.DB_NAME || 'timbel_db',
+      password: process.env.DB_PASSWORD || 'timbel_password',
+      port: process.env.DB_PORT || 5432,
     });
-
-  } catch (error) {
-    console.error('Get decision request error:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch decision request' });
-  }
-});
-
-// 의사결정 요청 생성
-router.post('/decisions', authenticateToken, async (req, res) => {
-  try {
-    const requestData = {
-      ...req.body,
-      requester_id: req.user.id
-    };
-
-    const result = await approvalService.createDecisionRequest(requestData);
-    res.status(201).json(result);
-
-  } catch (error) {
-    console.error('Create decision request error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// 의사결정 투표
-router.post('/decisions/:request_id/vote', authenticateToken, async (req, res) => {
-  try {
-    const { request_id } = req.params;
-    const voteData = {
-      ...req.body,
-      participant_id: req.user.id
-    };
-
-    const result = await approvalService.voteOnDecision(request_id, req.user.id, voteData);
-    res.json(result);
-
-  } catch (error) {
-    console.error('Vote on decision error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// [advice from AI] 메시지 API
-
-// 메시지 목록 조회
-router.get('/messages', authenticateToken, async (req, res) => {
-  try {
-    const { 
-      page = 1, 
-      limit = 50, 
-      request_id = '',
-      request_type = '',
-      is_read = ''
-    } = req.query;
-
-    const offset = (page - 1) * limit;
-    let query = `
-      SELECT am.*, u.full_name as sender_name, u.email as sender_email
-      FROM approval_messages am
-      JOIN timbel_users u ON am.sender_id = u.id
-      WHERE am.recipient_id = $1
-    `;
-
-    const params = [req.user.id];
-    let paramCount = 1;
-
-    if (request_id) {
-      paramCount++;
-      query += ` AND am.request_id = $${paramCount}`;
-      params.push(request_id);
-    }
-
-    if (request_type) {
-      paramCount++;
-      query += ` AND am.request_type = $${paramCount}`;
-      params.push(request_type);
-    }
-
-    if (is_read !== '') {
-      paramCount++;
-      query += ` AND am.is_read = $${paramCount}`;
+    
+    let whereClause = 'WHERE (am.recipient_id = $1 OR am.recipient_id IS NULL)';
+    let params = [userId];
+    
+    if (is_read !== undefined) {
+      whereClause += ' AND am.is_read = $2';
       params.push(is_read === 'true');
     }
-
-    query += ` ORDER BY am.sent_at DESC`;
-
-    // [advice from AI] 전체 개수 조회
-    let countQuery = `SELECT COUNT(*) as total FROM approval_messages am WHERE am.recipient_id = $1`;
-    const countParams = [req.user.id];
-    let countParamCount = 1;
-
-    if (request_id) {
-      countParamCount++;
-      countQuery += ` AND am.request_id = $${countParamCount}`;
-      countParams.push(request_id);
-    }
-
-    if (request_type) {
-      countParamCount++;
-      countQuery += ` AND am.request_type = $${countParamCount}`;
-      countParams.push(request_type);
-    }
-
-    if (is_read !== '') {
-      countParamCount++;
-      countQuery += ` AND am.is_read = $${countParamCount}`;
-      countParams.push(is_read === 'true');
-    }
-
-    const [messagesResult, countResult] = await Promise.all([
-      approvalService.pool.query(query + ` LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`, [...params, limit, offset]),
-      approvalService.pool.query(countQuery, countParams)
-    ]);
-
+    
+    const query = `
+      SELECT 
+        am.message_id as id,
+        am.message_type as type,
+        am.subject as title,
+        am.content as message,
+        am.priority,
+        am.sent_at as created_at,
+        am.is_read,
+        am.request_id,
+        ar.title as request_title,
+        u.full_name as sender_name
+      FROM approval_messages am
+      LEFT JOIN approval_requests ar ON am.request_id = ar.request_id
+      LEFT JOIN timbel_users u ON am.sender_id = u.id
+      ${whereClause}
+      ORDER BY am.sent_at DESC
+      LIMIT $${params.length + 1}
+    `;
+    
+    params.push(parseInt(limit));
+    
+    const result = await pool.query(query, params);
+    
     res.json({
       success: true,
-      data: messagesResult.rows,
-      pagination: {
-        total: parseInt(countResult.rows[0].total),
-        page: parseInt(page),
-        limit: parseInt(limit),
-        totalPages: Math.ceil(countResult.rows[0].total / limit)
-      }
+      data: result.rows,
+      message: '승인 메시지를 조회했습니다.'
     });
 
   } catch (error) {
-    console.error('Get messages error:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch messages' });
-  }
-});
-
-// 메시지 전송
-router.post('/messages', authenticateToken, async (req, res) => {
-  try {
-    const messageData = {
-      ...req.body,
-      sender_id: req.user.id
-    };
-
-    const result = await approvalService.sendMessage(messageData);
-    res.status(201).json(result);
-
-  } catch (error) {
-    console.error('Send message error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// 메시지 읽음 처리
-router.put('/messages/:message_id/read', authenticateToken, async (req, res) => {
-  try {
-    const { message_id } = req.params;
-
-    const result = await approvalService.pool.query(`
-      UPDATE approval_messages 
-      SET is_read = true, read_at = NOW()
-      WHERE message_id = $1 AND recipient_id = $2
-      RETURNING id, message_id, read_at
-    `, [message_id, req.user.id]);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Message not found' });
-    }
-
-    res.json({
-      success: true,
-      data: result.rows[0],
-      message: 'Message marked as read'
+    console.error('승인 메시지 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Query Failed',
+      message: error.message || '메시지 조회 중 오류가 발생했습니다.'
     });
-
-  } catch (error) {
-    console.error('Mark message as read error:', error);
-    res.status(500).json({ success: false, error: 'Failed to mark message as read' });
   }
 });
 
-// [advice from AI] 댓글 API
-
-// 댓글 추가
-router.post('/comments', authenticateToken, async (req, res) => {
+// [advice from AI] 메시지 센터 통계 조회
+router.get('/dashboard/stats', jwtAuth.verifyToken, async (req, res) => {
   try {
-    const { request_id, request_type, content, parent_comment_id, is_internal = false } = req.body;
-
-    const result = await approvalService.pool.query(`
-      INSERT INTO approval_comments (
-        request_id, request_type, author_id, parent_comment_id, content, is_internal
-      ) VALUES ($1, $2, $3, $4, $5, $6)
-      RETURNING id, comment_id, created_at
-    `, [request_id, request_type, req.user.id, parent_comment_id, content, is_internal]);
-
-    res.status(201).json({
-      success: true,
-      data: result.rows[0],
-      message: 'Comment added successfully'
+    const userId = req.user.userId;
+    
+    const { Pool } = require('pg');
+    const pool = new Pool({
+      user: process.env.DB_USER || 'timbel_user',
+      host: process.env.DB_HOST || 'postgres',
+      database: process.env.DB_NAME || 'timbel_db',
+      password: process.env.DB_PASSWORD || 'timbel_password',
+      port: process.env.DB_PORT || 5432,
     });
-
-  } catch (error) {
-    console.error('Add comment error:', error);
-    res.status(500).json({ success: false, error: 'Failed to add comment' });
-  }
-});
-
-// [advice from AI] 대시보드 통계 API
-
-// 승인 대시보드 통계
-router.get('/dashboard/stats', authenticateToken, async (req, res) => {
-  try {
-    const userId = req.user.id;
-
+    
     // [advice from AI] 내가 요청한 승인 통계
-    const myRequestsStats = await approvalService.pool.query(`
+    const myRequestsResult = await pool.query(`
       SELECT 
         COUNT(*) as total,
-        COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending,
-        COUNT(CASE WHEN status = 'approved' THEN 1 END) as approved,
-        COUNT(CASE WHEN status = 'rejected' THEN 1 END) as rejected
+        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
+        SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved,
+        SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected
       FROM approval_requests 
       WHERE requester_id = $1
     `, [userId]);
-
-    // [advice from AI] 내가 승인해야 할 요청 통계
-    const myApprovalsStats = await approvalService.pool.query(`
+    
+    // [advice from AI] 내가 승인해야 할 통계
+    const myApprovalsResult = await pool.query(`
       SELECT 
         COUNT(*) as total,
-        COUNT(CASE WHEN aa.status = 'pending' THEN 1 END) as pending,
-        COUNT(CASE WHEN aa.status = 'approved' THEN 1 END) as approved,
-        COUNT(CASE WHEN aa.status = 'rejected' THEN 1 END) as rejected
+        SUM(CASE WHEN aa.status = 'pending' THEN 1 ELSE 0 END) as pending,
+        SUM(CASE WHEN aa.status = 'approved' THEN 1 ELSE 0 END) as approved,
+        SUM(CASE WHEN aa.status = 'rejected' THEN 1 ELSE 0 END) as rejected
       FROM approval_assignments aa
       WHERE aa.approver_id = $1
     `, [userId]);
-
-    // [advice from AI] 내가 참여하는 의사결정 통계
-    const myDecisionsStats = await approvalService.pool.query(`
-      SELECT 
-        COUNT(*) as total,
-        COUNT(CASE WHEN dr.status = 'open' THEN 1 END) as open,
-        COUNT(CASE WHEN dr.status = 'voting' THEN 1 END) as voting,
-        COUNT(CASE WHEN dr.status = 'decided' THEN 1 END) as decided
-      FROM decision_requests dr
-      JOIN decision_participants dp ON dr.request_id = dp.request_id
-      WHERE dp.participant_id = $1
-    `, [userId]);
-
+    
     // [advice from AI] 읽지 않은 메시지 수
-    const unreadMessages = await approvalService.pool.query(`
-      SELECT COUNT(*) as count
-      FROM approval_messages 
-      WHERE recipient_id = $1 AND is_read = false
+    const unreadMessagesResult = await pool.query(`
+      SELECT COUNT(*) as unread_count
+      FROM approval_messages
+      WHERE (recipient_id = $1 OR recipient_id IS NULL) AND is_read = false
     `, [userId]);
-
+    
     res.json({
       success: true,
       data: {
-        my_requests: myRequestsStats.rows[0],
-        my_approvals: myApprovalsStats.rows[0],
-        my_decisions: myDecisionsStats.rows[0],
-        unread_messages: parseInt(unreadMessages.rows[0].count)
-      }
+        my_requests: myRequestsResult.rows[0],
+        my_approvals: myApprovalsResult.rows[0],
+        my_decisions: { total: '0', open: '0', voting: '0', decided: '0' }, // 임시
+        unread_messages: parseInt(unreadMessagesResult.rows[0].unread_count)
+      },
+      message: '승인 대시보드 통계를 조회했습니다.'
     });
 
   } catch (error) {
-    console.error('Get dashboard stats error:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch dashboard stats' });
-  }
-});
-
-// [advice from AI] 워크플로우 API
-
-// 워크플로우 생성 (테스트용)
-router.post('/workflow/create', authenticateToken, async (req, res) => {
-  try {
-    const workflowData = {
-      ...req.body,
-      requester_id: req.user.id
-    };
-
-    const result = await workflowEngine.createApprovalWorkflow(workflowData);
-    res.json(result);
-
-  } catch (error) {
-    console.error('Create workflow error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// 워크플로우 템플릿 목록 조회
-router.get('/workflow/templates', authenticateToken, async (req, res) => {
-  try {
-    const { type = '', department_id = '' } = req.query;
-
-    let query = `
-      SELECT awt.*, u.full_name as created_by_name, d.name as department_name
-      FROM approval_workflow_templates awt
-      LEFT JOIN timbel_users u ON awt.created_by = u.id
-      LEFT JOIN departments d ON awt.department_id = d.id
-      WHERE awt.is_active = true
-    `;
-
-    const params = [];
-    let paramCount = 0;
-
-    if (type) {
-      paramCount++;
-      query += ` AND awt.type = $${paramCount}`;
-      params.push(type);
-    }
-
-    if (department_id) {
-      paramCount++;
-      query += ` AND awt.department_id = $${paramCount}`;
-      params.push(department_id);
-    }
-
-    query += ` ORDER BY awt.created_at DESC`;
-
-    const result = await workflowEngine.pool.query(query, params);
-
-    res.json({
-      success: true,
-      data: result.rows
-    });
-
-  } catch (error) {
-    console.error('Get workflow templates error:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch workflow templates' });
-  }
-});
-
-// 워크플로우 템플릿 생성
-router.post('/workflow/templates', authenticateToken, async (req, res) => {
-  try {
-    const templateData = {
-      ...req.body,
-      created_by: req.user.id
-    };
-
-    const result = await workflowEngine.createWorkflowTemplate(templateData);
-    res.status(201).json(result);
-
-  } catch (error) {
-    console.error('Create workflow template error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// 워크플로우 템플릿 상세 조회
-router.get('/workflow/templates/:template_id', authenticateToken, async (req, res) => {
-  try {
-    const { template_id } = req.params;
-
-    const result = await workflowEngine.pool.query(`
-      SELECT awt.*, u.full_name as created_by_name, d.name as department_name
-      FROM approval_workflow_templates awt
-      LEFT JOIN timbel_users u ON awt.created_by = u.id
-      LEFT JOIN departments d ON awt.department_id = d.id
-      WHERE awt.template_id = $1
-    `, [template_id]);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Workflow template not found' });
-    }
-
-    // [advice from AI] 워크플로우 단계 조회
-    const stepsResult = await workflowEngine.pool.query(`
-      SELECT * FROM approval_workflow_steps
-      WHERE template_id = $1
-      ORDER BY step_order
-    `, [template_id]);
-
-    res.json({
-      success: true,
-      data: {
-        template: result.rows[0],
-        steps: stepsResult.rows
-      }
-    });
-
-  } catch (error) {
-    console.error('Get workflow template error:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch workflow template' });
-  }
-});
-
-// [advice from AI] 권한 레벨 정보 조회
-router.get('/permission-levels', authenticateToken, async (req, res) => {
-  try {
-    res.json({
-      success: true,
-      data: workflowEngine.permissionLevels
-    });
-
-  } catch (error) {
-    console.error('Get permission levels error:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch permission levels' });
-  }
-});
-
-// [advice from AI] 금액별 승인 규칙 조회
-router.get('/approval-rules', authenticateToken, async (req, res) => {
-  try {
-    res.json({
-      success: true,
-      data: {
-        amountThresholds: workflowEngine.amountThresholds,
-        projectTypeRules: workflowEngine.projectTypeRules
-      }
-    });
-
-  } catch (error) {
-    console.error('Get approval rules error:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch approval rules' });
-  }
-});
-
-// [advice from AI] 승인 현황 통계
-router.get('/workflow/stats', authenticateToken, async (req, res) => {
-  try {
-    const { period = '30d' } = req.query;
-
-    let timeFilter = '';
-    if (period === '7d') {
-      timeFilter = "created_at >= NOW() - INTERVAL '7 days'";
-    } else if (period === '30d') {
-      timeFilter = "created_at >= NOW() - INTERVAL '30 days'";
-    } else if (period === '90d') {
-      timeFilter = "created_at >= NOW() - INTERVAL '90 days'";
-    }
-
-    // [advice from AI] 승인 요청 통계
-    const requestStats = await approvalService.pool.query(`
-      SELECT 
-        COUNT(*) as total_requests,
-        COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_requests,
-        COUNT(CASE WHEN status = 'approved' THEN 1 END) as approved_requests,
-        COUNT(CASE WHEN status = 'rejected' THEN 1 END) as rejected_requests,
-        AVG(CASE WHEN status = 'approved' THEN 
-          EXTRACT(EPOCH FROM (updated_at - created_at)) / 3600 
-        END) as avg_approval_hours
-      FROM approval_requests
-      ${timeFilter ? `WHERE ${timeFilter}` : ''}
-    `);
-
-    // [advice from AI] 승인자별 통계
-    const approverStats = await approvalService.pool.query(`
-      SELECT 
-        u.full_name,
-        u.role_type,
-        u.permission_level,
-        COUNT(aa.id) as total_assignments,
-        COUNT(CASE WHEN aa.status = 'pending' THEN 1 END) as pending_assignments,
-        COUNT(CASE WHEN aa.status = 'approved' THEN 1 END) as approved_assignments,
-        COUNT(CASE WHEN aa.status = 'rejected' THEN 1 END) as rejected_assignments,
-        AVG(CASE WHEN aa.status != 'pending' THEN 
-          EXTRACT(EPOCH FROM (aa.responded_at - aa.assigned_at)) / 3600 
-        END) as avg_response_hours
-      FROM approval_assignments aa
-      JOIN timbel_users u ON aa.approver_id = u.id
-      ${timeFilter ? `WHERE aa.assigned_at >= NOW() - INTERVAL '${period.replace('d', ' days')}'` : ''}
-      GROUP BY u.id, u.full_name, u.role_type, u.permission_level
-      ORDER BY total_assignments DESC
-    `);
-
-    // [advice from AI] 부서별 통계
-    const departmentStats = await approvalService.pool.query(`
-      SELECT 
-        d.name as department_name,
-        COUNT(ar.id) as total_requests,
-        COUNT(CASE WHEN ar.status = 'pending' THEN 1 END) as pending_requests,
-        COUNT(CASE WHEN ar.status = 'approved' THEN 1 END) as approved_requests,
-        AVG(ar.amount) as avg_amount
-      FROM approval_requests ar
-      LEFT JOIN departments d ON ar.department_id = d.id
-      ${timeFilter ? `WHERE ar.created_at >= NOW() - INTERVAL '${period.replace('d', ' days')}'` : ''}
-      GROUP BY d.id, d.name
-      ORDER BY total_requests DESC
-    `);
-
-    res.json({
-      success: true,
-      data: {
-        request_stats: requestStats.rows[0],
-        approver_stats: approverStats.rows,
-        department_stats: departmentStats.rows,
-        period: period
-      }
-    });
-
-  } catch (error) {
-    console.error('Get workflow stats error:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch workflow stats' });
-  }
-});
-
-// [advice from AI] 승인 요청 상세 정보 조회
-router.get('/requests/:requestId', authenticateToken, async (req, res) => {
-  try {
-    const { requestId } = req.params;
-    
-    const result = await approvalService.getRequestDetail(requestId);
-    
-    if (result.success) {
-      res.json(result);
-    } else {
-      res.status(404).json(result);
-    }
-  } catch (error) {
-    console.error('승인 요청 상세 조회 실패:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: '승인 요청 상세 정보를 불러올 수 없습니다.' 
-    });
-  }
-});
-
-// [advice from AI] 승인 요청 응답 처리
-router.post('/requests/:requestId/respond', authenticateToken, async (req, res) => {
-  try {
-    const { requestId } = req.params;
-    const { action, comment, metadata } = req.body;
-    const approverId = req.user.id;
-    
-    if (!action || !['approve', 'reject'].includes(action)) {
-      return res.status(400).json({ 
-        success: false, 
-        error: '유효한 액션을 제공해주세요 (approve 또는 reject)' 
-      });
-    }
-    
-    const result = await approvalService.respondToRequest(
-      requestId, 
-      approverId, 
-      action, 
-      comment, 
-      metadata
-    );
-    
-    if (result.success) {
-      res.json(result);
-    } else {
-      res.status(400).json(result);
-    }
-  } catch (error) {
-    console.error('승인 응답 처리 실패:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: '승인 응답 처리 중 오류가 발생했습니다.' 
-    });
-  }
-});
-
-// [advice from AI] 댓글 추가
-router.post('/comments', authenticateToken, async (req, res) => {
-  try {
-    const { request_id, content, is_internal = false } = req.body;
-    const authorId = req.user.id;
-    
-    if (!request_id || !content) {
-      return res.status(400).json({ 
-        success: false, 
-        error: '요청 ID와 댓글 내용은 필수입니다.' 
-      });
-    }
-    
-    const result = await approvalService.addComment(
-      request_id, 
-      authorId, 
-      content, 
-      is_internal
-    );
-    
-    if (result.success) {
-      res.json(result);
-    } else {
-      res.status(400).json(result);
-    }
-  } catch (error) {
-    console.error('댓글 추가 실패:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: '댓글 추가 중 오류가 발생했습니다.' 
-    });
-  }
-});
-
-// [advice from AI] 승인 워크플로우 전체 현황 조회
-router.get('/workflow/overview', authenticateToken, async (req, res) => {
-  try {
-    const result = await approvalService.getWorkflowOverview();
-    
-    if (result.success) {
-      res.json(result);
-    } else {
-      res.status(400).json(result);
-    }
-  } catch (error) {
-    console.error('워크플로우 전체 현황 조회 실패:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: '워크플로우 현황을 불러올 수 없습니다.' 
-    });
-  }
-});
-
-// [advice from AI] 특정 승인 요청의 흐름 조회
-router.get('/workflow/flow/:requestId', authenticateToken, async (req, res) => {
-  try {
-    const { requestId } = req.params;
-    
-    const result = await approvalService.getRequestFlow(requestId);
-    
-    if (result.success) {
-      res.json(result);
-    } else {
-      res.status(404).json(result);
-    }
-  } catch (error) {
-    console.error('승인 요청 흐름 조회 실패:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: '승인 흐름을 불러올 수 없습니다.' 
-    });
-  }
-});
-
-// [advice from AI] 팀/부서별 승인 현황 조회
-router.get('/team/stats', authenticateToken, async (req, res) => {
-  try {
-    const result = await approvalService.getTeamApprovalStats();
-    
-    if (result.success) {
-      res.json(result);
-    } else {
-      res.status(400).json(result);
-    }
-  } catch (error) {
-    console.error('팀 승인 현황 조회 실패:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: '팀 승인 현황을 불러올 수 없습니다.' 
-    });
-  }
-});
-
-// [advice from AI] 승인/반려 결정 취소
-router.post('/requests/:requestId/cancel', authenticateToken, async (req, res) => {
-  try {
-    const { requestId } = req.params;
-    const { reason } = req.body;
-    const cancelerId = req.user.userId;
-    
-    console.log('🔄 승인 결정 취소 요청:', {
-      requestId,
-      cancelerId,
-      reason
-    });
-    
-    const result = await approvalService.cancelApprovalDecision(requestId, cancelerId, reason);
-    
-    res.json(result);
-  } catch (error) {
-    console.error('승인 결정 취소 실패:', error);
-    res.status(400).json({
+    console.error('승인 대시보드 통계 조회 실패:', error);
+    res.status(500).json({
       success: false,
-      error: 'Cancel Failed',
-      message: error.message
+      error: 'Query Failed',
+      message: error.message || '통계 조회 중 오류가 발생했습니다.'
+    });
+  }
+});
+
+// [advice from AI] 승인 요청 목록 조회 (실제 데이터 기반)
+router.get('/requests', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { my_approvals, my_requests, status, limit = 20, offset = 0 } = req.query;
+    
+    const { Pool } = require('pg');
+    const pool = new Pool({
+      user: process.env.DB_USER || 'timbel_user',
+      host: process.env.DB_HOST || 'postgres',
+      database: process.env.DB_NAME || 'timbel_db',
+      password: process.env.DB_PASSWORD || 'timbel_password',
+      port: process.env.DB_PORT || 5432,
+    });
+
+    let query = '';
+    let params = [];
+    let paramIndex = 1;
+
+    if (my_approvals === 'true') {
+      // [advice from AI] 내가 승인해야 할 요청들 (자산 유형별 통계 포함)
+      query = `
+        SELECT DISTINCT 
+          ar.request_id,
+          ar.title,
+          ar.type,
+          ar.priority,
+          ar.status as request_status,
+          ar.description,
+          ar.metadata,
+          ar.created_at,
+          ar.due_date,
+          u.full_name as requester_name,
+          aa.level as approval_level,
+          aa.status as my_approval_status,
+          aa.assigned_at,
+          aa.timeout_hours,
+          -- [advice from AI] pending_knowledge_assets에서 자산 유형별 통계
+          COALESCE(pka_stats.code_components, 0) as code_components_count,
+          COALESCE(pka_stats.documents, 0) as documents_count,
+          COALESCE(pka_stats.design_assets, 0) as design_assets_count,
+          COALESCE(pka_stats.catalog_components, 0) as catalog_components_count,
+          COALESCE(pka_stats.total_assets, 0) as total_assets_count
+        FROM approval_requests ar
+        JOIN approval_assignments aa ON ar.request_id = aa.request_id
+        JOIN timbel_users u ON ar.requester_id = u.id
+        LEFT JOIN (
+          SELECT 
+            approval_request_id,
+            COUNT(CASE WHEN asset_type = 'code_component' THEN 1 END) as code_components,
+            COUNT(CASE WHEN asset_type = 'document' THEN 1 END) as documents,
+            COUNT(CASE WHEN asset_type = 'design_asset' THEN 1 END) as design_assets,
+            COUNT(CASE WHEN asset_type = 'catalog_component' THEN 1 END) as catalog_components,
+            COUNT(*) as total_assets
+          FROM pending_knowledge_assets
+          WHERE approval_request_id IS NOT NULL
+          GROUP BY approval_request_id
+        ) pka_stats ON ar.request_id = pka_stats.approval_request_id
+        WHERE aa.approver_id = $${paramIndex++}
+      `;
+      params.push(userId);
+
+      if (status) {
+        query += ` AND aa.status = $${paramIndex++}`;
+        params.push(status);
+      }
+
+      query += ` ORDER BY ar.created_at DESC, aa.level ASC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
+      params.push(parseInt(limit), parseInt(offset));
+
+    } else if (my_requests === 'true') {
+      // [advice from AI] 내가 요청한 승인들
+      query = `
+        SELECT 
+          ar.request_id,
+          ar.title,
+          ar.type,
+          ar.priority,
+          ar.status,
+          ar.description,
+          ar.created_at,
+          ar.due_date,
+          u.full_name as requester_name,
+          COUNT(aa.id) as total_approvers,
+          COUNT(CASE WHEN aa.status = 'approved' THEN 1 END) as approved_count,
+          COUNT(CASE WHEN aa.status = 'pending' THEN 1 END) as pending_count,
+          COUNT(CASE WHEN aa.status = 'rejected' THEN 1 END) as rejected_count
+        FROM approval_requests ar
+        JOIN timbel_users u ON ar.requester_id = u.id
+        LEFT JOIN approval_assignments aa ON ar.request_id = aa.request_id
+        WHERE ar.requester_id = $${paramIndex++}
+      `;
+      params.push(userId);
+
+      if (status) {
+        query += ` AND ar.status = $${paramIndex++}`;
+        params.push(status);
+      }
+
+      query += ` 
+        GROUP BY ar.request_id, ar.title, ar.type, ar.priority, ar.status, ar.description, ar.created_at, ar.due_date, u.full_name
+        ORDER BY ar.created_at DESC 
+        LIMIT $${paramIndex++} OFFSET $${paramIndex++}
+      `;
+      params.push(parseInt(limit), parseInt(offset));
+
+    } else {
+      // [advice from AI] 전체 승인 요청 (관리자용)
+      query = `
+        SELECT 
+          ar.request_id,
+          ar.title,
+          ar.type,
+          ar.priority,
+          ar.status,
+          ar.description,
+          ar.created_at,
+          ar.due_date,
+          u.full_name as requester_name,
+          COUNT(aa.id) as total_approvers,
+          COUNT(CASE WHEN aa.status = 'approved' THEN 1 END) as approved_count,
+          COUNT(CASE WHEN aa.status = 'pending' THEN 1 END) as pending_count
+        FROM approval_requests ar
+        JOIN timbel_users u ON ar.requester_id = u.id
+        LEFT JOIN approval_assignments aa ON ar.request_id = aa.request_id
+        WHERE 1=1
+      `;
+
+      if (status) {
+        query += ` AND ar.status = $${paramIndex++}`;
+        params.push(status);
+      }
+
+      query += ` 
+        GROUP BY ar.request_id, ar.title, ar.type, ar.priority, ar.status, ar.description, ar.created_at, ar.due_date, u.full_name
+        ORDER BY ar.created_at DESC 
+        LIMIT $${paramIndex++} OFFSET $${paramIndex++}
+      `;
+      params.push(parseInt(limit), parseInt(offset));
+    }
+
+    console.log('승인 요청 목록 쿼리:', { query, params, userId, queryParams: req.query });
+
+    const result = await pool.query(query, params);
+    
+    console.log(`승인 요청 목록 조회 결과: ${result.rows.length}개 항목`);
+    
+    res.json({
+      success: true,
+      data: result.rows,
+      total: result.rows.length,
+      query_params: { my_approvals, my_requests, status, limit, offset },
+      message: '승인 요청 목록을 조회했습니다.'
+    });
+
+  } catch (error) {
+    console.error('승인 요청 목록 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Approval Requests Failed',
+      message: '승인 요청 목록 조회에 실패했습니다.',
+      details: error.message
+    });
+  }
+});
+
+// [advice from AI] 지식 자산 승인 대기 목록 조회 (pending_knowledge_assets 기반)
+router.get('/pending-assets', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { asset_type, system_id, status = 'pending', limit = 50, offset = 0 } = req.query;
+    
+    const { Pool } = require('pg');
+    const pool = new Pool({
+      user: process.env.DB_USER || 'timbel_user',
+      host: process.env.DB_HOST || 'postgres',
+      database: process.env.DB_NAME || 'timbel_db',
+      password: process.env.DB_PASSWORD || 'timbel_password',
+      port: process.env.DB_PORT || 5432,
+    });
+
+    // [advice from AI] 승인된 시스템의 pending 자산들만 조회
+    let query = `
+      SELECT 
+        pka.id,
+        pka.asset_type,
+        pka.asset_data,
+        pka.system_info,
+        pka.source_info,
+        pka.status,
+        pka.created_at,
+        ar.request_id as approval_request_id,
+        ar.title as system_title,
+        ar.status as system_approval_status,
+        ss.system_name,
+        ss.repository_url,
+        ss.branch_name,
+        u.full_name as requester_name
+      FROM pending_knowledge_assets pka
+      LEFT JOIN approval_requests ar ON pka.approval_request_id = ar.request_id
+      LEFT JOIN system_snapshots ss ON pka.extraction_id = ss.extraction_id
+      LEFT JOIN timbel_users u ON ar.requester_id = u.id
+      WHERE pka.status = $1
+        AND ar.status = 'approved' -- 시스템이 승인된 경우만
+    `;
+    
+    let params = [status];
+    let paramIndex = 2;
+
+    if (asset_type) {
+      query += ` AND pka.asset_type = $${paramIndex++}`;
+      params.push(asset_type);
+    }
+
+    if (system_id) {
+      query += ` AND ar.request_id = $${paramIndex++}`;
+      params.push(system_id);
+    }
+
+    query += ` ORDER BY pka.created_at DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
+    params.push(parseInt(limit), parseInt(offset));
+
+    console.log('지식 자산 승인 대기 목록 쿼리:', { query, params });
+
+    const result = await pool.query(query, params);
+    
+    // [advice from AI] 자산 데이터 파싱 및 구조화
+    const assets = result.rows.map(row => {
+      const assetData = typeof row.asset_data === 'string' ? JSON.parse(row.asset_data) : row.asset_data;
+      const systemInfo = typeof row.system_info === 'string' ? JSON.parse(row.system_info) : row.system_info;
+      
+      return {
+        id: row.id,
+        name: assetData.name || assetData.title || 'Unknown Asset',
+        type: row.asset_type,
+        description: assetData.description || assetData.content?.substring(0, 200) || '',
+        file_path: assetData.file_path || '',
+        language: assetData.language || '',
+        size: assetData.file_size || assetData.size || 0,
+        systemName: row.system_name || systemInfo?.name || 'Unknown System',
+        systemId: row.approval_request_id,
+        requester_name: row.requester_name,
+        created_at: row.created_at,
+        metadata: assetData
+      };
+    });
+
+    // [advice from AI] 시스템별 그룹화
+    const systemGroups = {};
+    assets.forEach(asset => {
+      if (!systemGroups[asset.systemId]) {
+        systemGroups[asset.systemId] = {
+          systemId: asset.systemId,
+          systemName: asset.systemName,
+          assets: []
+        };
+      }
+      systemGroups[asset.systemId].assets.push(asset);
+    });
+
+    res.json({
+      success: true,
+      data: {
+        assets: assets,
+        systemGroups: Object.values(systemGroups),
+        totalAssets: assets.length
+      },
+      query_params: { asset_type, system_id, status, limit, offset },
+      message: '지식 자산 승인 대기 목록을 조회했습니다.'
+    });
+
+  } catch (error) {
+    console.error('지식 자산 승인 대기 목록 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Pending Assets Failed',
+      message: '지식 자산 승인 대기 목록 조회에 실패했습니다.',
+      details: error.message
+    });
+  }
+});
+
+// [advice from AI] 승인된 자산 목록 조회 (카탈로그 뷰용)
+router.get('/approved-assets', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    const { asset_type, system_id, search, limit = 50, offset = 0 } = req.query;
+    
+    const { Pool } = require('pg');
+    const pool = new Pool({
+      user: process.env.DB_USER || 'timbel_user',
+      host: process.env.DB_HOST || 'postgres',
+      database: process.env.DB_NAME || 'timbel_db',
+      password: process.env.DB_PASSWORD || 'timbel_password',
+      port: process.env.DB_PORT || 5432,
+    });
+
+    // [advice from AI] 승인 완료된 자산들을 각 테이블에서 조회
+    const queries = [];
+    
+    if (!asset_type || asset_type === 'code_component') {
+      queries.push(`
+        SELECT 
+          'code_component' as asset_type,
+          cc.id,
+          cc.name,
+          cc.description,
+          cc.file_path,
+          cc.language,
+          cc.complexity_score,
+          cc.line_count,
+          cc.created_at,
+          cc.updated_at,
+          cc.approval_status,
+          u.full_name as created_by_name,
+          'active' as status
+        FROM code_components cc
+        LEFT JOIN timbel_users u ON cc.created_by = u.id
+        WHERE cc.approval_status = 'approved'
+        ${search ? `AND (cc.name ILIKE '%${search}%' OR cc.description ILIKE '%${search}%')` : ''}
+      `);
+    }
+
+    if (!asset_type || asset_type === 'design_asset') {
+      queries.push(`
+        SELECT 
+          'design_asset' as asset_type,
+          da.id,
+          da.name,
+          da.description,
+          da.file_path,
+          da.file_type as language,
+          0 as complexity_score,
+          da.file_size as line_count,
+          da.created_at,
+          da.updated_at,
+          da.approval_status,
+          u.full_name as created_by_name,
+          'active' as status
+        FROM design_assets da
+        LEFT JOIN timbel_users u ON da.created_by = u.id
+        WHERE da.approval_status = 'approved'
+        ${search ? `AND (da.name ILIKE '%${search}%' OR da.description ILIKE '%${search}%')` : ''}
+      `);
+    }
+
+    if (!asset_type || asset_type === 'document') {
+      queries.push(`
+        SELECT 
+          'document' as asset_type,
+          d.id,
+          d.title as name,
+          d.content as description,
+          d.file_path,
+          d.format as language,
+          0 as complexity_score,
+          d.word_count as line_count,
+          d.created_at,
+          d.updated_at,
+          d.approval_status,
+          u.full_name as created_by_name,
+          'active' as status
+        FROM documents d
+        LEFT JOIN timbel_users u ON d.created_by = u.id
+        WHERE d.approval_status = 'approved'
+        ${search ? `AND (d.title ILIKE '%${search}%' OR d.content ILIKE '%${search}%')` : ''}
+      `);
+    }
+
+    if (!asset_type || asset_type === 'catalog_component') {
+      queries.push(`
+        SELECT 
+          'catalog_component' as asset_type,
+          cc.id,
+          cc.name,
+          cc.description,
+          cc.file_path,
+          cc.type as language,
+          0 as complexity_score,
+          0 as line_count,
+          cc.created_at,
+          cc.updated_at,
+          cc.approval_status,
+          u.full_name as created_by_name,
+          'active' as status
+        FROM catalog_components cc
+        LEFT JOIN timbel_users u ON cc.created_by = u.id
+        WHERE cc.approval_status = 'approved'
+        ${search ? `AND (cc.name ILIKE '%${search}%' OR cc.description ILIKE '%${search}%')` : ''}
+      `);
+    }
+
+    // [advice from AI] UNION으로 모든 자산 타입 통합 조회
+    const unionQuery = queries.join(' UNION ALL ') + ` ORDER BY created_at DESC LIMIT ${parseInt(limit)} OFFSET ${parseInt(offset)}`;
+    
+    console.log('승인된 자산 목록 쿼리:', { unionQuery, filters: { asset_type, system_id, search } });
+
+    const result = await pool.query(unionQuery);
+    
+    // [advice from AI] 통계 정보 계산
+    const statsQuery = `
+      SELECT 
+        'code_component' as type, COUNT(*) as count FROM code_components WHERE approval_status = 'approved'
+      UNION ALL
+      SELECT 
+        'design_asset' as type, COUNT(*) as count FROM design_assets WHERE approval_status = 'approved'
+      UNION ALL
+      SELECT 
+        'document' as type, COUNT(*) as count FROM documents WHERE approval_status = 'approved'
+      UNION ALL
+      SELECT 
+        'catalog_component' as type, COUNT(*) as count FROM catalog_components WHERE approval_status = 'approved'
+    `;
+    
+    const statsResult = await pool.query(statsQuery);
+    const stats = {};
+    statsResult.rows.forEach(row => {
+      stats[row.type] = parseInt(row.count);
+    });
+
+    res.json({
+      success: true,
+      data: {
+        assets: result.rows,
+        stats: stats,
+        totalAssets: result.rows.length
+      },
+      query_params: { asset_type, system_id, search, limit, offset },
+      message: '승인된 자산 목록을 조회했습니다.'
+    });
+
+  } catch (error) {
+    console.error('승인된 자산 목록 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Approved Assets Failed',
+      message: '승인된 자산 목록 조회에 실패했습니다.',
+      details: error.message
+    });
+  }
+});
+
+// [advice from AI] 소유자별 미승인 항목 조회
+router.get('/my-items', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    const { status = 'draft', type } = req.query;
+    const ownerId = req.user.userId;
+    
+    const { Pool } = require('pg');
+    const pool = new Pool({
+      user: process.env.DB_USER || 'timbel_user',
+      host: process.env.DB_HOST || 'postgres',
+      database: process.env.DB_NAME || 'timbel_db',
+      password: process.env.DB_PASSWORD || 'timbel_password',
+      port: process.env.DB_PORT || 5432,
+    });
+    
+    let items = [];
+    
+    // [advice from AI] 각 테이블에서 소유자의 미승인 항목 수집
+    
+    // 시스템 항목
+    if (!type || type === 'system') {
+      const systemQuery = `
+        SELECT 
+          s.id, 'system' as type, s.system_name as name, s.system_description as description,
+          s.created_at, 'draft' as status, s.extraction_id,
+          COALESCE(ar.status, 'draft') as approval_status
+        FROM system_snapshots s
+        LEFT JOIN approval_requests ar ON ar.metadata->>'extractionId' = s.extraction_id::text
+        WHERE s.extraction_id IN (
+          SELECT DISTINCT extraction_id FROM pending_knowledge_assets 
+          WHERE system_info->>'requestedBy' = $1
+        )
+        ${status !== 'all' ? 'AND (ar.status = $2 OR (ar.status IS NULL AND $2 = \'draft\'))' : ''}
+      `;
+      
+      const systemResult = await pool.query(
+        systemQuery, 
+        status !== 'all' ? [req.user.email, status] : [req.user.email]
+      );
+      items.push(...systemResult.rows);
+    }
+    
+    // 코드 컴포넌트
+    if (!type || type === 'component') {
+      const componentQuery = `
+        SELECT 
+          cc.id, 'component' as type, cc.name, cc.description,
+          cc.created_at, 'draft' as status, cc.created_by as owner_id
+        FROM code_components cc
+        WHERE cc.created_by = $1 AND cc.approval_status IS NULL
+        ${status !== 'all' ? 'AND cc.status = $2' : ''}
+      `;
+      
+      const componentResult = await pool.query(
+        componentQuery,
+        status !== 'all' ? [ownerId, status] : [ownerId]
+      );
+      items.push(...componentResult.rows);
+    }
+    
+    // 디자인 자산
+    if (!type || type === 'design') {
+      const designQuery = `
+        SELECT 
+          da.id, 'design' as type, da.name, da.description,
+          da.created_at, 'draft' as status, da.created_by as owner_id
+        FROM design_assets da
+        WHERE da.created_by = $1 AND da.approval_status IS NULL
+        ${status !== 'all' ? 'AND da.status = $2' : ''}
+      `;
+      
+      const designResult = await pool.query(
+        designQuery,
+        status !== 'all' ? [ownerId, status] : [ownerId]
+      );
+      items.push(...designResult.rows);
+    }
+    
+    // 문서
+    if (!type || type === 'document') {
+      const documentQuery = `
+        SELECT 
+          d.id, 'document' as type, d.title as name, d.content as description,
+          d.created_at, 'draft' as status, d.author_id as owner_id
+        FROM documents d
+        WHERE d.author_id = $1 AND d.approval_status IS NULL
+        ${status !== 'all' ? 'AND d.status = $2' : ''}
+      `;
+      
+      const documentResult = await pool.query(
+        documentQuery,
+        status !== 'all' ? [ownerId, status] : [ownerId]
+      );
+      items.push(...documentResult.rows);
+    }
+    
+    // 생성일 기준 정렬
+    items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    
+    res.json({
+      success: true,
+      data: items,
+      message: `소유자별 ${status} 항목을 조회했습니다.`
+    });
+
+  } catch (error) {
+    console.error('소유자별 미승인 항목 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Query Failed',
+      message: error.message || '소유자별 항목 조회 중 오류가 발생했습니다.'
     });
   }
 });

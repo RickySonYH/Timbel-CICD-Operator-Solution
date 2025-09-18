@@ -9,19 +9,49 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev
+    # [advice from AI] 포트 정리: Frontend는 3005 포트 사용, Nginx는 3000 포트에서 프록시
     ports:
-      - "3000:3000"
+      - "3005:3000"
     volumes:
       - ./frontend:/app
-      - /app/node_modules
+      - frontend_node_modules:/app/node_modules
     environment:
-      - REACT_APP_API_URL=http://localhost:3001
-      - REACT_APP_WS_URL=ws://localhost:3001
-      - VITE_API_URL=http://localhost:3001
+      - REACT_APP_API_URL=/api
+      - REACT_APP_WS_URL=ws://rdc.rickyson.com:3001
+      - VITE_API_URL=/api
       - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
       - NODE_ENV=development
+      - DISABLE_ESLINT_PLUGIN=true
+      - GENERATE_SOURCEMAP=false
+      - DANGEROUSLY_DISABLE_HOST_CHECK=true
+      - WDS_SOCKET_HOST=0.0.0.0
+      - WDS_SOCKET_PORT=0
+      - FAST_REFRESH=false
+      - WDS_HOT=false
+      - DISABLE_NEW_JSX_TRANSFORM=true
+      - REACT_APP_NO_WEBSOCKET=true
+      - WEBPACK_DEV_SERVER_NO_WEBSOCKET=true
+      - HOST=0.0.0.0
+      - PUBLIC_URL=http://rdc.rickyson.com:3000
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     networks:
       - timbel-network
 
@@ -38,6 +68,11 @@ services:
     environment:
       # Database connections
       - DATABASE_URL=postgresql://timbel_user:timbel_password@postgres:5432/timbel_db
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=timbel_user
+      - DB_PASSWORD=timbel_password
+      - DB_NAME=timbel_db
       - REDIS_URL=redis://redis:6379
       - ELASTICSEARCH_URL=http://elasticsearch:9200
       - MINIO_ENDPOINT=minio:9000
@@ -55,11 +90,27 @@ services:
       - JWT_SECRET=timbel-super-secret-jwt-key-change-in-production
       - PORT=3001
     depends_on:
-      - postgres
-      - redis
-      - elasticsearch
-      - minio
-      - chromadb
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.8'
+        reservations:
+          memory: 256M
+          cpus: '0.3'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     networks:
       - timbel-network
 
@@ -72,9 +123,35 @@ services:
       - POSTGRES_DB=timbel_db
       - POSTGRES_USER=timbel_user
       - POSTGRES_PASSWORD=timbel_password
+    command: >
+      postgres
+      -c shared_buffers=256MB
+      -c work_mem=16MB
+      -c maintenance_work_mem=64MB
+      -c effective_cache_size=512MB
+      -c random_page_cost=1.1
+      -c max_connections=200
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/init:/docker-entrypoint-initdb.d
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 128M
+          cpus: '0.2'
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U timbel_user -d timbel_db"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     networks:
       - timbel-network
 
@@ -85,7 +162,22 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.3'
+        reservations:
+          memory: 64M
+          cpus: '0.1'
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     networks:
       - timbel-network
 
@@ -99,8 +191,28 @@ services:
       - discovery.type=single-node
       - xpack.security.enabled=false
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - bootstrap.memory_lock=true
     volumes:
       - elasticsearch_data:/usr/share/elasticsearch/data
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.8'
+        reservations:
+          memory: 512M
+          cpus: '0.4'
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
     networks:
       - timbel-network
 
@@ -171,8 +283,7 @@ services:
   nginx:
     image: nginx:alpine
     ports:
-      - "80:80"
-      - "443:443"
+      - "3000:3000"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf
       - ./nginx/ssl:/etc/nginx/ssl
@@ -190,6 +301,7 @@ volumes:
   chromadb_data:
   prometheus_data:
   grafana_data:
+  frontend_node_modules:
 
 networks:
   timbel-network:

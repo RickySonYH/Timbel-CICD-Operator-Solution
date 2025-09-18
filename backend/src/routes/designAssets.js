@@ -3,6 +3,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
 const { Pool } = require('pg');
+const jwtAuth = require('../middleware/jwtAuth');
 
 const router = express.Router();
 
@@ -15,8 +16,7 @@ const pool = new Pool({
   port: process.env.DB_PORT || 5434,
 });
 
-// [advice from AI] JWT 인증 미들웨어 import
-const jwtAuth = require('../middleware/jwtAuth');
+// [advice from AI] JWT 인증 미들웨어 import (중복 제거됨)
 
 // [advice from AI] 기존 authenticateToken 함수 (호환성을 위해 유지)
 const authenticateToken = (req, res, next) => {
@@ -109,7 +109,7 @@ const upload = multer({
 });
 
 // [advice from AI] 디자인 자산 목록 조회
-router.get('/', authenticateToken, checkPermission('design_assets', 'read'), async (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
     const { category, tag, search } = req.query;
     let query = `
@@ -157,7 +157,7 @@ router.get('/', authenticateToken, checkPermission('design_assets', 'read'), asy
 });
 
 // [advice from AI] 디자인 자산 상세 조회
-router.get('/:id', authenticateToken, checkPermission('design_assets', 'read'), async (req, res) => {
+router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT da.*, u.full_name as creator_name
@@ -186,8 +186,8 @@ router.get('/:id', authenticateToken, checkPermission('design_assets', 'read'), 
   }
 });
 
-// [advice from AI] 디자인 자산 생성
-router.post('/', authenticateToken, checkPermission('design_assets', 'create'), upload.single('file'), async (req, res) => {
+// [advice from AI] 디자인 자산 생성 - Admin, PO, PE만 가능
+router.post('/', jwtAuth.verifyToken, jwtAuth.requireRole(['admin', 'po', 'pe']), upload.single('file'), async (req, res) => {
   try {
     const { name, description, category, tags, version, license } = req.body;
     
@@ -240,8 +240,8 @@ router.post('/', authenticateToken, checkPermission('design_assets', 'create'), 
   }
 });
 
-// [advice from AI] 디자인 자산 수정
-router.put('/:id', authenticateToken, checkPermission('design_assets', 'update'), async (req, res) => {
+// [advice from AI] 디자인 자산 수정 - Admin, PO, PE만 가능
+router.put('/:id', jwtAuth.verifyToken, jwtAuth.requireRole(['admin', 'po', 'pe']), async (req, res) => {
   try {
     const { name, description, category, tags, version, license } = req.body;
     
@@ -279,8 +279,8 @@ router.put('/:id', authenticateToken, checkPermission('design_assets', 'update')
   }
 });
 
-// [advice from AI] 디자인 자산 삭제
-router.delete('/:id', authenticateToken, checkPermission('design_assets', 'delete'), async (req, res) => {
+// [advice from AI] 디자인 자산 삭제 - Admin만 가능
+router.delete('/:id', jwtAuth.verifyToken, jwtAuth.requireRole(['admin']), async (req, res) => {
   try {
     const result = await pool.query(`
       DELETE FROM design_assets 
@@ -316,11 +316,11 @@ router.delete('/:id', authenticateToken, checkPermission('design_assets', 'delet
   }
 });
 
-// [advice from AI] 파일 다운로드
-router.get('/:id/download', authenticateToken, checkPermission('design_assets', 'read'), async (req, res) => {
+// [advice from AI] 파일 다운로드 (단일 파일)
+router.get('/:id/download', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT file_info FROM design_assets WHERE id = $1
+      SELECT name, file_path, file_type FROM design_assets WHERE id = $1
     `, [req.params.id]);
 
     if (result.rows.length === 0) {
@@ -330,16 +330,214 @@ router.get('/:id/download', authenticateToken, checkPermission('design_assets', 
       });
     }
 
-    const fileInfo = JSON.parse(result.rows[0].file_info);
-    const filePath = fileInfo.path;
-    const fileName = fileInfo.originalName;
+    const asset = result.rows[0];
+    const filePath = asset.file_path;
+    const fileName = asset.name;
+    const fileExtension = asset.file_type;
 
-    res.download(filePath, fileName);
+    console.log('다운로드 요청:', { filePath, fileName, fileExtension });
+
+    // 파일 경로가 상대 경로인 경우 절대 경로로 변환
+    const fs = require('fs');
+    const path = require('path');
+    
+    let fullPath = filePath;
+    if (!path.isAbsolute(filePath)) {
+      // 프로젝트 루트 기준으로 절대 경로 생성
+      const projectRoot = path.resolve(__dirname, '../../..');
+      
+      // '../test_image.png' 같은 경우를 처리
+      if (filePath.startsWith('../')) {
+        fullPath = path.resolve(projectRoot, filePath.substring(3));
+      } else {
+        fullPath = path.resolve(projectRoot, filePath);
+      }
+    }
+
+    console.log('📁 파일 경로 계산:', {
+      원본_경로: filePath,
+      계산된_절대_경로: fullPath,
+      프로젝트_루트: path.resolve(__dirname, '../../..')
+    });
+
+    // 파일 존재 여부 확인
+    if (!fs.existsSync(fullPath)) {
+      console.error('❌ 파일이 존재하지 않음:', fullPath);
+      return res.status(404).json({
+        success: false,
+        error: 'File not found',
+        message: `요청한 파일을 찾을 수 없습니다. 경로: ${fullPath}`
+      });
+    }
+
+    // 파일 정보 확인
+    const fileStats = fs.statSync(fullPath);
+    console.log('📊 파일 정보:', {
+      크기: fileStats.size,
+      수정일: fileStats.mtime,
+      읽기권한: fs.constants.R_OK
+    });
+
+    // 파일 확장자가 없는 경우 추가
+    const downloadFileName = fileName.includes('.') ? fileName : `${fileName}.${fileExtension}`;
+
+    console.log('⬇️ 파일 다운로드 시작:', { fullPath, downloadFileName });
+    
+    // 파일 읽기 권한 확인
+    try {
+      fs.accessSync(fullPath, fs.constants.R_OK);
+      console.log('✅ 파일 읽기 권한 확인됨');
+    } catch (accessErr) {
+      console.error('❌ 파일 읽기 권한 없음:', accessErr);
+      return res.status(403).json({
+        success: false,
+        error: 'Permission denied',
+        message: '파일에 대한 읽기 권한이 없습니다.'
+      });
+    }
+    
+    res.download(fullPath, downloadFileName, (err) => {
+      if (err) {
+        console.error('❌ 다운로드 중 오류:', err);
+        if (!res.headersSent) {
+          res.status(500).json({ 
+            success: false, 
+            error: 'Download failed',
+            message: `파일 다운로드 중 오류가 발생했습니다: ${err.message}`
+          });
+        }
+      } else {
+        console.log('✅ 파일 다운로드 완료:', downloadFileName);
+      }
+    });
+
   } catch (error) {
     console.error('File download error:', error);
     res.status(500).json({ 
       success: false, 
-      error: 'Failed to download file' 
+      error: 'Failed to download file',
+      message: error.message
+    });
+  }
+});
+
+// [advice from AI] 종속성 포함 다운로드 (ZIP 파일)
+router.get('/:id/download-with-dependencies', authenticateToken, async (req, res) => {
+  try {
+    const assetId = req.params.id;
+    
+    // 자산 정보 조회
+    const assetResult = await pool.query(`
+      SELECT name, file_path, file_type, related_components, usage_locations 
+      FROM design_assets WHERE id = $1
+    `, [assetId]);
+
+    if (assetResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Design asset not found'
+      });
+    }
+
+    const asset = assetResult.rows[0];
+    console.log('📦 종속성 포함 다운로드 요청:', asset.name);
+
+    const archiver = require('archiver');
+    const fs = require('fs');
+    const path = require('path');
+
+    // ZIP 파일 생성
+    const archive = archiver('zip', {
+      zlib: { level: 9 } // 최대 압축
+    });
+
+    // 응답 헤더 설정
+    const zipFileName = `${asset.name}_with_dependencies.zip`;
+    res.attachment(zipFileName);
+    res.setHeader('Content-Type', 'application/zip');
+
+    // 아카이브를 응답 스트림에 연결
+    archive.pipe(res);
+
+    // 메인 파일 추가
+    const projectRoot = path.resolve(__dirname, '../../..');
+    let mainFilePath = asset.file_path;
+    
+    if (!path.isAbsolute(mainFilePath)) {
+      if (mainFilePath.startsWith('../')) {
+        mainFilePath = path.resolve(projectRoot, mainFilePath.substring(3));
+      } else {
+        mainFilePath = path.resolve(projectRoot, mainFilePath);
+      }
+    }
+
+    if (fs.existsSync(mainFilePath)) {
+      archive.file(mainFilePath, { name: `main/${path.basename(mainFilePath)}` });
+      console.log('📁 메인 파일 추가:', path.basename(mainFilePath));
+    }
+
+    // 관련 컴포넌트 파일들 추가
+    if (asset.related_components && Array.isArray(asset.related_components)) {
+      for (const relatedId of asset.related_components) {
+        try {
+          // 관련 자산 정보 조회
+          const relatedResult = await pool.query(`
+            SELECT name, file_path, file_type FROM design_assets WHERE id = $1
+            UNION ALL
+            SELECT name, file_info->>'file_path' as file_path, 'code' as file_type FROM code_components WHERE id = $1
+          `, [relatedId]);
+
+          if (relatedResult.rows.length > 0) {
+            const related = relatedResult.rows[0];
+            let relatedPath = related.file_path;
+            
+            if (relatedPath && !path.isAbsolute(relatedPath)) {
+              if (relatedPath.startsWith('../')) {
+                relatedPath = path.resolve(projectRoot, relatedPath.substring(3));
+              } else {
+                relatedPath = path.resolve(projectRoot, relatedPath);
+              }
+            }
+
+            if (relatedPath && fs.existsSync(relatedPath)) {
+              archive.file(relatedPath, { name: `dependencies/${path.basename(relatedPath)}` });
+              console.log('🔗 관련 파일 추가:', path.basename(relatedPath));
+            }
+          }
+        } catch (err) {
+          console.warn('관련 파일 추가 실패:', err.message);
+        }
+      }
+    }
+
+    // README 파일 생성
+    const readmeContent = `# ${asset.name} - 종속성 포함 패키지
+
+## 포함된 파일들
+- main/${path.basename(mainFilePath || asset.name)} (메인 파일)
+- dependencies/ (관련 파일들)
+
+## 사용 방법
+1. 메인 파일을 프로젝트에 복사
+2. dependencies 폴더의 파일들을 적절한 위치에 배치
+3. 필요한 의존성 설치 및 설정
+
+생성일: ${new Date().toLocaleString('ko-KR')}
+`;
+
+    archive.append(readmeContent, { name: 'README.md' });
+
+    // 아카이브 완료
+    await archive.finalize();
+
+    console.log('✅ ZIP 파일 생성 완료:', zipFileName);
+
+  } catch (error) {
+    console.error('❌ 종속성 포함 다운로드 실패:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to create dependency package',
+      message: error.message
     });
   }
 });

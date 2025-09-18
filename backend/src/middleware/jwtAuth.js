@@ -134,8 +134,8 @@ class JWTAuthMiddleware {
     };
   }
 
-  // [advice from AI] 계층적 역할 기반 접근 제어
-  requireRole = (requiredRole) => {
+  // [advice from AI] 계층적 역할 기반 접근 제어 - 배열 지원
+  requireRole = (requiredRoles) => {
     return (req, res, next) => {
       if (!req.user) {
         return res.status(401).json({
@@ -146,19 +146,20 @@ class JWTAuthMiddleware {
       }
 
       const userRole = req.user.roleType;
+      const rolesArray = Array.isArray(requiredRoles) ? requiredRoles : [requiredRoles];
       
-      // [advice from AI] 계층적 권한 검증
-      const hasPermission = this.checkRolePermission(userRole, requiredRole);
+      // [advice from AI] 배열 중 하나라도 권한이 있으면 통과
+      const hasPermission = rolesArray.some(role => this.checkRolePermission(userRole, role));
       
       if (!hasPermission) {
         return res.status(403).json({
           success: false,
           error: 'Forbidden',
-          message: `접근 권한이 없습니다. 필요한 역할: ${requiredRole}, 현재 역할: ${userRole}`
+          message: `접근 권한이 없습니다. 필요한 역할: ${rolesArray.join(',')}, 현재 역할: ${userRole}`
         });
       }
 
-      console.log(`✅ 권한 검증 성공: ${userRole} -> ${requiredRole}`);
+      console.log(`✅ 권한 검증 성공: ${userRole} -> ${rolesArray.join(',')}`);
       next();
     };
   }

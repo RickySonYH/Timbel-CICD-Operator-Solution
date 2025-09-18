@@ -10,11 +10,11 @@ const router = express.Router();
 
 // [advice from AI] PostgreSQL 연결 설정
 const pool = new Pool({
-  user: process.env.POSTGRES_USER || 'timbel_user',
-  host: process.env.POSTGRES_HOST || 'postgres',
-  database: process.env.POSTGRES_DB || 'timbel_knowledge',
-  password: process.env.POSTGRES_PASSWORD || 'timbel_password',
-  port: process.env.POSTGRES_PORT || 5432,
+  user: process.env.DB_USER || 'timbel_user',
+  host: process.env.DB_HOST || 'localhost',
+  database: process.env.DB_NAME || 'timbel_db',
+  password: process.env.DB_PASSWORD || 'timbel_password',
+  port: process.env.DB_PORT || 5434,
 });
 
 // [advice from AI] JWT 기반 로그인 (토큰 반환) - 데이터베이스 기반

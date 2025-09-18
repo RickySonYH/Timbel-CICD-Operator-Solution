@@ -81,10 +81,20 @@ export const useJwtAuthStore = create<AuthState>()(
         try {
           console.log('🔐 JWT 로그인 시도:', loginId);
           
-          const apiUrl = process.env.NODE_ENV === 'development' 
-            ? 'http://localhost:3001' 
-            : 'http://backend:3001';
-          const response = await fetch(`${apiUrl}/api/auth/login`, {
+          // [advice from AI] 동적 API URL 감지 - 내부/외부 접속 자동 구분
+          const getApiUrl = () => {
+            const currentHost = window.location.host;
+            if (currentHost === 'localhost:3000' || currentHost === '127.0.0.1:3000') {
+              // 내부 접속 - 직접 백엔드 포트로
+              return 'http://localhost:3001';
+            } else {
+              // 외부 접속 - Nginx 프록시를 통해
+              return '/api';
+            }
+          };
+          
+          const apiUrl = getApiUrl();
+          const response = await fetch(`${apiUrl}/auth/login`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

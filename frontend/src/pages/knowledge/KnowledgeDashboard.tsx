@@ -1,4 +1,4 @@
-// [advice from AI] 지식 등록 및 관리 대시보드 컴포넌트
+// [advice from AI] 지식자원 카탈로그 대시보드 컴포넌트
 // 지식 자산의 등록, 검색, 승인, 다이어그램 관리 기능을 제공
 
 import React, { useState, useEffect } from 'react';
@@ -30,9 +30,14 @@ import {
   AccountTree as DiagramIcon,
   TrendingUp as TrendingUpIcon,
   Edit as EditIcon,
-  Visibility as ViewIcon
+  Visibility as ViewIcon,
+  Business as BusinessIcon,
+  Computer as SystemIcon,
+  Assignment as AssignmentIcon
 } from '@mui/icons-material';
 import { useJwtAuthStore } from '../../store/jwtAuthStore';
+import KnowledgeSearch from '../../components/knowledge/KnowledgeSearch';
+import KnowledgeAssetDetail from '../../components/knowledge/KnowledgeAssetDetail';
 import { useNavigate } from 'react-router-dom';
 
 const KnowledgeDashboard: React.FC = () => {
@@ -54,20 +59,21 @@ const KnowledgeDashboard: React.FC = () => {
         }
 
         // [advice from AI] 실제 API에서 데이터 조회
+        const apiUrl = process.env.REACT_APP_API_URL || '/api';
         const [designAssetsResponse, codeComponentsResponse, documentsResponse] = await Promise.all([
-          fetch('http://localhost:3001/api/design-assets', {
+          fetch(`${apiUrl}/design-assets`, {
             headers: {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json'
             }
           }),
-          fetch('http://localhost:3001/api/code-components', {
+          fetch(`${apiUrl}/code-components`, {
             headers: {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json'
             }
           }),
-          fetch('http://localhost:3001/api/documents', {
+          fetch(`${apiUrl}/documents`, {
             headers: {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json'
@@ -105,53 +111,59 @@ const KnowledgeDashboard: React.FC = () => {
   }, [user]);
 
   // [advice from AI] 지식 관리 메뉴 항목들
-  const knowledgeItems = [
+  // [advice from AI] Phase 4: 순수 카탈로그 조회용 메뉴들 (등록 기능 제거)
+  // [advice from AI] 카탈로그 카드 데이터 (6개 → 3x2 배치)
+  const catalogItems = [
+    // 첫 번째 행: 도메인, 프로젝트, 시스템
     {
-      title: '디자인 자산 등록',
-      description: 'UI/UX 디자인 자산을 등록하고 관리합니다',
-      icon: <DesignIcon />,
-      path: '/knowledge/design',
-      color: '#e91e63',
-      stats: stats?.totalDesignAssets || 0
+      title: '도메인 (영업처)',
+      description: '비즈니스 도메인별 지식 자산을 조회합니다',
+      icon: <BusinessIcon />,
+      path: '/knowledge/domains',
+      color: '#795548',
+      stats: stats?.totalDomains || 0
     },
     {
-      title: '코드/컴포넌트 등록',
-      description: '재사용 가능한 코드와 컴포넌트를 등록합니다',
+      title: '프로젝트 (기획)',
+      description: '도메인별 프로젝트를 조회하고 관리합니다',
+      icon: <AssignmentIcon />,
+      path: '/knowledge/projects',
+      color: '#ff5722',
+      stats: stats?.totalProjects || 0,
+      badge: 'NEW'
+    },
+    {
+      title: '시스템 (솔루션)',
+      description: '승인된 시스템들을 조회하고 활용합니다',
+      icon: <SystemIcon />,
+      path: '/knowledge/systems',
+      color: '#607d8b',
+      stats: stats?.totalSystems || 0
+    },
+    // 두 번째 행: 코드 컴포넌트, 문서/가이드, 디자인
+    {
+      title: '코드 컴포넌트',
+      description: '재사용 가능한 코드와 컴포넌트를 조회하고 활용합니다',
       icon: <CodeIcon />,
       path: '/knowledge/code',
       color: '#9c27b0',
       stats: stats?.totalCodeComponents || 0
     },
     {
-      title: '문서/가이드 등록',
-      description: '기술 문서와 가이드를 등록하고 관리합니다',
+      title: '문서/가이드',
+      description: '기술 문서와 가이드를 조회하고 활용합니다',
       icon: <DocIcon />,
       path: '/knowledge/docs',
       color: '#3f51b5',
       stats: stats?.totalDocuments || 0
     },
     {
-      title: '지식 검색 및 관리',
-      description: '등록된 지식 자산을 검색하고 관리합니다',
-      icon: <SearchIcon />,
-      path: '/knowledge/search',
-      color: '#2196f3'
-    },
-    {
-      title: '승인 워크플로우',
-      description: '지식 자산의 승인 프로세스를 관리합니다',
-      icon: <ApprovalIcon />,
-      path: '/knowledge/approval',
-      color: '#ff9800',
-      stats: stats?.pendingApprovals || 0
-    },
-    {
-      title: '다이어그램 관리',
-      description: '시스템 다이어그램을 생성하고 관리합니다',
-      icon: <DiagramIcon />,
-      path: '/knowledge/diagrams',
-      color: '#4caf50',
-      stats: stats?.totalDiagrams || 0
+      title: '디자인 자산',
+      description: '등록된 UI/UX 디자인 자산을 조회하고 활용합니다',
+      icon: <DesignIcon />,
+      path: '/knowledge/design',
+      color: '#e91e63',
+      stats: stats?.totalDesignAssets || 0
     }
   ];
 
@@ -166,20 +178,21 @@ const KnowledgeDashboard: React.FC = () => {
         if (!token) return;
 
         // [advice from AI] 최근 등록된 데이터 조회
+        const apiUrl = process.env.REACT_APP_API_URL || '/api';
         const [recentDesignAssets, recentCodeComponents, recentDocuments] = await Promise.all([
-          fetch('http://localhost:3001/api/design-assets?limit=5&sort=created_at:desc', {
+          fetch(`${apiUrl}/design-assets?limit=5&sort=created_at:desc`, {
             headers: {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json'
             }
           }),
-          fetch('http://localhost:3001/api/code-components?limit=5&sort=created_at:desc', {
+          fetch(`${apiUrl}/code-components?limit=5&sort=created_at:desc`, {
             headers: {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json'
             }
           }),
-          fetch('http://localhost:3001/api/documents?limit=5&sort=created_at:desc', {
+          fetch(`${apiUrl}/documents?limit=5&sort=created_at:desc`, {
             headers: {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json'
@@ -292,125 +305,128 @@ const KnowledgeDashboard: React.FC = () => {
       {/* [advice from AI] 페이지 헤더 */}
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 600 }}>
-          지식 등록 및 관리 대시보드
+          지식자원 카탈로그 대시보드
         </Typography>
         <Typography variant="body1" color="text.secondary">
           지식 자산을 등록, 검색, 승인하고 시스템 다이어그램을 관리합니다.
         </Typography>
       </Box>
 
-      {/* [advice from AI] 통계 요약 카드 */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ height: '100%' }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <DesignIcon sx={{ color: '#e91e63', mr: 1 }} />
-                <Typography variant="h6">디자인 자산</Typography>
-              </Box>
-              <Typography variant="h3" sx={{ fontWeight: 600, color: '#e91e63' }}>
-                {stats?.totalDesignAssets || 0}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                등록된 디자인 자산
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
+      {/* [advice from AI] 통합 지식 검색 섹션 */}
+      <Card sx={{ mb: 4 }}>
+        <CardContent>
+          <Typography variant="h5" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <SearchIcon />
+            통합 지식 검색
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            RickySon의 {(stats?.totalDesignAssets || 0) + (stats?.totalCodeComponents || 0) + (stats?.totalDocuments || 0)}개 지식 자산에서 검색하세요
+          </Typography>
+          <KnowledgeSearch />
+        </CardContent>
+      </Card>
 
-        <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ height: '100%' }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <CodeIcon sx={{ color: '#9c27b0', mr: 1 }} />
-                <Typography variant="h6">코드 컴포넌트</Typography>
-              </Box>
-              <Typography variant="h3" sx={{ fontWeight: 600, color: '#9c27b0' }}>
-                {stats?.totalCodeComponents || 0}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                재사용 가능한 컴포넌트
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
+      {/* [advice from AI] Phase 4: 상단 작은 통계 카드들 제거 - 아래 큰 카드들로 통합 */}
 
-        <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ height: '100%' }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <DocIcon sx={{ color: '#3f51b5', mr: 1 }} />
-                <Typography variant="h6">문서/가이드</Typography>
-              </Box>
-              <Typography variant="h3" sx={{ fontWeight: 600, color: '#3f51b5' }}>
-                {stats?.totalDocuments || 0}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                기술 문서 및 가이드
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ height: '100%' }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <ApprovalIcon sx={{ color: '#ff9800', mr: 1 }} />
-                <Typography variant="h6">승인 대기</Typography>
-              </Box>
-              <Typography variant="h3" sx={{ fontWeight: 600, color: '#ff9800' }}>
-                {stats?.pendingApprovals || 0}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                승인 대기 중인 자산
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-
-      {/* [advice from AI] 지식 관리 메뉴 그리드 */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        {knowledgeItems.map((item, index) => (
+      {/* [advice from AI] 지식자원 카탈로그 메뉴 그리드 - 3x2 배치 */}
+      <Grid container spacing={4} sx={{ mb: 4 }}>
+        {/* 전체 6개 카드를 3x2로 배치 */}
+        {catalogItems.map((item, index) => (
           <Grid item xs={12} sm={6} md={4} key={index}>
             <Card 
               sx={{ 
-                height: '100%',
+                height: '200px',
                 cursor: 'pointer',
                 transition: 'transform 0.2s, box-shadow 0.2s',
                 '&:hover': {
-                  transform: 'translateY(-2px)',
-                  boxShadow: 3
+                  transform: 'translateY(-4px)',
+                  boxShadow: 6
                 }
               }}
               onClick={() => navigate(item.path)}
             >
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                  <Box 
-                    sx={{ 
-                      p: 1, 
-                      borderRadius: 1, 
-                      bgcolor: `${item.color}20`,
-                      color: item.color,
-                      mr: 2
-                    }}
-                  >
-                    {item.icon}
+              <CardContent sx={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                <Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                    <Box 
+                      sx={{ 
+                        p: 1.5, 
+                        borderRadius: 2, 
+                        bgcolor: `${item.color}20`,
+                        color: item.color,
+                        mr: 2
+                      }}
+                    >
+                      {item.icon}
+                    </Box>
+                    <Typography variant="h5" sx={{ fontWeight: 600, color: item.color }}>
+                      {item.stats || 0}
+                    </Typography>
                   </Box>
-                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
                     {item.title}
                   </Typography>
-                </Box>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  {item.description}
-                </Typography>
-                {item.stats !== undefined && (
-                  <Typography variant="h4" sx={{ fontWeight: 600, color: item.color }}>
-                    {item.stats}
+                  <Typography variant="body2" color="text.secondary">
+                    {item.description}
                   </Typography>
-                )}
+                </Box>
+                <Box sx={{ mt: 2, textAlign: 'center' }}>
+                  <Typography variant="caption" color="primary.main" sx={{ fontWeight: 600 }}>
+                    관리
+                  </Typography>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
+      </Grid>
+      
+      {/* 두 번째 행: 2개 (중앙 정렬) */}
+      <Grid container spacing={4} sx={{ mb: 4 }} justifyContent="center">
+        {catalogItems.slice(3, 5).map((item, index) => (
+          <Grid item xs={12} sm={6} md={4} key={index + 3}>
+            <Card 
+              sx={{ 
+                height: '200px',
+                cursor: 'pointer',
+                transition: 'transform 0.2s, box-shadow 0.2s',
+                '&:hover': {
+                  transform: 'translateY(-4px)',
+                  boxShadow: 6
+                }
+              }}
+              onClick={() => navigate(item.path)}
+            >
+              <CardContent sx={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                <Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                    <Box 
+                      sx={{ 
+                        p: 1.5, 
+                        borderRadius: 2, 
+                        bgcolor: `${item.color}20`,
+                        color: item.color,
+                        mr: 2
+                      }}
+                    >
+                      {item.icon}
+                    </Box>
+                    <Typography variant="h5" sx={{ fontWeight: 600, color: item.color }}>
+                      {item.stats || 0}
+                    </Typography>
+                  </Box>
+                  <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
+                    {item.title}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {item.description}
+                  </Typography>
+                </Box>
+                <Box sx={{ mt: 2, textAlign: 'center' }}>
+                  <Typography variant="caption" color="primary.main" sx={{ fontWeight: 600 }}>
+                    관리
+                  </Typography>
+                </Box>
               </CardContent>
               <CardActions>
                 <Button size="small" startIcon={<ViewIcon />}>
@@ -448,16 +464,14 @@ const KnowledgeDashboard: React.FC = () => {
                       </ListItemIcon>
                       <ListItemText
                         primary={activity.title}
-                        secondary={
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <Typography variant="body2" color="text.secondary">
-                              {activity.user}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              {activity.time}
-                            </Typography>
-                          </Box>
-                        }
+                        secondary={`${activity.user} • ${activity.time}`}
+                        secondaryTypographyProps={{
+                          sx: { 
+                            display: 'flex', 
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
+                          }
+                        }}
                       />
                     </ListItem>
                     {index < recentActivities.length - 1 && <Divider />}

@@ -38,9 +38,13 @@ import {
   GitHub as GitHubIcon,
   Extension as NpmIcon,
   Link as LinkIcon,
-  Preview as PreviewIcon
+  Preview as PreviewIcon,
+  Visibility as ViewIcon
 } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 import { useJwtAuthStore } from '../../../store/jwtAuthStore';
+import KnowledgeAssetDetail from '../../../components/knowledge/KnowledgeAssetDetail';
+import { safeFetch, handleApiResponse } from '../../../utils/apiConfig';
 
 interface CodeComponent {
   id: string;
@@ -49,17 +53,24 @@ interface CodeComponent {
   type: string;
   language: string;
   framework: string;
-  dependencies: any[];
+  dependencies: {
+    functions?: any[];
+    api_endpoints?: any[];
+    imports?: any[];
+    exports?: any[];
+  } | any[];
   usage_example: string;
   version: string;
   source_type: string;
   source_url: string;
   source_info: any;
   file_info: {
-    originalName: string;
-    filename: string;
-    size: number;
-    mimetype: string;
+    originalName?: string;
+    filename?: string;
+    size?: number;
+    mimetype?: string;
+    line_count?: number;
+    complexity_score?: number;
   } | null;
   creator_name: string;
   download_count: number;
@@ -95,7 +106,9 @@ interface ExternalSourceInfo {
 
 const CodeComponentRegistration: React.FC = () => {
   const { token } = useJwtAuthStore();
+  const navigate = useNavigate();
   const [components, setComponents] = useState<CodeComponent[]>([]);
+  const [filteredComponents, setFilteredComponents] = useState<CodeComponent[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openDialog, setOpenDialog] = useState(false);
@@ -105,6 +118,10 @@ const CodeComponentRegistration: React.FC = () => {
   const [languageFilter, setLanguageFilter] = useState('');
   const [sourceTypeFilter, setSourceTypeFilter] = useState('');
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [selectedAsset, setSelectedAsset] = useState<{
+    type: 'code';
+    id: string;
+  } | null>(null);
   const [externalInfo, setExternalInfo] = useState<ExternalSourceInfo | null>(null);
 
   const [formData, setFormData] = useState<CodeComponentFormData>({
@@ -152,7 +169,7 @@ const CodeComponentRegistration: React.FC = () => {
       if (languageFilter) params.append('language', languageFilter);
       if (sourceTypeFilter) params.append('source_type', sourceTypeFilter);
 
-      const response = await fetch(`http://localhost:3001/api/code-components?${params}`, {
+      const response = await fetch(`/api/code-components?${params}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -164,6 +181,7 @@ const CodeComponentRegistration: React.FC = () => {
 
       const data = await response.json();
       setComponents(data.data);
+      setFilteredComponents(data.data); // 초기에는 모든 데이터 표시
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Unknown error');
     } finally {
@@ -175,7 +193,24 @@ const CodeComponentRegistration: React.FC = () => {
     if (token) {
       fetchComponents();
     }
-  }, [token, searchTerm, typeFilter, languageFilter, sourceTypeFilter]);
+  }, [token]);
+
+  // [advice from AI] 필터링 로직
+  useEffect(() => {
+    let filtered = components.filter(component => {
+      const matchesSearch = !searchTerm || 
+        component.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        component.description?.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const matchesType = !typeFilter || component.type === typeFilter;
+      const matchesLanguage = !languageFilter || component.language === languageFilter;
+      const matchesSourceType = !sourceTypeFilter || component.source_type === sourceTypeFilter;
+      
+      return matchesSearch && matchesType && matchesLanguage && matchesSourceType;
+    });
+
+    setFilteredComponents(filtered);
+  }, [components, searchTerm, typeFilter, languageFilter, sourceTypeFilter]);
 
   // [advice from AI] 외부 저장소 정보 미리보기 (자동 수집 + 수동 수정 가능)
   const handlePreviewExternal = async () => {
@@ -186,7 +221,7 @@ const CodeComponentRegistration: React.FC = () => {
 
     setPreviewLoading(true);
     try {
-      const response = await fetch('http://localhost:3001/api/code-components/preview-external', {
+      const response = await fetch('/api/code-components/preview-external', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -245,7 +280,7 @@ const CodeComponentRegistration: React.FC = () => {
         formDataToSend.append('version', formData.version);
         formDataToSend.append('file', formData.file);
 
-        response = await fetch('http://localhost:3001/api/code-components', {
+        response = await fetch('/api/code-components', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`
@@ -253,7 +288,7 @@ const CodeComponentRegistration: React.FC = () => {
           body: formDataToSend
         });
       } else {
-        response = await fetch('http://localhost:3001/api/code-components', {
+        response = await fetch('/api/code-components', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -351,13 +386,22 @@ const CodeComponentRegistration: React.FC = () => {
           <Typography variant="h4" component="h1" gutterBottom>
             코드/컴포넌트 등록
           </Typography>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => handleOpenDialog()}
-          >
-            새 컴포넌트 등록
-          </Button>
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            <Button
+              variant="outlined"
+              onClick={() => navigate('/knowledge/auto-registration')}
+              color="secondary"
+            >
+              자동 등록
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => handleOpenDialog()}
+            >
+              새 컴포넌트 등록
+            </Button>
+          </Box>
         </Box>
 
         {error && (
@@ -385,149 +429,231 @@ const CodeComponentRegistration: React.FC = () => {
                   }}
                 />
               </Grid>
-              <Grid item xs={12} md={3}>
-                <FormControl fullWidth>
-                  <InputLabel>타입</InputLabel>
-                  <Select
-                    value={typeFilter}
-                    onChange={(e) => setTypeFilter(e.target.value)}
-                    label="타입"
-                  >
-                    <MenuItem value="">전체</MenuItem>
-                    {componentTypes.map((type) => (
-                      <MenuItem key={type} value={type}>
-                        {type}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12} md={3}>
-                <FormControl fullWidth>
-                  <InputLabel>언어</InputLabel>
-                  <Select
-                    value={languageFilter}
-                    onChange={(e) => setLanguageFilter(e.target.value)}
-                    label="언어"
-                  >
-                    <MenuItem value="">전체</MenuItem>
-                    {languages.map((language) => (
-                      <MenuItem key={language} value={language}>
-                        {language}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12} md={3}>
-                <FormControl fullWidth>
-                  <InputLabel>소스 타입</InputLabel>
-                  <Select
-                    value={sourceTypeFilter}
-                    onChange={(e) => setSourceTypeFilter(e.target.value)}
-                    label="소스 타입"
-                  >
-                    <MenuItem value="">전체</MenuItem>
-                    {sourceTypes.map((source) => (
-                      <MenuItem key={source.value} value={source.value}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          {source.icon}
-                          {source.label}
-                        </Box>
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
+              {/* [advice from AI] 중복 버튼 제거 - 상단 헤더에 이미 있음 */}
             </Grid>
           </CardContent>
         </Card>
 
-        {/* 컴포넌트 목록 */}
-        <Card>
-          <CardContent>
-            {loading ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-                <CircularProgress />
+        {/* 인디케이터 설명 */}
+        <Card sx={{ mb: 2, bgcolor: '#f8f9fa' }}>
+          <CardContent sx={{ py: 2 }}>
+            <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>
+              📊 카드 인디케이터 가이드
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap', alignItems: 'center' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'success.main' }} />
+                <Typography variant="caption">관계 있음</Typography>
               </Box>
-            ) : (
-              <TableContainer>
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>소스</TableCell>
-                      <TableCell>이름</TableCell>
-                      <TableCell>타입</TableCell>
-                      <TableCell>언어</TableCell>
-                      <TableCell>프레임워크</TableCell>
-                      <TableCell>버전</TableCell>
-                      <TableCell>다운로드</TableCell>
-                      <TableCell>생성자</TableCell>
-                      <TableCell>생성일</TableCell>
-                      <TableCell>작업</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {components.map((component) => (
-                      <TableRow key={component.id}>
-                        <TableCell>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            {getSourceIcon(component.source_type)}
-                            <Chip label={getSourceLabel(component.source_type)} size="small" />
-                          </Box>
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="subtitle2" fontWeight="bold">
-                            {component.name}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {component.description}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Chip label={component.type} size="small" />
-                        </TableCell>
-                        <TableCell>{component.language}</TableCell>
-                        <TableCell>{component.framework}</TableCell>
-                        <TableCell>{component.version}</TableCell>
-                        <TableCell>{component.download_count}</TableCell>
-                        <TableCell>{component.creator_name}</TableCell>
-                        <TableCell>
-                          {new Date(component.created_at).toLocaleDateString('ko-KR')}
-                        </TableCell>
-                        <TableCell>
-                          {component.file_info && (
-                            <IconButton
-                              size="small"
-                              onClick={() => window.open(`http://localhost:3001/api/code-components/${component.id}/download`)}
-                              title="다운로드"
-                            >
-                              <DownloadIcon />
-                            </IconButton>
-                          )}
-                          <IconButton
-                            size="small"
-                            onClick={() => handleOpenDialog(component)}
-                            title="수정"
-                          >
-                            <EditIcon />
-                          </IconButton>
-                          <IconButton
-                            size="small"
-                            title="삭제"
-                            color="error"
-                          >
-                            <DeleteIcon />
-                          </IconButton>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            )}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <Box sx={{ width: 8, height: 8, borderRadius: '50%', border: '1px solid', borderColor: 'grey.400' }} />
+                <Typography variant="caption">관계 없음</Typography>
+              </Box>
+              <Typography variant="caption" color="text.secondary">
+                • 🧮 복잡도: 낮음(초록) → 보통(노랑) → 높음(빨강)
+                • ⚙️ 함수, 🔌 API, 📦 의존성 개수 표시
+              </Typography>
+            </Box>
           </CardContent>
         </Card>
+
+        {/* 컴포넌트 목록 - 카드 형식 */}
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+            <CircularProgress />
+          </Box>
+        ) : (
+          <Grid container spacing={3}>
+            {filteredComponents.map((component) => (
+              <Grid item xs={12} sm={6} md={4} key={component.id}>
+                <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                  <CardContent sx={{ flexGrow: 1 }}>
+                    {/* 소스 타입과 이름 */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                      <Box sx={{ mr: 2 }}>
+                        {getSourceIcon(component.source_type)}
+                      </Box>
+                      <Box sx={{ flexGrow: 1 }}>
+                        <Typography variant="h6" component="div" noWrap>
+                          {component.name}
+                        </Typography>
+                        <Chip label={getSourceLabel(component.source_type)} size="small" variant="outlined" />
+                      </Box>
+                    </Box>
+
+                    {/* 설명 */}
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                      {component.description || '설명 없음'}
+                    </Typography>
+
+                    {/* 타입과 언어 */}
+                    <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+                      <Chip label={component.type} size="small" color="primary" />
+                      <Chip label={component.language} size="small" color="secondary" />
+                    </Box>
+
+                    {/* 프레임워크 */}
+                    {component.framework && (
+                      <Box sx={{ mb: 2 }}>
+                        <Chip label={component.framework} size="small" variant="outlined" />
+                      </Box>
+                    )}
+
+                    {/* 메타 정보 */}
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                      <Typography variant="caption" color="text.secondary">
+                        버전: {component.version || '1.0.0'}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        다운로드: {component.download_count || 0}회
+                      </Typography>
+                    </Box>
+
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                      <Typography variant="caption" color="text.secondary">
+                        생성자: {component.creator_name || 'RickySon'}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        생성일: {new Date(component.created_at).toLocaleDateString('ko-KR')}
+                      </Typography>
+                    </Box>
+
+                    {/* 코드 메트릭 및 관계 인디케이터 */}
+                    <Box sx={{ display: 'flex', gap: 0.5, mt: 1, flexWrap: 'wrap' }}>
+                      {(() => {
+                        const deps = component.dependencies;
+                        if (!deps || typeof deps !== 'object' || Array.isArray(deps)) return null;
+                        
+                        const indicators = [];
+                        
+                        if (deps.functions && Array.isArray(deps.functions) && deps.functions.length > 0) {
+                          indicators.push(
+                            <Chip 
+                              key="functions"
+                              label={`⚙️ 함수 ${deps.functions.length}개`} 
+                              size="small" 
+                              variant="outlined" 
+                              color="primary"
+                            />
+                          );
+                        }
+                        
+                        if (deps.api_endpoints && Array.isArray(deps.api_endpoints) && deps.api_endpoints.length > 0) {
+                          indicators.push(
+                            <Chip 
+                              key="api_endpoints"
+                              label={`🔌 API ${deps.api_endpoints.length}개`} 
+                              size="small" 
+                              variant="outlined" 
+                              color="secondary"
+                            />
+                          );
+                        }
+                        
+                        if (deps.imports && Array.isArray(deps.imports) && deps.imports.length > 0) {
+                          indicators.push(
+                            <Chip 
+                              key="imports"
+                              label={`📦 의존성 ${deps.imports.length}개`} 
+                              size="small" 
+                              variant="outlined" 
+                              color="info"
+                            />
+                          );
+                        }
+                        
+                        return indicators;
+                      })()}
+                      
+                      {component.file_info?.complexity_score && (
+                        <Chip 
+                          label={`🧮 복잡도 ${Math.min(component.file_info.complexity_score * 10, 10).toFixed(1)}/10`} 
+                          size="small" 
+                          variant="outlined" 
+                          color={component.file_info.complexity_score > 0.7 ? "error" : component.file_info.complexity_score > 0.4 ? "warning" : "success"}
+                        />
+                      )}
+                      {component.file_info?.line_count && (
+                        <Chip 
+                          label={`📏 ${component.file_info.line_count}줄`} 
+                          size="small" 
+                          variant="outlined" 
+                          color="default"
+                        />
+                      )}
+                      
+                      {/* 관계 및 다이어그램 상태 인디케이터 */}
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        <Box
+                          sx={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: '50%',
+                            bgcolor: 'success.main', // 초록색 - 관계 있음 (임시)
+                            border: '1px solid',
+                            borderColor: 'success.main'
+                          }}
+                          title="관계 정보 있음"
+                        />
+                        <Box
+                          sx={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: '50%',
+                            bgcolor: 'transparent',
+                            border: '1px solid',
+                            borderColor: 'grey.400'
+                          }}
+                          title="다이어그램 없음"
+                        />
+                      </Box>
+                    </Box>
+                  </CardContent>
+
+                  {/* 액션 버튼 */}
+                  <Box sx={{ p: 2, pt: 0, display: 'flex', justifyContent: 'space-between' }}>
+                    <Box>
+                      {component.file_info && (
+                        <IconButton
+                          size="small"
+                          onClick={() => window.open(`/api/code-components/${component.id}/download`)}
+                          title="다운로드"
+                          color="primary"
+                        >
+                          <DownloadIcon />
+                        </IconButton>
+                      )}
+                      <IconButton
+                        size="small"
+                        onClick={() => setSelectedAsset({ type: 'code', id: component.id })}
+                        title="상세 보기"
+                        color="info"
+                      >
+                        <ViewIcon />
+                      </IconButton>
+                    </Box>
+                    <Box>
+                      <IconButton
+                        size="small"
+                        onClick={() => handleOpenDialog(component)}
+                        title="편집"
+                      >
+                        <EditIcon />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        title="삭제"
+                        color="error"
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </Box>
+                  </Box>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+        )}
 
         {/* 등록/수정 다이얼로그 */}
         <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="md" fullWidth>
@@ -767,6 +893,16 @@ const CodeComponentRegistration: React.FC = () => {
             </Button>
           </DialogActions>
         </Dialog>
+
+        {/* 상세 보기 다이얼로그 */}
+        {selectedAsset && (
+          <KnowledgeAssetDetail
+            open={!!selectedAsset}
+            onClose={() => setSelectedAsset(null)}
+            assetType={selectedAsset.type}
+            assetId={selectedAsset.id}
+          />
+        )}
       </Box>
     </Container>
   );

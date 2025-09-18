@@ -242,9 +242,9 @@ async function getSystemMetrics() {
       pool.query(`
         SELECT 
           COUNT(*) as total_tenants,
-          COUNT(CASE WHEN tenant_status = 'active' THEN 1 END) as active_tenants,
-          COUNT(CASE WHEN tenant_status = 'creating' THEN 1 END) as creating_tenants,
-          COUNT(CASE WHEN tenant_status = 'error' THEN 1 END) as error_tenants
+          COUNT(CASE WHEN status = 'active' THEN 1 END) as active_tenants,
+          COUNT(CASE WHEN status = 'creating' THEN 1 END) as creating_tenants,
+          COUNT(CASE WHEN status = 'error' THEN 1 END) as error_tenants
         FROM tenants
       `),
       
@@ -471,9 +471,9 @@ router.get('/integrated/overview', jwtAuth.verifyToken, async (req, res) => {
       pool.query(`
         SELECT 
           COUNT(*) as total_tenants,
-          COUNT(CASE WHEN tenant_status = 'active' THEN 1 END) as active_tenants,
-          COUNT(CASE WHEN tenant_status = 'creating' THEN 1 END) as creating_tenants,
-          COUNT(CASE WHEN tenant_status = 'error' THEN 1 END) as error_tenants
+          COUNT(CASE WHEN status = 'active' THEN 1 END) as active_tenants,
+          COUNT(CASE WHEN status = 'creating' THEN 1 END) as creating_tenants,
+          COUNT(CASE WHEN status = 'error' THEN 1 END) as error_tenants
         FROM tenants
       `),
       

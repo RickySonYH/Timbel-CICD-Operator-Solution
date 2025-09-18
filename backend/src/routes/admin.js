@@ -8,10 +8,10 @@ const router = express.Router();
 // [advice from AI] 데이터베이스 연결 설정
 const pool = new Pool({
   user: process.env.DB_USER || 'timbel_user',
-  host: process.env.DB_HOST || 'postgres',
-  database: process.env.DB_NAME || 'timbel_knowledge',
+  host: process.env.DB_HOST || 'localhost',
+  database: process.env.DB_NAME || 'timbel_db',
   password: process.env.DB_PASSWORD || 'timbel_password',
-  port: process.env.DB_PORT || 5432,
+  port: process.env.DB_PORT || 5434,
 });
 
 // [advice from AI] JWT 인증 미들웨어

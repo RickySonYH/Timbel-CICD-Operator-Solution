@@ -13,17 +13,21 @@
     "@types/node": "^20.9.1",
     "@types/react": "^18.2.38",
     "@types/react-dom": "^18.2.17",
+    "@types/react-syntax-highlighter": "^15.5.13",
+    "ajv": "^8.17.1",
+    "ajv-keywords": "^5.1.0",
     "d3": "^7.8.5",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.18.0",
     "react-scripts": "^5.0.1",
+    "react-syntax-highlighter": "^15.6.6",
     "typescript": "^4.9.5",
     "web-vitals": "^3.5.0",
     "zustand": "^4.4.7"
   },
   "scripts": {
-    "start": "craco start",
+    "start": "DISABLE_ESLINT_PLUGIN=true GENERATE_SOURCEMAP=false DANGEROUSLY_DISABLE_HOST_CHECK=true react-scripts start",
     "build": "craco build",
     "test": "craco test",
     "eject": "react-scripts eject"

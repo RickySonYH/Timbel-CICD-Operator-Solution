@@ -10,13 +10,17 @@ WORKDIR /app
 RUN apk update && apk add --no-cache \
     git \
     curl \
-    postgresql-client
+    postgresql-client \
+    python3 \
+    make \
+    g++ \
+    libc6-compat
 
 # 패키지 파일 복사 (캐시 최적화)
 COPY package*.json ./
 
-# 의존성 설치
-RUN npm install
+# 의존성 설치 (bcrypt 네이티브 바인딩 재빌드)
+RUN npm install && npm rebuild bcrypt --build-from-source
 
 # 소스 코드 복사
 COPY . .
