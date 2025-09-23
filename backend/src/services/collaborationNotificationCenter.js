@@ -571,6 +571,202 @@ class CollaborationNotificationCenter {
     }
   }
 
+  // [advice from AI] 프로젝트 생성 알림
+  async notifyProjectCreated(projectId, projectName, createdBy) {
+    try {
+      // 최고관리자들에게 알림
+      const adminsResult = await this.pool.query(`
+        SELECT id FROM timbel_users WHERE role_type = 'admin'
+      `);
+      
+      const adminIds = adminsResult.rows.map(row => row.id);
+      
+      if (adminIds.length > 0) {
+        // 기존 approval_messages 테이블 사용 (올바른 스키마)
+        for (const adminId of adminIds) {
+          await this.pool.query(`
+            INSERT INTO approval_messages (
+              message_id, recipient_id, sender_id, request_type, subject, content, 
+              priority, message_type, sent_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+          `, [
+            uuidv4(), adminId, createdBy, 'approval',
+            '🆕 새 프로젝트 승인 요청',
+            `"${projectName}" 프로젝트가 생성되어 승인을 기다리고 있습니다.`,
+            'high', 'notification'
+          ]);
+        }
+        
+        console.log(`✅ 프로젝트 생성 알림 전송: ${projectName}`);
+      }
+    } catch (error) {
+      console.error('❌ 프로젝트 생성 알림 실패:', error);
+    }
+  }
+  
+  // [advice from AI] 프로젝트 승인 알림
+  async notifyProjectApproved(projectId, projectName, approvedBy, projectCreator) {
+    try {
+      await this.pool.query(`
+        INSERT INTO approval_messages (
+          message_id, recipient_id, sender_id, request_type, subject, content, 
+          priority, message_type, sent_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+      `, [
+        uuidv4(), projectCreator, approvedBy, 'approval',
+        '✅ 프로젝트 승인 완료',
+        `"${projectName}" 프로젝트가 승인되었습니다. 이제 PE 할당을 진행할 수 있습니다.`,
+        'medium', 'notification'
+      ]);
+      
+      console.log(`✅ 프로젝트 승인 알림 전송: ${projectName}`);
+    } catch (error) {
+      console.error('❌ 프로젝트 승인 알림 실패:', error);
+    }
+  }
+  
+  // [advice from AI] 프로젝트 거부 알림
+  async notifyProjectRejected(projectId, projectName, rejectedBy, projectCreator, reason) {
+    try {
+      await this.pool.query(`
+        INSERT INTO approval_messages (
+          message_id, recipient_id, sender_id, request_type, subject, content, 
+          priority, message_type, sent_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+      `, [
+        uuidv4(), projectCreator, rejectedBy, 'approval',
+        '❌ 프로젝트 승인 거부',
+        `"${projectName}" 프로젝트가 거부되었습니다.\n사유: ${reason}`,
+        'high', 'notification'
+      ]);
+      
+      console.log(`✅ 프로젝트 거부 알림 전송: ${projectName}`);
+    } catch (error) {
+      console.error('❌ 프로젝트 거부 알림 실패:', error);
+    }
+  }
+  
+  // [advice from AI] PE 할당 알림
+  async notifyPEAssigned(projectId, projectName, peUserId, assignedBy) {
+    try {
+      await this.pool.query(`
+        INSERT INTO approval_messages (
+          message_id, recipient_id, sender_id, request_type, subject, content, 
+          priority, message_type, sent_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+      `, [
+        uuidv4(), peUserId, assignedBy, 'approval',
+        '👨‍💻 새 프로젝트 할당',
+        `"${projectName}" 프로젝트가 할당되었습니다. 작업 시작을 위해 요구사항을 검토해주세요.`,
+        'medium', 'notification'
+      ]);
+      
+      console.log(`✅ PE 할당 알림 전송: ${projectName}`);
+    } catch (error) {
+      console.error('❌ PE 할당 알림 실패:', error);
+    }
+  }
+  
+  // [advice from AI] 작업 시작 알림
+  async notifyWorkStarted(projectId, projectName, peUserId, repositoryUrl) {
+    try {
+      // PO와 최고관리자에게 알림
+      const recipientsResult = await this.pool.query(`
+        SELECT DISTINCT u.id
+        FROM timbel_users u
+        WHERE u.role_type IN ('admin', 'po')
+           OR (u.role_type = 'po' AND u.id = (
+             SELECT p.created_by FROM projects p WHERE p.id = $1
+           ))
+      `, [projectId]);
+      
+      const recipientIds = recipientsResult.rows.map(row => row.id);
+      
+      for (const recipientId of recipientIds) {
+        await this.pool.query(`
+          INSERT INTO approval_messages (
+            message_id, recipient_id, sender_id, title, message, 
+            priority, message_type, sent_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+        `, [
+          uuidv4(), recipientId, peUserId, 'approval',
+          '🚀 프로젝트 작업 시작',
+          `"${projectName}" 프로젝트의 개발이 시작되었습니다.\n레포지토리: ${repositoryUrl}`,
+          'medium', 'notification'
+        ]);
+      }
+      
+      console.log(`✅ 작업 시작 알림 전송: ${projectName}`);
+    } catch (error) {
+      console.error('❌ 작업 시작 알림 실패:', error);
+    }
+  }
+  
+  // [advice from AI] 작업 거부 알림
+  async notifyWorkRejected(projectId, projectName, peUserId, reason, category) {
+    try {
+      // PO와 최고관리자에게 알림
+      const recipientsResult = await this.pool.query(`
+        SELECT DISTINCT u.id
+        FROM timbel_users u
+        WHERE u.role_type IN ('admin', 'po')
+           OR (u.role_type = 'po' AND u.id = (
+             SELECT p.created_by FROM projects p WHERE p.id = $1
+           ))
+      `, [projectId]);
+      
+      const recipientIds = recipientsResult.rows.map(row => row.id);
+      
+      for (const recipientId of recipientIds) {
+        await this.pool.query(`
+          INSERT INTO approval_messages (
+            message_id, recipient_id, sender_id, title, message, 
+            priority, message_type, sent_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+        `, [
+          uuidv4(), recipientId, peUserId, 'approval',
+          '⚠️ 프로젝트 작업 거부',
+          `"${projectName}" 프로젝트 작업이 거부되었습니다.\n분류: ${category}\n사유: ${reason}`,
+          'high', 'notification'
+        ]);
+      }
+      
+      console.log(`✅ 작업 거부 알림 전송: ${projectName}`);
+    } catch (error) {
+      console.error('❌ 작업 거부 알림 실패:', error);
+    }
+  }
+  
+  // [advice from AI] 긴급 개발 프로젝트 알림
+  async notifyUrgentProject(projectId, projectName, urgentReason, expectedHours, createdBy) {
+    try {
+      // 모든 관리자와 PO에게 긴급 알림
+      const recipientsResult = await this.pool.query(`
+        SELECT id FROM timbel_users WHERE role_type IN ('admin', 'po')
+      `);
+      
+      const recipientIds = recipientsResult.rows.map(row => row.id);
+      
+      for (const recipientId of recipientIds) {
+        await this.pool.query(`
+          INSERT INTO approval_messages (
+            message_id, recipient_id, sender_id, title, message, 
+            priority, message_type, sent_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+        `, [
+          uuidv4(), recipientId, createdBy, 'approval',
+          '🚨 긴급 개발 프로젝트',
+          `긴급 개발이 필요한 "${projectName}" 프로젝트가 생성되었습니다.\n사유: ${urgentReason}\n예상 완료 시간: ${expectedHours}시간`,
+          'urgent', 'notification'
+        ]);
+      }
+      
+      console.log(`✅ 긴급 프로젝트 알림 전송: ${projectName}`);
+    } catch (error) {
+      console.error('❌ 긴급 프로젝트 알림 실패:', error);
+    }
+  }
+
   // [advice from AI] 서비스 종료
   async close() {
     await this.pool.end();

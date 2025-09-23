@@ -1,5 +1,5 @@
-// [advice from AI] PE 주간 보고서 시스템
-// Phase 3: PE 업무 지원 시스템의 핵심 기능
+// [advice from AI] PE 진행 상황 보고 시스템
+// Phase 3: PE 업무 지원 시스템의 핵심 기능 - 업무 관리와 주간 보고서 통합
 
 import React, { useState, useEffect } from 'react';
 import {
@@ -98,6 +98,9 @@ const WeeklyReports: React.FC = () => {
     report_date: new Date().toISOString().split('T')[0],
     title: '',
     content: '',
+    readme_content: '',
+    progress_percentage: 0,
+    developer_comments: '',
     github_summary: {
       total_commits: 0,
       lines_added: 0,
@@ -109,6 +112,11 @@ const WeeklyReports: React.FC = () => {
     },
     attachments: [] as any[]
   });
+  
+  // [advice from AI] GitHub 활동 및 레포지토리 정보
+  const [repositoryInfo, setRepositoryInfo] = useState<any>(null);
+  const [loadingGitActivity, setLoadingGitActivity] = useState(false);
+  const [currentProgress, setCurrentProgress] = useState(0);
 
   // [advice from AI] 데이터 로드 함수들
   const loadReports = async () => {
@@ -132,9 +140,93 @@ const WeeklyReports: React.FC = () => {
     }
   };
 
+  // [advice from AI] GitHub 활동 자동 로드
+  const loadGitHubActivity = async () => {
+    try {
+      setLoadingGitActivity(true);
+      
+      // 현재 할당된 프로젝트의 레포지토리 정보 조회
+      const projectsResponse = await fetch('/api/projects/assigned/me', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      if (projectsResponse.ok) {
+        const projectsResult = await projectsResponse.json();
+        if (projectsResult.success && projectsResult.data.length > 0) {
+          const project = projectsResult.data[0];
+          
+          // Git 분석 데이터 조회
+          const gitResponse = await fetch(`/api/dev-environment/projects/${project.project_id}/git-analytics`, {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
+          });
+          
+          if (gitResponse.ok) {
+            const gitResult = await gitResponse.json();
+            if (gitResult.success && gitResult.data) {
+              const gitData = gitResult.data;
+              setRepositoryInfo({
+                repository_url: gitData.repository_url,
+                last_commit_date: gitData.last_commit_date,
+                total_files: gitData.total_files
+              });
+              
+              // GitHub 요약 자동 설정
+              setFormData(prev => ({
+                ...prev,
+                github_summary: {
+                  total_commits: gitData.total_commits || 0,
+                  lines_added: gitData.total_lines_added || 0,
+                  lines_removed: gitData.total_lines_deleted || 0,
+                  files_changed: gitData.code_files || 0,
+                  issues_created: 0,
+                  issues_resolved: 0,
+                  pull_requests: 0
+                }
+              }));
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('GitHub 활동 로드 실패:', error);
+    } finally {
+      setLoadingGitActivity(false);
+    }
+  };
+
+  // [advice from AI] 현재 프로젝트 진행률 로드
+  const loadCurrentProgress = async () => {
+    try {
+      const response = await fetch('/api/projects/assigned/me', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.data.length > 0) {
+          const latestProject = result.data[0];
+          setCurrentProgress(latestProject.progress_percentage || 0);
+          setFormData(prev => ({
+            ...prev,
+            progress_percentage: latestProject.progress_percentage || 0
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('진행률 로드 실패:', error);
+    }
+  };
+
   // [advice from AI] 컴포넌트 마운트 시 데이터 로드
   useEffect(() => {
     loadReports();
+    loadCurrentProgress();
   }, []);
 
   // [advice from AI] 필터링된 보고서 목록
@@ -182,6 +274,9 @@ const WeeklyReports: React.FC = () => {
           report_date: new Date().toISOString().split('T')[0],
           title: '',
           content: '',
+          readme_content: '',
+          progress_percentage: 0,
+          developer_comments: '',
           github_summary: {
             total_commits: 0,
             lines_added: 0,
@@ -215,12 +310,15 @@ const WeeklyReports: React.FC = () => {
   };
 
   // [advice from AI] 새 보고서 작성
-  const handleCreateReport = () => {
+  const handleCreateReport = async () => {
     setEditingReport(null);
     setFormData({
       report_date: new Date().toISOString().split('T')[0],
       title: '',
       content: '',
+      readme_content: '',
+      progress_percentage: currentProgress,
+      developer_comments: '',
       github_summary: {
         total_commits: 0,
         lines_added: 0,
@@ -233,6 +331,11 @@ const WeeklyReports: React.FC = () => {
       attachments: []
     });
     setReportDialog(true);
+    
+    // 다이얼로그가 열린 후 GitHub 활동 자동 로드
+    setTimeout(() => {
+      loadGitHubActivity();
+    }, 500);
   };
 
   // [advice from AI] 보고서 수정
@@ -242,6 +345,9 @@ const WeeklyReports: React.FC = () => {
       report_date: report.report_date,
       title: report.title,
       content: report.content,
+      readme_content: (report as any).readme_content || '',
+      progress_percentage: (report as any).progress_percentage || currentProgress,
+      developer_comments: (report as any).developer_comments || '',
       github_summary: report.github_summary || {
         total_commits: 0,
         lines_added: 0,
@@ -275,16 +381,14 @@ const WeeklyReports: React.FC = () => {
       {/* 헤더 */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4" component="h1" gutterBottom>
-          <TimelineIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-          주간 보고서
+          진행 상황 보고
         </Typography>
         <Button
           variant="contained"
-          startIcon={<AddIcon />}
           onClick={handleCreateReport}
           sx={{ bgcolor: 'primary.main' }}
         >
-          새 보고서 작성
+          진행 보고서 작성
         </Button>
       </Box>
 
@@ -461,7 +565,7 @@ const WeeklyReports: React.FC = () => {
         fullWidth
       >
         <DialogTitle>
-          {editingReport ? '보고서 수정' : '새 주간 보고서 작성'}
+          {editingReport ? '진행 보고서 수정' : '새 진행 보고서 작성'}
         </DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
@@ -483,23 +587,129 @@ const WeeklyReports: React.FC = () => {
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
               />
             </Grid>
+
+            {/* [advice from AI] 진행률 게이지 및 개발자 의견 */}
+            <Grid item xs={12}>
+              <Paper sx={{ p: 2, bgcolor: 'grey.50' }}>
+                <Typography variant="subtitle1" gutterBottom>
+                  📊 프로젝트 진행률 업데이트
+                </Typography>
+                
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="body2" color="text.secondary" gutterBottom>
+                    현재 진행률: {currentProgress}% → 업데이트할 진행률: {formData.progress_percentage}%
+                  </Typography>
+                  
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                    <Typography variant="body2" sx={{ minWidth: 50 }}>
+                      {formData.progress_percentage}%
+                    </Typography>
+                    <LinearProgress
+                      variant="determinate"
+                      value={formData.progress_percentage}
+                      sx={{ flexGrow: 1, mx: 2, height: 8, borderRadius: 4 }}
+                    />
+                    <TextField
+                      type="number"
+                      value={formData.progress_percentage}
+                      onChange={(e) => setFormData({ 
+                        ...formData, 
+                        progress_percentage: Math.max(0, Math.min(100, parseInt(e.target.value) || 0))
+                      })}
+                      inputProps={{ min: 0, max: 100 }}
+                      size="small"
+                      sx={{ width: 80 }}
+                    />
+                  </Box>
+                </Box>
+                
+                <TextField
+                  fullWidth
+                  label="진행률 변경 사유 및 개발자 의견"
+                  multiline
+                  rows={3}
+                  value={formData.developer_comments}
+                  onChange={(e) => setFormData({ ...formData, developer_comments: e.target.value })}
+                  placeholder="이번 주 진행 상황, 어려움, 성과 등을 작성해주세요..."
+                  helperText={`진행률이 ${formData.progress_percentage - currentProgress}% 변경됩니다.`}
+                />
+              </Paper>
+            </Grid>
+
+            {/* [advice from AI] README 파일 영역 */}
+            <Grid item xs={12}>
+              <Paper sx={{ p: 2, bgcolor: 'info.50' }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                  <Typography variant="subtitle1">
+                    📝 README 파일 내용
+                  </Typography>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={loadGitHubActivity}
+                    disabled={loadingGitActivity}
+                  >
+                    {loadingGitActivity ? '로딩...' : '레포지토리에서 불러오기'}
+                  </Button>
+                </Box>
+                
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={6}
+                  value={formData.readme_content}
+                  onChange={(e) => setFormData({ ...formData, readme_content: e.target.value })}
+                  placeholder="프로젝트 README 내용을 작성하거나 레포지토리에서 불러오세요..."
+                  variant="outlined"
+                  sx={{ 
+                    '& .MuiInputBase-input': { 
+                      fontFamily: 'monospace',
+                      fontSize: '0.875rem'
+                    }
+                  }}
+                />
+              </Paper>
+            </Grid>
+
             <Grid item xs={12}>
               <TextField
                 fullWidth
                 label="보고서 내용"
                 multiline
-                rows={8}
+                rows={6}
                 value={formData.content}
                 onChange={(e) => setFormData({ ...formData, content: e.target.value })}
                 placeholder="이번 주 업무 내용을 작성하세요..."
               />
             </Grid>
             
-            {/* GitHub 요약 */}
+            {/* [advice from AI] GitHub 활동 요약 - 자동 로드 */}
             <Grid item xs={12}>
-              <Typography variant="h6" gutterBottom>
-                GitHub 활동 요약
-              </Typography>
+              <Paper sx={{ p: 2, bgcolor: 'success.50' }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                  <Typography variant="subtitle1">
+                    🔄 GitHub 활동 요약
+                  </Typography>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={loadGitHubActivity}
+                    disabled={loadingGitActivity}
+                  >
+                    {loadingGitActivity ? '로딩...' : '최신 데이터 불러오기'}
+                  </Button>
+                </Box>
+
+                {repositoryInfo && (
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    <Typography variant="body2">
+                      <strong>레포지토리:</strong> {repositoryInfo.repository_url}<br />
+                      <strong>마지막 커밋:</strong> {repositoryInfo.last_commit_date ? new Date(repositoryInfo.last_commit_date).toLocaleDateString() : '없음'}<br />
+                      <strong>전체 파일:</strong> {repositoryInfo.total_files}개
+                    </Typography>
+                  </Alert>
+                )}
+              </Paper>
             </Grid>
             <Grid item xs={12} md={6}>
               <TextField
@@ -631,8 +841,55 @@ const WeeklyReports: React.FC = () => {
               
               <Divider sx={{ my: 2 }} />
               
+              {/* [advice from AI] 진행률 표시 */}
+              {(viewingReport as any).progress_percentage !== undefined && (
+                <>
+                  <Typography variant="subtitle2" gutterBottom>
+                    📊 프로젝트 진행률
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                    <LinearProgress
+                      variant="determinate"
+                      value={(viewingReport as any).progress_percentage}
+                      sx={{ flexGrow: 1, mr: 2, height: 8, borderRadius: 4 }}
+                    />
+                    <Typography variant="body2" sx={{ minWidth: 50 }}>
+                      {(viewingReport as any).progress_percentage}%
+                    </Typography>
+                  </Box>
+                  {(viewingReport as any).developer_comments && (
+                    <Paper sx={{ p: 2, bgcolor: 'info.50', mb: 2 }}>
+                      <Typography variant="body2">
+                        <strong>개발자 의견:</strong> {(viewingReport as any).developer_comments}
+                      </Typography>
+                    </Paper>
+                  )}
+                  <Divider sx={{ my: 2 }} />
+                </>
+              )}
+
+              {/* [advice from AI] README 파일 내용 */}
+              {(viewingReport as any).readme_content && (
+                <>
+                  <Typography variant="subtitle2" gutterBottom>
+                    📝 README 파일
+                  </Typography>
+                  <Paper sx={{ p: 2, bgcolor: 'grey.50', mb: 2 }}>
+                    <pre style={{ 
+                      whiteSpace: 'pre-wrap', 
+                      fontFamily: 'monospace',
+                      fontSize: '0.875rem',
+                      margin: 0 
+                    }}>
+                      {(viewingReport as any).readme_content}
+                    </pre>
+                  </Paper>
+                  <Divider sx={{ my: 2 }} />
+                </>
+              )}
+              
               <Typography variant="subtitle2" gutterBottom>
-                보고서 내용
+                📋 보고서 내용
               </Typography>
               <Paper sx={{ p: 2, bgcolor: 'grey.50' }}>
                 <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}>

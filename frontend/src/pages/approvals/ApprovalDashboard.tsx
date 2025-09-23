@@ -126,23 +126,31 @@ const ApprovalDashboard: React.FC = () => {
     try {
       console.log('승인 대시보드 데이터 로드 시작...');
       
-      // [advice from AI] 병렬로 모든 데이터 로드
-      const [statsResponse, pendingResponse, requestsResponse] = await Promise.all([
-        fetch('http://localhost:3001/api/approvals/dashboard/stats', {
+      // [advice from AI] 동적 API URL 결정
+      const getApiUrl = (): string => {
+        const currentHost = window.location.host;
+        if (currentHost === 'localhost:3000' || currentHost === '127.0.0.1:3000') {
+          return 'http://localhost:3001';
+        } else {
+          return '';  // 상대 경로 사용
+        }
+      };
+      
+      const apiUrl = getApiUrl();
+      
+      // [advice from AI] 메시지 센터의 실제 데이터 사용
+      const [statsResponse, notificationsResponse] = await Promise.all([
+        fetch(`${apiUrl}/api/notifications/dashboard-stats`, {
           headers: { 'Authorization': `Bearer ${token}` }
         }),
-        fetch('http://localhost:3001/api/approvals/requests?my_approvals=true&status=pending&limit=10', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }),
-        fetch('http://localhost:3001/api/approvals/requests?my_requests=true&limit=20', {
+        fetch(`${apiUrl}/api/notifications?limit=20`, {
           headers: { 'Authorization': `Bearer ${token}` }
         })
       ]);
 
       console.log('API 응답 상태:', {
         stats: statsResponse.status,
-        pending: pendingResponse.status,
-        requests: requestsResponse.status
+        notifications: notificationsResponse.status
       });
 
       // [advice from AI] 통계 데이터 처리
@@ -156,26 +164,29 @@ const ApprovalDashboard: React.FC = () => {
         console.error('통계 API 오류:', statsResponse.status, await statsResponse.text());
       }
 
-      // [advice from AI] 내가 승인해야 할 항목들
-      if (pendingResponse.ok) {
-        const pendingData = await pendingResponse.json();
-        console.log('승인 대기 데이터:', pendingData);
-        if (pendingData.success) {
-          setPendingApprovals(pendingData.data);
+      // [advice from AI] 알림 데이터를 승인 요청 형태로 변환
+      if (notificationsResponse.ok) {
+        const notificationsData = await notificationsResponse.json();
+        console.log('알림 데이터:', notificationsData);
+        if (notificationsData.success && notificationsData.data) {
+          // 알림을 승인 요청 형태로 변환
+          const convertedApprovals = notificationsData.data.map((notification: any) => ({
+            id: notification.id,
+            title: notification.title,
+            description: notification.message,
+            priority: notification.priority,
+            status: notification.is_read ? 'read' : 'pending',
+            created_at: notification.created_at,
+            requester_name: notification.sender_name,
+            requester_role: notification.sender_role,
+            type: notification.message_type
+          }));
+          
+          setPendingApprovals(convertedApprovals.filter((item: any) => !item.is_read));
+          setMyRequests(convertedApprovals);
         }
       } else {
-        console.error('승인 대기 API 오류:', pendingResponse.status, await pendingResponse.text());
-      }
-
-      // [advice from AI] 내가 요청한 승인들
-      if (requestsResponse.ok) {
-        const requestsData = await requestsResponse.json();
-        console.log('내 요청 데이터:', requestsData);
-        if (requestsData.success) {
-          setMyRequests(requestsData.data);
-        }
-      } else {
-        console.error('내 요청 API 오류:', requestsResponse.status, await requestsResponse.text());
+        console.error('알림 API 오류:', notificationsResponse.status, await notificationsResponse.text());
       }
 
     } catch (error) {

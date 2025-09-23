@@ -65,6 +65,8 @@ services:
     volumes:
       - ./backend:/app
       - /app/node_modules
+      - dev_projects_data:/app/dev-projects
+      - project_templates_data:/app/project-templates
     environment:
       # Database connections
       - DATABASE_URL=postgresql://timbel_user:timbel_password@postgres:5432/timbel_db
@@ -89,6 +91,17 @@ services:
       - NODE_ENV=development
       - JWT_SECRET=timbel-super-secret-jwt-key-change-in-production
       - PORT=3001
+      
+      # Git Analytics & Development Environment Settings
+      - DEV_PROJECTS_PATH=/app/dev-projects
+      - DEV_TEMPLATE_PATH=/app/project-templates
+      - GITLAB_URL=http://rdc.rickyson.com:8929
+      - GITLAB_TOKEN=${GITLAB_TOKEN:-}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      
+      # Scheduler Settings
+      - ENABLE_SCHEDULER=true
+      - SCHEDULER_TIMEZONE=Asia/Seoul
     depends_on:
       postgres:
         condition: service_healthy
@@ -302,6 +315,8 @@ volumes:
   prometheus_data:
   grafana_data:
   frontend_node_modules:
+  dev_projects_data:
+  project_templates_data:
 
 networks:
   timbel-network:

@@ -37,6 +37,7 @@ const navigationItems = [
   { text: '홈', path: '/' },
   { text: '지식자원 카탈로그', path: '/knowledge', hasSubMenu: true },
   { text: 'VibeStudio', path: '/vibe-studio' },
+  { text: '메시지 센터', path: '/message-center' },
 ];
 
 // [advice from AI] Phase 1: 통합된 지식자원 관리 하위 메뉴 (권한 기반 기능 차등 제공 예정)
@@ -50,9 +51,8 @@ const knowledgeSubMenus = [
   { text: '문서/가이드', path: '/knowledge/docs' }
 ];
 
-// [advice from AI] 관리자 전용 승인 관리 메뉴
+// [advice from AI] 관리자 전용 지식자산 승인 관리 메뉴 (프로젝트 승인은 메시지 센터로 통합)
 const adminApprovalSubMenus = [
-  { text: '승인 대시보드', path: '/admin/approvals/dashboard' },
   { text: '시스템 승인 대기', path: '/admin/approvals/systems-pending', badge: 'NEW' },
   { text: '지식 자산 승인 대기', path: '/admin/approvals/assets-pending', badge: 'NEW' },
   { text: '승인된 자산 관리', path: '/admin/approvals/approved-assets' },
@@ -63,19 +63,22 @@ const adminApprovalSubMenus = [
 // [advice from AI] 역할별 대시보드 메뉴 (하위 메뉴 포함)
 const roleDashboards = [
   { text: '최고 관리자', path: '/executive', hasSubMenu: false },
-  { text: 'PO 대시보드', path: '/po-dashboard', hasSubMenu: false }, // 향후 프로젝트 관리, PE 관리, 요구사항 관리 등
-  { text: 'PE 작업공간', path: '/pe-workspace', hasSubMenu: true }, // 개발도구, 지식자원 활용, 산출물 관리 등
+  { text: 'PO 대시보드', path: '/po-dashboard', hasSubMenu: true }, // 프로젝트 관리, PE 관리, 요구사항 관리
+  { text: 'PE 대시보드', path: '/pe-workspace', hasSubMenu: true }, // PE 작업 대시보드 및 하위 기능들
   { text: 'QA/QC 센터', path: '/qa-center', hasSubMenu: false }, // 향후 테스트 계획, 품질 검사, 결함 관리 등
   { text: '운영 센터', path: '/operations', hasSubMenu: true }, // 현재 4개 하위 센터
 ];
 
-// [advice from AI] PE 작업공간 하위 메뉴
+// [advice from AI] PE 대시보드 하위 메뉴
+// [advice from AI] PO 대시보드 하위 메뉴 (정리됨)
+const poDashboardSubMenus = [
+  { text: 'PO 대시보드', path: '/po-dashboard', highlight: false },
+  { text: '진행 현황 및 성과 관리', path: '/po/progress', highlight: false },
+];
+
 const peWorkspaceSubMenus = [
-  { text: 'PE 대시보드', path: '/pe-workspace/dashboard', highlight: false },
-  { text: '업무 관리', path: '/pe-workspace/tasks', highlight: false },
-  { text: '주간 보고서', path: '/pe-workspace/reports', highlight: false },
-  { text: '지식 관리', path: '/pe-workspace/knowledge', highlight: false },
-  { text: '코드 등록', path: '/pe-workspace/code-registration', highlight: false },
+  { text: 'PE 대시보드', path: '/pe-workspace', highlight: true }, // 메인 대시보드
+  { text: '진행 상황 보고', path: '/pe-workspace/reports', highlight: false }, // 업무 관리와 주간 보고서 통합
 ];
 
 // [advice from AI] 운영센터 하위 메뉴 (모든 센터 하이라이트 적용)
@@ -125,6 +128,7 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
   const [mobileOpen, setMobileOpen] = useState(false);
   const [operationsOpen, setOperationsOpen] = useState(false);
   const [peWorkspaceOpen, setPeWorkspaceOpen] = useState(false);
+  const [poDashboardOpen, setPoDashboardOpen] = useState(false);
   const [knowledgeOpen, setKnowledgeOpen] = useState(false);
   const [approvalOpen, setApprovalOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
@@ -206,9 +210,24 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
   // [advice from AI] 메뉴 접근 권한 확인 (활성화 여부)
   const canAccess = (menuPath: string) => {
     if (!user) return false;
+    
     const menuInfo = menuAccessMap[menuPath];
     if (!menuInfo) return true; // 매핑되지 않은 메뉴는 기본적으로 접근 가능
-    return menuInfo.roles.includes(user.roleType || '');
+    
+    const hasAccess = menuInfo.roles.includes(user.roleType || '');
+    
+    // [advice from AI] PO 대시보드 접근 시 디버깅 로그
+    if (menuPath === '/po-dashboard') {
+      console.log('🔍 PO 대시보드 접근 권한 확인:', {
+        menuPath,
+        userRoleType: user.roleType,
+        allowedRoles: menuInfo.roles,
+        hasAccess,
+        user: user
+      });
+    }
+    
+    return hasAccess;
   };
 
   // [advice from AI] 메뉴 접근 정보 가져오기
@@ -435,7 +454,123 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
           const hasAccess = canAccess(item.path);
           const accessInfo = getMenuAccessInfo(item.path);
           
-          // [advice from AI] PE 작업공간은 하위 메뉴가 있음
+          // [advice from AI] PO 대시보드는 하위 메뉴가 있음
+          if (item.path === '/po-dashboard') {
+            return (
+              <React.Fragment key={item.text}>
+                <ListItem disablePadding>
+                  <Tooltip 
+                    title={hasAccess ? '' : accessInfo.description}
+                    placement="right"
+                    arrow
+                  >
+                    <span>
+                      <ListItemButton
+                        onClick={() => {
+                          if (!hasAccess) return;
+                          // [advice from AI] 다른 메뉴들 모두 닫기
+                          setPeWorkspaceOpen(false);
+                          setOperationsOpen(false);
+                          
+                          if (poDashboardOpen) {
+                            setPoDashboardOpen(false);
+                          } else {
+                            setPoDashboardOpen(true);
+                            handleNavigation(item.path);
+                          }
+                        }}
+                        selected={hasAccess && (location.pathname === item.path || location.pathname.startsWith('/po/'))}
+                        disabled={!hasAccess}
+                        sx={{
+                          mx: 1,
+                          borderRadius: 1,
+                          backgroundColor: hasAccess && (location.pathname === item.path || location.pathname.startsWith('/po/')) ? 'rgba(25, 118, 210, 0.08)' : 'transparent',
+                          '&:hover': {
+                            backgroundColor: hasAccess ? 'rgba(25, 118, 210, 0.04)' : 'transparent',
+                          },
+                          '&.Mui-disabled': {
+                            opacity: 0.6,
+                          },
+                        }}
+                      >
+                        <ListItemText 
+                          primary={item.text}
+                          sx={{
+                            pl: 1,
+                            '& .MuiListItemText-primary': {
+                              fontSize: '0.875rem',
+                              fontWeight: location.pathname === item.path || location.pathname.startsWith('/po/') ? 600 : 400,
+                            }
+                          }}
+                        />
+                        {poDashboardOpen ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                      </ListItemButton>
+                    </span>
+                  </Tooltip>
+                </ListItem>
+                <Collapse in={poDashboardOpen} timeout="auto" unmountOnExit>
+                  <List component="div" disablePadding>
+                    {poDashboardSubMenus.map((subItem) => (
+                      <ListItem key={subItem.text} disablePadding>
+                        <Tooltip 
+                          title={hasAccess ? '' : accessInfo.description}
+                          placement="right"
+                          arrow
+                        >
+                          <span>
+                            <ListItemButton
+                              onClick={() => hasAccess && handleNavigation(subItem.path)}
+                              selected={hasAccess && location.pathname === subItem.path}
+                              disabled={!hasAccess}
+                              sx={{
+                                pl: 4,
+                                mx: 1,
+                                borderRadius: 1,
+                                backgroundColor: hasAccess && location.pathname === subItem.path ? 'rgba(25, 118, 210, 0.08)' : 'transparent',
+                                '&:hover': {
+                                  backgroundColor: hasAccess ? 'rgba(25, 118, 210, 0.04)' : 'transparent',
+                                },
+                                '&.Mui-disabled': {
+                                  opacity: 0.6,
+                                },
+                              }}
+                            >
+                              <ListItemText 
+                                primary={subItem.text}
+                                sx={{
+                                  '& .MuiListItemText-primary': {
+                                    fontSize: '0.875rem',
+                                    fontWeight: location.pathname === subItem.path ? 600 : 400,
+                                    color: subItem.highlight ? 'primary.main' : 'text.primary'
+                                  }
+                                }}
+                              />
+                              {subItem.highlight && (
+                                <Chip 
+                                  label="NEW" 
+                                  size="small" 
+                                  color="primary" 
+                                  sx={{ 
+                                    height: 20, 
+                                    fontSize: '0.625rem',
+                                    '& .MuiChip-label': {
+                                      px: 1
+                                    }
+                                  }} 
+                                />
+                              )}
+                            </ListItemButton>
+                          </span>
+                        </Tooltip>
+                      </ListItem>
+                    ))}
+                  </List>
+                </Collapse>
+              </React.Fragment>
+            );
+          }
+          
+          // [advice from AI] PE 대시보드는 하위 메뉴가 있음
           if (item.path === '/pe-workspace') {
             return (
               <React.Fragment key={item.text}>
@@ -449,6 +584,10 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
                       <ListItemButton
                         onClick={() => {
                           if (!hasAccess) return; // 권한이 없으면 클릭 무시
+                          // [advice from AI] 다른 메뉴들 모두 닫기
+                          setPoDashboardOpen(false);
+                          setOperationsOpen(false);
+                          
                           if (peWorkspaceOpen) {
                             setPeWorkspaceOpen(false);
                           } else {
@@ -481,11 +620,13 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
                       >
                         <ListItemText 
                           primary={item.text}
-                          primaryTypographyProps={{
-                            fontSize: '0.875rem',
-                            fontWeight: location.pathname === item.path || location.pathname.startsWith('/pe-workspace/') ? 600 : 400,
+                          sx={{
+                            pl: 1,
+                            '& .MuiListItemText-primary': {
+                              fontSize: '0.875rem',
+                              fontWeight: location.pathname === item.path || location.pathname.startsWith('/pe-workspace/') ? 600 : 400,
+                            }
                           }}
-                          sx={{ pl: 1 }}
                         />
                         {peWorkspaceOpen ? <ExpandLessIcon /> : <ExpandMoreIcon />}
                       </ListItemButton>
@@ -562,6 +703,10 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
                   <ListItemButton
                     onClick={() => {
                           if (!hasAccess) return; // 권한이 없으면 클릭 무시
+                          // [advice from AI] 다른 메뉴들 모두 닫기
+                          setPoDashboardOpen(false);
+                          setPeWorkspaceOpen(false);
+                          
                       if (operationsOpen) {
                         setOperationsOpen(false);
                       } else {
@@ -594,11 +739,13 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
                   >
                     <ListItemText 
                       primary={item.text}
-                      primaryTypographyProps={{
-                        fontSize: '0.875rem',
-                        fontWeight: location.pathname === item.path || location.pathname.startsWith('/operations/') ? 600 : 400,
+                      sx={{
+                        pl: 1,
+                        '& .MuiListItemText-primary': {
+                          fontSize: '0.875rem',
+                          fontWeight: location.pathname === item.path || location.pathname.startsWith('/operations/') ? 600 : 400,
+                        }
                       }}
-                      sx={{ pl: 1 }}
                     />
                     {operationsOpen ? <ExpandLessIcon /> : <ExpandMoreIcon />}
                   </ListItemButton>
@@ -719,11 +866,13 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
               >
                 <ListItemText 
                   primary={item.text}
-                  primaryTypographyProps={{
-                    fontSize: '0.875rem',
-                    fontWeight: location.pathname === item.path ? 600 : 400,
+                  sx={{
+                    pl: 1,
+                    '& .MuiListItemText-primary': {
+                      fontSize: '0.875rem',
+                      fontWeight: location.pathname === item.path ? 600 : 400,
+                    }
                   }}
-                  sx={{ pl: 1 }}
                 />
               </ListItemButton>
                 </span>
@@ -956,7 +1105,7 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
             {title}
           </Typography>
           
-          {/* [advice from AI] 메시지 센터 */}
+          {/* [advice from AI] 통합 메시지/알림 센터 */}
           <MessageCenter />
           
           {/* [advice from AI] 사용자 정보 표시 */}

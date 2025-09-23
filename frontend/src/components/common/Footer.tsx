@@ -19,9 +19,9 @@ const Footer: React.FC = () => {
     >
       <Container maxWidth="lg">
         <Divider sx={{ mb: 2 }} />
-        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 4 }}>
           {/* 회사 정보 */}
-          <Box sx={{ flex: 1 }}>
+          <Box>
             <Typography variant="h6" color="primary" gutterBottom>
               (주)팀벨 Timeless Label
             </Typography>
@@ -37,34 +37,18 @@ const Footer: React.FC = () => {
           </Box>
 
           {/* 연락처 정보 */}
-          <Box sx={{ flex: 1 }}>
+          <Box>
             <Typography variant="h6" color="primary" gutterBottom>
               연락처
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              📞 대표번호: 02-584-8181
+              대표번호: 02-584-8181
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              📧 이메일: sales@timbel.net
+              이메일: sales@timbel.net
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              🌐 웹사이트: www.timbel.net
-            </Typography>
-          </Box>
-
-          {/* 플랫폼 정보 */}
-          <Box sx={{ flex: 1 }}>
-            <Typography variant="h6" color="primary" gutterBottom>
-              Timbel 지식자원 플랫폼
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              AI 기반 개발 생산성 300% 향상
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              바이브 코딩으로 혁신적 개발 경험
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              연간 19.6억원 절감 효과
+              웹사이트: www.timbel.net
             </Typography>
           </Box>
         </Box>

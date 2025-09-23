@@ -359,7 +359,7 @@ const ApprovalWorkflow: React.FC = () => {
                       <ListItemText
                         primary={
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                            <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>
+                            <Typography component="span" variant="subtitle1" sx={{ fontWeight: 500 }}>
                               {item.title}
                             </Typography>
                             <Chip 
@@ -377,10 +377,10 @@ const ApprovalWorkflow: React.FC = () => {
                         }
                         secondary={
                           <Box>
-                            <Typography variant="body2" color="text.secondary">
+                            <Typography component="span" variant="body2" color="text.secondary">
                               {getTypeText(item.type)} • {item.submitter} ({item.submitterRole}) • {item.createdAt.toLocaleDateString()}
                             </Typography>
-                            <Typography variant="caption" color="text.secondary">
+                            <Typography component="span" variant="caption" color="text.secondary" display="block">
                               현재 단계: {workflowSteps[item.currentStep - 1]?.label}
                             </Typography>
                           </Box>

@@ -40,10 +40,22 @@ import KnowledgeSearch from '../../components/knowledge/KnowledgeSearch';
 import KnowledgeAssetDetail from '../../components/knowledge/KnowledgeAssetDetail';
 import { useNavigate } from 'react-router-dom';
 
+interface DashboardStats {
+  totalDomains: number;
+  totalProjects: number;
+  totalSystems: number;
+  totalDesignAssets: number;
+  totalCodeComponents: number;
+  totalDocuments: number;
+  pendingApprovals: number;
+  totalDiagrams: number;
+  recentUploads: number;
+}
+
 const KnowledgeDashboard: React.FC = () => {
   const { user } = useJwtAuthStore();
   const navigate = useNavigate();
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,35 +70,48 @@ const KnowledgeDashboard: React.FC = () => {
           throw new Error('토큰이 없습니다. 다시 로그인해주세요.');
         }
 
-        // [advice from AI] 실제 API에서 데이터 조회
+        // [advice from AI] 실제 API에서 모든 데이터 조회
         const apiUrl = process.env.REACT_APP_API_URL || '/api';
-        const [designAssetsResponse, codeComponentsResponse, documentsResponse] = await Promise.all([
+        const [
+          designAssetsResponse, 
+          codeComponentsResponse, 
+          documentsResponse,
+          domainsResponse,
+          projectsResponse,
+          systemsResponse
+        ] = await Promise.all([
           fetch(`${apiUrl}/design-assets`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
           }),
           fetch(`${apiUrl}/code-components`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
           }),
           fetch(`${apiUrl}/documents`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+          }),
+          fetch(`${apiUrl}/domains`, {
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+          }),
+          fetch(`${apiUrl}/projects`, {
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+          }),
+          fetch(`${apiUrl}/catalog/systems`, {
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
           })
         ]);
 
         const designAssetsData = await designAssetsResponse.json();
         const codeComponentsData = await codeComponentsResponse.json();
         const documentsData = await documentsResponse.json();
+        const domainsData = await domainsResponse.json();
+        const projectsData = await projectsResponse.json();
+        const systemsData = await systemsResponse.json();
 
         // [advice from AI] 실제 데이터로 통계 설정
         setStats({
+          totalDomains: domainsData.success ? (domainsData.data?.length || 0) : 0,
+          totalProjects: projectsData.success ? (projectsData.data?.length || 0) : 0,
+          totalSystems: systemsData.success ? (systemsData.data?.systems?.length || systemsData.data?.length || 0) : 0,
           totalDesignAssets: designAssetsData.success ? (designAssetsData.data?.length || 0) : 0,
           totalCodeComponents: codeComponentsData.success ? (codeComponentsData.data?.length || 0) : 0,
           totalDocuments: documentsData.success ? (documentsData.data?.length || 0) : 0,
@@ -376,63 +401,6 @@ const KnowledgeDashboard: React.FC = () => {
                   </Typography>
                 </Box>
               </CardContent>
-            </Card>
-          </Grid>
-        ))}
-      </Grid>
-      
-      {/* 두 번째 행: 2개 (중앙 정렬) */}
-      <Grid container spacing={4} sx={{ mb: 4 }} justifyContent="center">
-        {catalogItems.slice(3, 5).map((item, index) => (
-          <Grid item xs={12} sm={6} md={4} key={index + 3}>
-            <Card 
-              sx={{ 
-                height: '200px',
-                cursor: 'pointer',
-                transition: 'transform 0.2s, box-shadow 0.2s',
-                '&:hover': {
-                  transform: 'translateY(-4px)',
-                  boxShadow: 6
-                }
-              }}
-              onClick={() => navigate(item.path)}
-            >
-              <CardContent sx={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                <Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                    <Box 
-                      sx={{ 
-                        p: 1.5, 
-                        borderRadius: 2, 
-                        bgcolor: `${item.color}20`,
-                        color: item.color,
-                        mr: 2
-                      }}
-                    >
-                      {item.icon}
-                    </Box>
-                    <Typography variant="h5" sx={{ fontWeight: 600, color: item.color }}>
-                      {item.stats || 0}
-                    </Typography>
-                  </Box>
-                  <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
-                    {item.title}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {item.description}
-                  </Typography>
-                </Box>
-                <Box sx={{ mt: 2, textAlign: 'center' }}>
-                  <Typography variant="caption" color="primary.main" sx={{ fontWeight: 600 }}>
-                    관리
-                  </Typography>
-                </Box>
-              </CardContent>
-              <CardActions>
-                <Button size="small" startIcon={<ViewIcon />}>
-                  관리
-                </Button>
-              </CardActions>
             </Card>
           </Grid>
         ))}

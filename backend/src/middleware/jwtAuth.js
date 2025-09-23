@@ -81,7 +81,8 @@ class JWTAuthMiddleware {
       const decoded = jwt.verify(token, this.secretKey);
       req.user = decoded;
       
-      console.log('✅ JWT 토큰 검증 성공:', decoded.username, decoded.roleType);
+      console.log('✅ JWT 토큰 검증 성공:', decoded.username || decoded.userId, decoded.roleType);
+      console.log('🔍 토큰 디코딩 결과:', JSON.stringify(decoded, null, 2));
       next();
 
     } catch (error) {

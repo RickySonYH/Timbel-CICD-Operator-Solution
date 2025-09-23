@@ -1,71 +1,61 @@
-// [advice from AI] 상단 헤더의 메시지 센터 컴포넌트
-// 승인 대기, 의사결정 요청, 알림 카운트 표시 및 드롭다운 메뉴
-
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
-  IconButton,
-  Badge,
-  Menu,
-  MenuItem,
-  Typography,
   Box,
-  Divider,
+  Typography,
+  Card,
+  CardContent,
+  Grid,
   List,
   ListItem,
   ListItemText,
   ListItemAvatar,
   Avatar,
-  Chip,
   Button,
-  Tooltip
+  Paper,
+  Divider,
+  Chip,
+  Alert,
+  CircularProgress
 } from '@mui/material';
 import {
   Notifications as NotificationsIcon,
+  Check as CheckIcon,
+  Warning as WarningIcon,
+  Info as InfoIcon,
+  Error as ErrorIcon,
   Assignment as AssignmentIcon,
-  HowToVote as VoteIcon,
-  Message as MessageIcon,
-  CheckCircle as CheckIcon,
-  Schedule as ScheduleIcon,
-  Warning as WarningIcon
+  Vote as VoteIcon
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
 import { useJwtAuthStore } from '../../store/jwtAuthStore';
 
+// [advice from AI] 알림 통계 타입 정의
 interface NotificationStats {
-  my_requests: {
-    total: string;
-    pending: string;
-    approved: string;
-    rejected: string;
-  };
-  my_approvals: {
-    total: string;
-    pending: string;
-    approved: string;
-    rejected: string;
-  };
-  my_decisions: {
-    total: string;
-    open: string;
-    voting: string;
-    decided: string;
-  };
+  my_pending_approvals: number;
+  my_pending_requests: number;
   unread_messages: number;
+  total_notifications: number;
+  role_specific_stats?: {
+    pending_approvals: number;
+    approved_projects: number;
+    rejected_projects: number;
+    total_projects: number;
+  };
 }
 
+// [advice from AI] 알림 아이템 타입 정의
 interface NotificationItem {
   id: string;
-  type: 'approval_request' | 'approval_response' | 'decision_request' | 'message';
-  title: string;
-  message: string;
+  subject: string;
+  content: string;
   priority: 'low' | 'medium' | 'high' | 'urgent';
-  created_at: string;
+  type: string;
   is_read: boolean;
-  request_id?: string;
+  created_at: string;
+  metadata?: any;
 }
 
 const MessageCenter: React.FC = () => {
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [stats, setStats] = useState<NotificationStats | null>(null);
   const [recentNotifications, setRecentNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -75,123 +65,150 @@ const MessageCenter: React.FC = () => {
   // [advice from AI] 동적 API URL 결정 로직
   const getApiUrl = (): string => {
     const currentHost = window.location.host;
-    if (currentHost === 'localhost:3000' || currentHost === '127.0.0.1:3000') {
-      // 내부 접속 - 직접 백엔드 포트로
-      return 'http://localhost:3001';
+    
+    if (currentHost.includes('localhost') || currentHost.includes('127.0.0.1')) {
+      return 'http://localhost:3000';
+    } else if (currentHost.includes('rdc.rickyson.com')) {
+      return 'http://rdc.rickyson.com:3000';
     } else {
-      // 외부 접속 - Nginx 프록시를 통해
-      return '';  // 상대 경로 사용
+      return `http://${currentHost}`;
     }
   };
 
-  const open = Boolean(anchorEl);
-
-  // [advice from AI] 알림 통계 및 최근 알림 로드
+  // [advice from AI] 알림 데이터 로드
   const loadNotificationData = async () => {
-    if (!user) return;
+    if (!user || !token) return;
 
-    setLoading(true);
     try {
-      if (!token) return;
+      setLoading(true);
+      const apiUrl = getApiUrl();
 
-      // [advice from AI] 병렬로 데이터 로드
+      // 기본 알림 통계 및 메시지 로드
       const [statsResponse, notificationsResponse] = await Promise.all([
-        fetch('/api/approvals/dashboard/stats', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
+        fetch(`${apiUrl}/api/notifications/stats`, {
+          headers: { 'Authorization': `Bearer ${token}` }
         }),
-        fetch(`${getApiUrl()}/api/approvals/messages?limit=10&is_read=false`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
+        fetch(`${apiUrl}/api/notifications?limit=20`, {
+          headers: { 'Authorization': `Bearer ${token}` }
         })
       ]);
 
       if (statsResponse.ok) {
         const statsData = await statsResponse.json();
-        if (statsData.success) {
-          setStats(statsData.data);
-        }
+        setStats(statsData);
       }
 
       if (notificationsResponse.ok) {
         const notificationsData = await notificationsResponse.json();
-        if (notificationsData.success) {
-          setRecentNotifications(notificationsData.data.slice(0, 5)); // 최근 5개만
-        }
+        setRecentNotifications(notificationsData.notifications || []);
       }
 
     } catch (error) {
-      console.error('알림 데이터 로드 실패:', error);
+      console.error('❌ 알림 데이터 로드 실패:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  // [advice from AI] 컴포넌트 마운트 시 데이터 로드 - 오류 처리 개선한 자동 갱신
+  // [advice from AI] 컴포넌트 마운트 시 데이터 로드
   useEffect(() => {
-    if (!user || !token) return;
-    
     loadNotificationData();
     
-    // [advice from AI] 60초마다 자동 갱신 (오류 시에도 계속 시도하지만 로그만 남김)
-    const interval = setInterval(() => {
-      if (user && token) {
-        loadNotificationData();
-      }
-    }, 60000); // 30초 → 60초로 늘려서 부하 감소
+    // 30초마다 데이터 새로고침
+    const interval = setInterval(loadNotificationData, 30000);
     
     return () => clearInterval(interval);
   }, [user, token]);
 
-  // [advice from AI] 메뉴 열기/닫기
-  const handleClick = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
-    if (!open) {
-      loadNotificationData(); // 메뉴 열 때마다 최신 데이터 로드
+  // [advice from AI] 알림 클릭 시 처리 (읽음 처리 및 상세 보기)
+  const handleNotificationClick = async (notification: NotificationItem) => {
+    try {
+      // 읽음 처리
+      if (!notification.is_read) {
+        const apiUrl = getApiUrl();
+        await fetch(`${apiUrl}/api/notifications/${notification.id}/read`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        // 로컬 상태 업데이트
+        setRecentNotifications(prev => 
+          prev.map(item => 
+            item.id === notification.id 
+              ? { ...item, is_read: true }
+              : item
+          )
+        );
+      }
+
+      // 알림 타입별 처리
+      if (notification.type === 'deletion_approval') {
+        // 삭제 승인 요청인 경우 - 이미 승인/거부 버튼이 있으므로 추가 처리 없음
+        return;
+      } else if (notification.type === 'project_created') {
+        // 프로젝트 생성 알림인 경우 프로젝트 관리 페이지로 이동
+        navigate('/admin/approvals');
+      } else if (notification.type === 'project_approved') {
+        // 프로젝트 승인 완료 알림인 경우 프로젝트 목록으로 이동
+        navigate('/admin/approvals/projects');
+      } else if (notification.type === 'urgent_project') {
+        // 긴급 프로젝트 알림인 경우 프로젝트 관리 페이지로 이동
+        navigate('/admin/approvals');
+      } else if (notification.type === 'project_completed') {
+        // 프로젝트 완료 알림인 경우 프로젝트 목록으로 이동
+        navigate('/admin/approvals/projects');
+      }
+    } catch (error) {
+      console.error('알림 처리 실패:', error);
     }
   };
 
-  const handleClose = () => {
-    setAnchorEl(null);
+  // [advice from AI] 삭제 승인 처리
+  const handleDeletionApproval = async (messageId: string, action: 'approved' | 'rejected') => {
+    try {
+      const apiUrl = getApiUrl();
+      const response = await fetch(`${apiUrl}/api/notifications/approve/${messageId}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ action })
+      });
+
+      if (response.ok) {
+        // 성공 시 알림 목록 새로고침
+        loadNotificationData();
+      } else {
+        console.error('승인 처리 실패');
+      }
+    } catch (error) {
+      console.error('승인 처리 중 오류:', error);
+    }
   };
 
-  // [advice from AI] 전체 알림 카운트 계산
-  const getTotalNotificationCount = () => {
-    if (!stats) return 0;
-    return (
-      parseInt(stats.my_approvals?.pending || '0') +
-      (stats.unread_messages || 0)
-    );
-  };
-
-  // [advice from AI] 긴급 알림 카운트 계산
-  const getUrgentNotificationCount = () => {
-    if (!stats) return 0;
-    return 0; // 긴급 알림은 별도 구현 필요
-  };
-
-  // [advice from AI] 우선순위별 색상
+  // [advice from AI] 우선순위별 색상 반환
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case 'urgent': return '#d32f2f';
-      case 'high': return '#f57c00';
-      case 'medium': return '#1976d2';
-      case 'low': return '#388e3c';
-      default: return '#666666';
+      case 'urgent': return '#f44336';
+      case 'high': return '#ff9800';
+      case 'medium': return '#2196f3';
+      case 'low': return '#4caf50';
+      default: return '#9e9e9e';
     }
   };
 
-  // [advice from AI] 알림 타입별 아이콘
-  const getNotificationIcon = (type: string) => {
-    switch (type) {
-      case 'approval_request': return <AssignmentIcon fontSize="small" />;
-      case 'decision_request': return <VoteIcon fontSize="small" />;
-      case 'message': return <MessageIcon fontSize="small" />;
-      default: return <NotificationsIcon fontSize="small" />;
+  // [advice from AI] 우선순위별 아이콘 반환
+  const getPriorityIcon = (priority: string) => {
+    switch (priority) {
+      case 'urgent': return <ErrorIcon />;
+      case 'high': return <WarningIcon />;
+      case 'medium': return <InfoIcon />;
+      case 'low': return <CheckIcon />;
+      default: return <NotificationsIcon />;
     }
   };
 
@@ -200,216 +217,278 @@ const MessageCenter: React.FC = () => {
     const date = new Date(dateString);
     const now = new Date();
     const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
-
+    
     if (diffInMinutes < 1) return '방금 전';
     if (diffInMinutes < 60) return `${diffInMinutes}분 전`;
     if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}시간 전`;
     return `${Math.floor(diffInMinutes / 1440)}일 전`;
   };
 
-  const totalCount = getTotalNotificationCount();
-  const urgentCount = getUrgentNotificationCount();
+  // [advice from AI] 로그인하지 않은 사용자 처리
+  if (!user || !token) {
+    return (
+      <Box sx={{ width: '100%', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Paper sx={{ p: 4, textAlign: 'center' }}>
+          <Typography variant="h5" sx={{ mb: 2 }}>
+            로그인이 필요합니다
+          </Typography>
+          <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+            메시지 센터를 사용하려면 먼저 로그인해주세요.
+          </Typography>
+          <Button
+            variant="contained"
+            onClick={() => navigate('/login')}
+            startIcon={<NotificationsIcon />}
+          >
+            로그인하기
+          </Button>
+        </Paper>
+      </Box>
+    );
+  }
 
   return (
-    <>
-      <Tooltip title="메시지 센터">
-        <IconButton
-          color="inherit"
-          onClick={handleClick}
-          sx={{ 
-            mr: 1,
-            '&:hover': {
-              backgroundColor: 'rgba(0, 0, 0, 0.04)'
-            }
-          }}
-        >
-          <Badge 
-            badgeContent={totalCount} 
-            color={urgentCount > 0 ? "error" : "primary"}
-            max={99}
-          >
-            <NotificationsIcon />
-          </Badge>
-        </IconButton>
-      </Tooltip>
-
-      <Menu
-        anchorEl={anchorEl}
-        open={open}
-        onClose={handleClose}
-        PaperProps={{
-          sx: {
-            width: 400,
-            maxHeight: 500,
-            mt: 1.5,
-            '& .MuiMenuItem-root': {
-              padding: 0,
-            },
-          },
-        }}
-        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-      >
-        {/* [advice from AI] 메시지 센터 헤더 */}
-        <Box sx={{ p: 2, borderBottom: '1px solid #e0e0e0' }}>
-          <Typography variant="h6" sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
+    <Box sx={{ width: '100%', minHeight: '100vh', display: 'flex', flexDirection: 'column', p: 2 }}>
+      {/* [advice from AI] 메시지 센터 헤더 */}
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Typography variant="h4" sx={{ fontWeight: 600 }}>
             메시지 센터
           </Typography>
-          {stats && (
-            <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
-              <Chip 
-                label={`승인 대기 ${stats.my_approvals?.pending || '0'}`}
-                size="small"
-                color="primary"
-                variant="outlined"
-              />
-              <Chip 
-                label={`읽지 않음 ${stats.unread_messages || 0}`}
-                size="small"
-                color="secondary"
-                variant="outlined"
-              />
-            </Box>
-          )}
-        </Box>
-
-        {/* [advice from AI] 빠른 액션 버튼들 */}
-        <Box sx={{ p: 2, borderBottom: '1px solid #e0e0e0' }}>
+          
+          {/* [advice from AI] 빠른 네비게이션 버튼들 */}
           <Box sx={{ display: 'flex', gap: 1 }}>
             <Button
               size="small"
-              startIcon={<AssignmentIcon />}
-              onClick={() => {
-                handleClose();
-                navigate('/approvals/dashboard');
-              }}
-              sx={{ flex: 1 }}
+              variant="outlined"
+              onClick={() => navigate('/')}
             >
-              승인 대기
+              홈
             </Button>
             <Button
               size="small"
-              startIcon={<VoteIcon />}
-              onClick={() => {
-                handleClose();
-                navigate('/test/message-center');
-              }}
-              sx={{ flex: 1 }}
+              variant="outlined"
+              onClick={() => navigate('/knowledge/dashboard')}
             >
-              테스트
+              지식자원 카탈로그
             </Button>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => navigate('/vibe-studio')}
+            >
+              VibeStudio
+            </Button>
+            {(user?.roleType === 'admin' || user?.roleType === 'executive') && (
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => navigate('/admin')}
+              >
+                관리자 대시보드
+              </Button>
+            )}
           </Box>
         </Box>
 
-        {/* [advice from AI] Phase 4: 최근 알림 목록 (3개만 표시) */}
-        <Box sx={{ maxHeight: 200, overflow: 'auto' }}>
-          {loading ? (
-            <Box sx={{ p: 2, textAlign: 'center' }}>
-              <Typography variant="body2" color="text.secondary">
-                로딩 중...
-              </Typography>
-            </Box>
-          ) : recentNotifications.length > 0 ? (
-            <List sx={{ py: 0 }}>
-                {recentNotifications.slice(0, 3).map((notification: NotificationItem, index: number) => (
-                <React.Fragment key={notification.id}>
-                  <ListItem
-                    button
-                    onClick={() => {
-                      handleClose();
-                      if (notification.request_id) {
-                        navigate(`/approvals/requests/${notification.request_id}`);
-                      }
-                    }}
-                    sx={{
-                      py: 1.5,
-                      '&:hover': {
-                        backgroundColor: 'rgba(0, 0, 0, 0.04)'
-                      }
-                    }}
-                  >
-                    <ListItemAvatar>
-                      <Avatar
-                        sx={{
-                          width: 32,
-                          height: 32,
-                          backgroundColor: getPriorityColor(notification.priority),
-                        }}
-                      >
-                        {getNotificationIcon(notification.type)}
-                      </Avatar>
-                    </ListItemAvatar>
-                    <ListItemText
-                      primary={
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Typography
-                            variant="body2"
-                            sx={{
-                              fontWeight: notification.is_read ? 400 : 600,
-                              fontSize: '0.875rem'
-                            }}
-                          >
-                            {notification.title}
-                          </Typography>
-                          {notification.priority === 'urgent' && (
-                            <WarningIcon sx={{ fontSize: 16, color: '#d32f2f' }} />
-                          )}
-                        </Box>
-                      }
-                      secondary={
-                        <Box>
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                            sx={{
-                              fontSize: '0.8rem',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap'
-                            }}
-                          >
-                            {notification.message}
-                          </Typography>
-                          <Typography
-                            variant="caption"
-                            color="text.secondary"
-                            sx={{ fontSize: '0.7rem' }}
-                          >
-                            {formatTime(notification.created_at)}
-                          </Typography>
-                        </Box>
-                      }
-                    />
-                  </ListItem>
-                  {index < recentNotifications.length - 1 && <Divider />}
-                </React.Fragment>
-              ))}
-            </List>
-          ) : (
-            <Box sx={{ p: 3, textAlign: 'center' }}>
-              <CheckIcon sx={{ fontSize: 48, color: '#4caf50', mb: 1 }} />
-              <Typography variant="body2" color="text.secondary">
-                모든 알림을 확인했습니다
-              </Typography>
-            </Box>
-          )}
-        </Box>
+        {/* [advice from AI] 통계 카드들 */}
+        {stats && (
+          <Grid container spacing={2} sx={{ mb: 2 }}>
+            <Grid item xs={12} sm={6} md={3}>
+              <Card>
+                <CardContent>
+                  <Typography variant="h6" color="primary" sx={{ mb: 1 }}>
+                    내 승인 대기
+                  </Typography>
+                  <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+                    {stats.my_pending_approvals || 0}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    승인이 필요한 항목
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            
+            <Grid item xs={12} sm={6} md={3}>
+              <Card>
+                <CardContent>
+                  <Typography variant="h6" color="secondary" sx={{ mb: 1 }}>
+                    내 요청 대기
+                  </Typography>
+                  <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+                    {stats.my_pending_requests || 0}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    처리 대기 중인 요청
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            
+            <Grid item xs={12} sm={6} md={3}>
+              <Card>
+                <CardContent>
+                  <Typography variant="h6" color="warning.main" sx={{ mb: 1 }}>
+                    읽지 않은 메시지
+                  </Typography>
+                  <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+                    {stats.unread_messages || 0}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    확인하지 않은 알림
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            
+            <Grid item xs={12} sm={6} md={3}>
+              <Card>
+                <CardContent>
+                  <Typography variant="h6" color="success.main" sx={{ mb: 1 }}>
+                    총 알림
+                  </Typography>
+                  <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+                    {(stats.total_notifications || 0).toString().padStart(2, '0')}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    전체 알림 수
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+          </Grid>
+        )}
+      </Paper>
 
-        {/* [advice from AI] 하단 액션 버튼들 */}
-        <Box sx={{ p: 2, borderTop: '1px solid #e0e0e0' }}>
-          <Button
-            fullWidth
-            variant="outlined"
-            onClick={() => {
-              handleClose();
-              navigate('/admin/approvals/dashboard');
-            }}
-          >
-            전체 승인 대시보드 보기
-          </Button>
-        </Box>
-      </Menu>
-    </>
+      {/* [advice from AI] 알림 리스트 */}
+      <Box sx={{ flex: 1, overflow: 'auto' }}>
+        <Typography variant="h6" sx={{ mb: 2 }}>
+          최근 알림
+        </Typography>
+            
+        {/* 알림 목록 */}
+        {loading ? (
+          <Box sx={{ p: 2, textAlign: 'center' }}>
+            <CircularProgress size={24} />
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+              로딩 중...
+            </Typography>
+          </Box>
+        ) : recentNotifications.length > 0 ? (
+          <List sx={{ py: 0 }}>
+            {recentNotifications.map((notification: NotificationItem, index: number) => (
+              <React.Fragment key={notification.id}>
+                <ListItem
+                  button
+                  onClick={() => handleNotificationClick(notification)}
+                  sx={{
+                    py: 1.5,
+                    backgroundColor: notification.is_read ? 'transparent' : 'rgba(25, 118, 210, 0.04)',
+                    '&:hover': {
+                      backgroundColor: notification.is_read ? 'rgba(0, 0, 0, 0.04)' : 'rgba(25, 118, 210, 0.08)'
+                    }
+                  }}
+                >
+                  <ListItemAvatar>
+                    <Avatar
+                      sx={{
+                        width: 32,
+                        height: 32,
+                        backgroundColor: getPriorityColor(notification.priority),
+                      }}
+                    >
+                      {getPriorityIcon(notification.priority)}
+                    </Avatar>
+                  </ListItemAvatar>
+                  <ListItemText
+                    primary={
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                        <Typography component="span" variant="subtitle1" sx={{ fontWeight: 500 }}>
+                          {notification.subject}
+                        </Typography>
+                        {!notification.is_read && (
+                          <Chip
+                            label="NEW"
+                            size="small"
+                            color="primary"
+                            sx={{ fontSize: '0.6rem', height: 16 }}
+                          />
+                        )}
+                        <Chip
+                          label={notification.priority}
+                          size="small"
+                          sx={{ 
+                            fontSize: '0.6rem', 
+                            height: 16,
+                            backgroundColor: getPriorityColor(notification.priority),
+                            color: 'white'
+                          }}
+                        />
+                      </Box>
+                    }
+                    secondary={
+                      <Box>
+                        <Typography component="span" variant="body2" color="text.secondary">
+                          {notification.content}
+                        </Typography>
+                        <Typography 
+                          component="span" 
+                          variant="caption" 
+                          color="text.secondary"
+                          sx={{ fontSize: '0.7rem', display: 'block' }}
+                        >
+                          {formatTime(notification.created_at)}
+                        </Typography>
+                        
+                        {/* 삭제 승인 요청인 경우 승인/거부 버튼 표시 (관리자/PO만) */}
+                        {notification.type === 'deletion_approval' && !notification.is_read && 
+                         (user?.roleType === 'admin' || user?.roleType === 'executive' || user?.roleType === 'po') && (
+                          <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                            <Button
+                              size="small"
+                              variant="contained"
+                              color="success"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeletionApproval(notification.id, 'approved');
+                              }}
+                              sx={{ minWidth: 60, fontSize: '0.7rem' }}
+                            >
+                              승인
+                            </Button>
+                            <Button
+                              size="small"
+                              variant="contained"
+                              color="error"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeletionApproval(notification.id, 'rejected');
+                              }}
+                              sx={{ minWidth: 60, fontSize: '0.7rem' }}
+                            >
+                              거부
+                            </Button>
+                          </Box>
+                        )}
+                      </Box>
+                    }
+                  />
+                </ListItem>
+                {index < recentNotifications.length - 1 && <Divider />}
+              </React.Fragment>
+            ))}
+          </List>
+        ) : (
+          <Box sx={{ p: 3, textAlign: 'center' }}>
+            <CheckIcon sx={{ fontSize: 48, color: '#4caf50', mb: 1 }} />
+            <Typography variant="body2" color="text.secondary">
+              모든 알림을 확인했습니다
+            </Typography>
+          </Box>
+        )}
+      </Box>
+    </Box>
   );
 };
 

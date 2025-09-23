@@ -435,38 +435,6 @@ const PermissionSettings: React.FC = () => {
       </Alert>
     </Container>
   );
-
-  // [advice from AI] 사용자 그룹 배정 함수
-  async function assignUserToGroup(userId: string, groupId: string) {
-    try {
-      // TODO: 실제 API 호출로 사용자의 role_type 업데이트
-      const roleMapping: { [key: string]: string } = {
-        'executive': 'admin',
-        'po': 'po',
-        'pe': 'pe',
-        'qa': 'qa',
-        'operations': 'ops',
-        'general': null
-      };
-
-      const newRoleType = roleMapping[groupId];
-      
-      // 임시로 로컬 상태 업데이트
-      setUsers(prevUsers => 
-        prevUsers.map(user => 
-          user.id === userId 
-            ? { ...user, role_type: newRoleType }
-            : user
-        )
-      );
-
-      alert(`사용자가 ${groups.find(g => g.id === groupId)?.name} 그룹으로 이동되었습니다.`);
-      
-    } catch (error) {
-      console.error('그룹 배정 오류:', error);
-      alert('그룹 배정 중 오류가 발생했습니다.');
-    }
-  }
 };
 
 export default PermissionSettings;

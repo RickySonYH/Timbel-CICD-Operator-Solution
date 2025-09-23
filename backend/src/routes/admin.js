@@ -154,7 +154,7 @@ router.post('/users', authenticateToken, requireAdmin, async (req, res) => {
     const { username, email, full_name, role_type, permission_level, password } = req.body;
     
     // 비밀번호 해싱
-    const bcrypt = require('bcrypt');
+    const bcrypt = require('bcryptjs');
     const saltRounds = 10;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
     
@@ -210,7 +210,7 @@ router.put('/users/:id/password', authenticateToken, requireAdmin, async (req, r
     const { id } = req.params;
     const { password } = req.body;
     
-    const bcrypt = require('bcrypt');
+    const bcrypt = require('bcryptjs');
     const saltRounds = 10;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
     

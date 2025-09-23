@@ -11,6 +11,7 @@ import LoginForm from './components/auth/LoginForm';
 import LoginJWT from './pages/LoginJWT';
 import Footer from './components/common/Footer';
 import Dashboard from './pages/Dashboard';
+import IntegratedHomeDashboard from './pages/dashboard/IntegratedHomeDashboard';
 // [advice from AI] Phase 1: 카탈로그 페이지들 제거됨 - 지식 관리로 통합
 
 // [advice from AI] 지식 등록 및 관리 페이지들 (독립 메뉴로 이동)
@@ -30,6 +31,11 @@ import SystemRepositoryView from './pages/systems/SystemRepositoryView';
 // [advice from AI] Phase 1: 카탈로그 관련 컴포넌트들 제거됨
 import SystemApprovalPending from './pages/admin/approvals/SystemApprovalPending';
 import AssetApprovalPending from './pages/admin/approvals/AssetApprovalPending';
+import ProjectApprovalManagement from './pages/admin/ProjectApprovalManagement';
+import ExecutiveDashboard from './pages/admin/ExecutiveDashboard';
+import PODashboard from './pages/po/PODashboard';
+import ProgressManagement from './pages/po/ProgressManagement';
+import ProgressPerformanceManagement from './pages/po/ProgressPerformanceManagement';
 import ApprovedAssetsManagement from './pages/admin/approvals/ApprovedAssetsManagement';
 import DiagramEditor from './pages/knowledge/DiagramEditor';
 import MyPendingApprovals from './pages/knowledge/MyPendingApprovals';
@@ -46,8 +52,6 @@ import BackupRestore from './pages/admin/BackupRestore';
 import NotificationSettings from './pages/admin/NotificationSettings';
 import SecuritySettings from './pages/admin/SecuritySettings';
 import ApiKeyManagement from './pages/admin/ApiKeyManagement';
-import ExecutiveDashboard from './pages/executive/ExecutiveDashboard';
-import PODashboard from './pages/po/PODashboard';
 import PEWorkspace from './pages/pe/PEWorkspace';
 import QACenter from './pages/qa/QACenter';
 import OperationsCenter from './pages/operations/OperationsCenter';
@@ -58,6 +62,7 @@ import TestLogin from './pages/TestLogin';
 import PEKnowledgeManagement from './pages/pe/KnowledgeManagement';
 import CodeRegistration from './pages/pe/CodeRegistration';
 import MessageCenterTest from './components/notifications/MessageCenterTest';
+import MessageCenter from './components/notifications/MessageCenter';
 import ApprovalDashboard from './pages/approvals/ApprovalDashboard';
 import ApprovalDashboardTest from './components/approvals/ApprovalDashboardTest';
 import PEDashboard from './pages/pe/PEDashboard';
@@ -146,7 +151,8 @@ function AppContent() {
       {/* [advice from AI] 백스테이지IO 스타일의 메인 레이아웃 적용 */}
       <BackstageLayout title="Timbel 지식자원 플랫폼">
         <Routes>
-          <Route path="/" element={<IntegratedMonitoringCenter />} />
+          <Route path="/" element={<IntegratedHomeDashboard />} />
+          <Route path="/monitoring" element={<IntegratedMonitoringCenter />} />
             {/* [advice from AI] Phase 1: 카탈로그 라우트를 지식 관리로 통합 리다이렉트 */}
             <Route path="/catalog" element={<Navigate to="/knowledge/dashboard" replace />} />
             <Route path="/catalog/dashboard" element={<Navigate to="/knowledge/dashboard" replace />} />
@@ -174,13 +180,23 @@ function AppContent() {
             {/* [advice from AI] 관계 시각화는 지식 관리 내부 탭으로 통합 예정 */}
             <Route path="/catalog/relationships" element={<Navigate to="/knowledge/dashboard" replace />} />
             
-            {/* 관리자 승인 관리 라우트 */}
-            <Route path="/admin/approvals/dashboard" element={<ApprovalWorkflow />} />
+            {/* 메시지 센터 라우트 */}
+            <Route path="/message-center" element={<MessageCenter />} />
+            
+            {/* 관리자 승인 관리 라우트 - 메시지 센터로 통합 */}
+            <Route path="/admin/approvals/dashboard" element={<Navigate to="/message-center" replace />} />
             <Route path="/admin/approvals/systems-pending" element={<SystemApprovalPending />} />
             <Route path="/admin/approvals/assets-pending" element={<AssetApprovalPending />} />
             <Route path="/admin/approvals/approved-assets" element={<ApprovedAssetsManagement />} />
+            <Route path="/admin/approvals" element={<ProjectApprovalManagement />} />
+            <Route path="/admin/approvals/projects" element={<ProjectApprovalManagement />} />
+            
+            {/* PO 전용 라우트 */}
+            <Route path="/po-dashboard" element={<PODashboard />} />
+            <Route path="/po/progress" element={<ProgressPerformanceManagement />} />
           <Route path="/vibe-studio" element={<VibeStudio />} />
           <Route path="/admin" element={<AdminDashboard />} />
+          <Route path="/executive" element={<ExecutiveDashboard />} />
           <Route path="/admin/analytics" element={<Analytics />} />
           <Route path="/admin/users" element={<UserManagement />} />
           <Route path="/admin/members" element={<MembersList />} />
@@ -193,8 +209,6 @@ function AppContent() {
           <Route path="/admin/backup" element={<BackupRestore />} />
           <Route path="/admin/notifications" element={<NotificationSettings />} />
           {/* [advice from AI] PO-PE-QA-운영팀 구조 역할별 대시보드 라우트 */}
-          <Route path="/executive" element={<ExecutiveDashboard />} />
-          <Route path="/po-dashboard" element={<PODashboard />} />
           <Route path="/pe-workspace" element={<PEWorkspace />} />
           <Route path="/completion" element={<CompletionChecklist />} />
           <Route path="/qa-center" element={<QACenter />} />
@@ -210,11 +224,13 @@ function AppContent() {
           <Route path="/monitoring" element={<IntegratedMonitoringCenter />} />
           
           {/* [advice from AI] PE 작업공간 하위 기능들 */}
-          <Route path="/pe-workspace/dashboard" element={<PEDashboard />} />
-          <Route path="/pe-workspace/tasks" element={<TaskManagement />} />
           <Route path="/pe-workspace/reports" element={<WeeklyReports />} />
-          <Route path="/pe-workspace/knowledge" element={<PEKnowledgeManagement />} />
-          <Route path="/pe-workspace/code-registration" element={<CodeRegistration />} />
+          
+          {/* [advice from AI] 제거된 PE 기능들을 적절한 곳으로 리다이렉트 */}
+          <Route path="/pe-workspace/dashboard" element={<Navigate to="/pe-workspace" replace />} />
+          <Route path="/pe-workspace/tasks" element={<Navigate to="/pe-workspace" replace />} />
+          <Route path="/pe-workspace/knowledge" element={<Navigate to="/catalog/knowledge" replace />} />
+          <Route path="/pe-workspace/code-registration" element={<Navigate to="/catalog/knowledge/code" replace />} />
           
           {/* [advice from AI] 기존 분리된 라우트들 → 통합 센터로 리다이렉트 */}
           <Route path="/operations/deployment-wizard" element={<Navigate to="/operations/tenant-center?tab=1" replace />} />
@@ -257,7 +273,12 @@ function App() {
   return (
     <ThemeProvider theme={backstageTheme}>
       <CssBaseline />
-      <Router>
+      <Router 
+        future={{
+          v7_startTransition: true,
+          v7_relativeSplatPath: true
+        }}
+      >
         <AppContent />
       </Router>
     </ThemeProvider>
