@@ -78,12 +78,18 @@ class GitAnalyticsService {
         repository = insertResult.rows[0];
       }
       
-      // Git 분석 테이블 초기화
-      await client.query(`
-        INSERT INTO project_git_analytics (project_id, repository_id)
-        VALUES ($1, $2)
-        ON CONFLICT (repository_id) DO NOTHING
-      `, [projectId, repository.id]);
+      // Git 분석 테이블 초기화 (중복 체크 후 INSERT)
+      const existingAnalytics = await client.query(`
+        SELECT id FROM project_git_analytics 
+        WHERE repository_id = $1
+      `, [repository.id]);
+
+      if (existingAnalytics.rows.length === 0) {
+        await client.query(`
+          INSERT INTO project_git_analytics (project_id, repository_id)
+          VALUES ($1, $2)
+        `, [projectId, repository.id]);
+      }
       
       // 초기 분석 실행
       await this.analyzeRepository(client, repository);
