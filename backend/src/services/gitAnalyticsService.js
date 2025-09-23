@@ -32,8 +32,8 @@ class GitAnalyticsService {
       const insertResult = await client.query(`
         INSERT INTO project_repositories (
           project_id, work_group_id, assigned_pe, repository_url, repository_name,
-          platform, branch_name, repository_description, is_private
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          platform, branch_name, repository_description, is_private, created_by
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         ON CONFLICT (project_id, work_group_id, assigned_pe) 
         DO UPDATE SET 
           repository_url = EXCLUDED.repository_url,
@@ -48,7 +48,8 @@ class GitAnalyticsService {
         this.detectPlatform(repositoryData.repository_url),
         repositoryData.branch_name || 'main',
         repositoryData.description || '',
-        repositoryData.is_private !== false
+        repositoryData.is_private !== false,
+        assignedPE // created_by로 assigned_pe 사용
       ]);
       
       const repository = insertResult.rows[0];
