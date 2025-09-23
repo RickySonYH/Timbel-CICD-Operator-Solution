@@ -27,7 +27,6 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useEffect } from 'react';
 import UserInfo from './UserInfo';
 import { useJwtAuthStore } from '../../store/jwtAuthStore';
-import MessageCenter from '../notifications/MessageCenter';
 
 // [advice from AI] 백스테이지IO 스타일의 사이드바 너비
 const DRAWER_WIDTH = 240;
@@ -1111,8 +1110,15 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
             {title}
           </Typography>
           
-          {/* [advice from AI] 통합 메시지/알림 센터 */}
-          <MessageCenter />
+          {/* [advice from AI] 메시지 센터로 이동하는 버튼 */}
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => navigate('/message-center')}
+            sx={{ mr: 2 }}
+          >
+            메시지 센터
+          </Button>
           
           {/* [advice from AI] 사용자 정보 표시 */}
           <UserInfo />
