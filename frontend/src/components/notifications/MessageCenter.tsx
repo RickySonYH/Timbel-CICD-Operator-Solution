@@ -251,31 +251,40 @@ const MessageCenter: React.FC = () => {
     <Box sx={{ width: '100%', minHeight: '100vh', display: 'flex', flexDirection: 'column', p: 2 }}>
       {/* [advice from AI] 메시지 센터 헤더 */}
       <Paper sx={{ p: 2, mb: 2 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h4" sx={{ fontWeight: 600 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+          <Typography variant="h4" sx={{ fontWeight: 600, alignSelf: 'flex-start' }}>
             메시지 센터
           </Typography>
           
           {/* [advice from AI] 빠른 네비게이션 버튼들 */}
-          <Box sx={{ display: 'flex', gap: 1 }}>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
             <Button
               size="small"
               variant="outlined"
-              onClick={() => navigate('/')}
+              onClick={() => {
+                console.log('🔗 홈으로 이동 시도');
+                navigate('/');
+              }}
             >
               홈
             </Button>
             <Button
               size="small"
               variant="outlined"
-              onClick={() => navigate('/knowledge/dashboard')}
+              onClick={() => {
+                console.log('🔗 지식자원 카탈로그로 이동 시도');
+                navigate('/knowledge/dashboard');
+              }}
             >
               지식자원 카탈로그
             </Button>
             <Button
               size="small"
               variant="outlined"
-              onClick={() => navigate('/vibe-studio')}
+              onClick={() => {
+                console.log('🔗 VibeStudio로 이동 시도');
+                navigate('/vibe-studio');
+              }}
             >
               VibeStudio
             </Button>
@@ -283,7 +292,10 @@ const MessageCenter: React.FC = () => {
               <Button
                 size="small"
                 variant="outlined"
-                onClick={() => navigate('/admin')}
+                onClick={() => {
+                  console.log('🔗 관리자 대시보드로 이동 시도');
+                  navigate('/admin');
+                }}
               >
                 관리자 대시보드
               </Button>

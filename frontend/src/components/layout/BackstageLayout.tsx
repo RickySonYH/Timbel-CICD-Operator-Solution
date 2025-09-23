@@ -242,6 +242,7 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
 
   // [advice from AI] 네비게이션 아이템 클릭 핸들러
   const handleNavigation = (path: string) => {
+    console.log('🔗 네비게이션 시도:', path, '현재 경로:', location.pathname);
     navigate(path);
     if (isMobile) {
       setMobileOpen(false);
