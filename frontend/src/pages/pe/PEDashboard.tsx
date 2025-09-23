@@ -755,7 +755,14 @@ const PEDashboard: React.FC = () => {
   useEffect(() => {
     if (token && user && (user.roleType === 'pe' || user.roleType === 'admin' || user.roleType === 'executive' || user.roleType === 'po')) {
       console.log('✅ PE 대시보드 로딩 시작 - 사용자:', user.roleType);
-    loadDashboardData();
+      loadDashboardData();
+      
+      // 주기적 데이터 새로고침 (30초마다)
+      const interval = setInterval(() => {
+        loadDashboardData();
+      }, 30000);
+      
+      return () => clearInterval(interval);
     } else {
       console.log('❌ PE 대시보드 접근 권한 없음:', user?.roleType);
     }

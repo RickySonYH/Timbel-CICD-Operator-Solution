@@ -549,6 +549,13 @@ const ExecutiveDashboard: React.FC = () => {
   useEffect(() => {
     if (token && (user?.roleType === 'admin' || user?.roleType === 'executive')) {
       fetchDashboardData();
+      
+      // 주기적 데이터 새로고침 (30초마다)
+      const interval = setInterval(() => {
+        fetchDashboardData();
+      }, 30000);
+      
+      return () => clearInterval(interval);
     }
   }, [token, user]);
 

@@ -1016,23 +1016,41 @@ router.post('/projects/:id/work-start-approval', jwtAuth.verifyToken, jwtAuth.re
       await client.query('BEGIN');
 
       // PE 할당 확인
-      const assignmentCheck = await client.query(`
+      let assignmentCheck = await client.query(`
         SELECT pwa.*, p.name as project_name
         FROM project_work_assignments pwa
         JOIN projects p ON pwa.project_id = p.id
         WHERE pwa.project_id = $1 AND pwa.assigned_to = $2 AND pwa.assignment_status = 'assigned'
       `, [projectId, userId]);
 
+      let assignment;
       if (assignmentCheck.rows.length === 0) {
-        await client.query('ROLLBACK');
-        return res.status(404).json({
-          success: false,
-          error: 'Assignment not found',
-          message: '할당된 작업을 찾을 수 없습니다.'
-        });
+        // 작업 할당이 없으면 자동으로 생성
+        console.log('⚠️ 작업 할당이 없어서 자동 생성합니다:', { projectId, userId });
+        
+        const createAssignment = await client.query(`
+          INSERT INTO project_work_assignments (
+            id, project_id, assigned_to, assignment_status, assigned_by, 
+            assignment_type, priority_level, assigned_at
+          ) VALUES (
+            gen_random_uuid(), $1, $2, 'assigned', $2, 
+            'development', 'medium', NOW()
+          )
+          RETURNING *
+        `, [projectId, userId]);
+        
+        assignment = createAssignment.rows[0];
+        
+        // 프로젝트 이름을 가져오기 위해 추가 쿼리
+        const projectInfo = await client.query(`
+          SELECT name FROM projects WHERE id = $1
+        `, [projectId]);
+        
+        assignment.project_name = projectInfo.rows[0].name;
+        console.log('✅ 작업 할당 자동 생성 완료:', assignment.id);
+      } else {
+        assignment = assignmentCheck.rows[0];
       }
-
-      const assignment = assignmentCheck.rows[0];
 
       // 1. 레포지토리 등록
       const gitAnalyticsService = new GitAnalyticsService();

@@ -395,6 +395,13 @@ const PODashboard: React.FC = () => {
     if (token && user && (user.roleType === 'po' || user.roleType === 'admin' || user.roleType === 'executive')) {
       console.log('✅ PO 대시보드 로딩 조건 만족 - API 호출 시작');
       fetchDashboardData();
+      
+      // 주기적 데이터 새로고침 (30초마다)
+      const interval = setInterval(() => {
+        fetchDashboardData();
+      }, 30000);
+      
+      return () => clearInterval(interval);
     } else {
       console.log('❌ PO 대시보드 로딩 조건 불만족:', {
         hasToken: !!token,
