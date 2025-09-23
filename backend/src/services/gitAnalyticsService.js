@@ -28,31 +28,55 @@ class GitAnalyticsService {
         throw new Error('레포지토리에 접근할 수 없습니다. URL과 토큰을 확인해주세요.');
       }
       
-      // 레포지토리 등록
-      const insertResult = await client.query(`
-        INSERT INTO project_repositories (
-          project_id, work_group_id, assigned_pe, repository_url, repository_name,
-          platform, branch_name, repository_description, is_private, created_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-        ON CONFLICT (project_id, work_group_id, assigned_pe) 
-        DO UPDATE SET 
-          repository_url = EXCLUDED.repository_url,
-          repository_name = EXCLUDED.repository_name,
-          platform = EXCLUDED.platform,
-          branch_name = EXCLUDED.branch_name,
-          updated_at = NOW()
-        RETURNING *
-      `, [
-        projectId, workGroupId, assignedPE, repositoryData.repository_url,
-        repositoryData.repository_name || this.extractRepoName(repositoryData.repository_url),
-        this.detectPlatform(repositoryData.repository_url),
-        repositoryData.branch_name || 'main',
-        repositoryData.description || '',
-        repositoryData.is_private !== false,
-        assignedPE // created_by로 assigned_pe 사용
-      ]);
-      
-      const repository = insertResult.rows[0];
+      // 레포지토리 등록 (중복 체크 후 INSERT)
+      const existingRepo = await client.query(`
+        SELECT id FROM project_repositories 
+        WHERE project_id = $1 AND work_group_id = $2 AND assigned_pe = $3
+      `, [projectId, workGroupId, assignedPE]);
+
+      let repository;
+      if (existingRepo.rows.length > 0) {
+        // 기존 레포지토리 업데이트
+        const updateResult = await client.query(`
+          UPDATE project_repositories SET 
+            repository_url = $4,
+            repository_name = $5,
+            platform = $6,
+            branch_name = $7,
+            repository_description = $8,
+            is_private = $9,
+            updated_at = NOW()
+          WHERE id = $1
+          RETURNING *
+        `, [
+          existingRepo.rows[0].id,
+          repositoryData.repository_url,
+          repositoryData.repository_name || this.extractRepoName(repositoryData.repository_url),
+          this.detectPlatform(repositoryData.repository_url),
+          repositoryData.branch_name || 'main',
+          repositoryData.description || '',
+          repositoryData.is_private !== false
+        ]);
+        repository = updateResult.rows[0];
+      } else {
+        // 새 레포지토리 등록
+        const insertResult = await client.query(`
+          INSERT INTO project_repositories (
+            project_id, work_group_id, assigned_pe, repository_url, repository_name,
+            platform, branch_name, repository_description, is_private, created_by
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          RETURNING *
+        `, [
+          projectId, workGroupId, assignedPE, repositoryData.repository_url,
+          repositoryData.repository_name || this.extractRepoName(repositoryData.repository_url),
+          this.detectPlatform(repositoryData.repository_url),
+          repositoryData.branch_name || 'main',
+          repositoryData.description || '',
+          repositoryData.is_private !== false,
+          assignedPE // created_by로 assigned_pe 사용
+        ]);
+        repository = insertResult.rows[0];
+      }
       
       // Git 분석 테이블 초기화
       await client.query(`
