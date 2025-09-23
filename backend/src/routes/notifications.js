@@ -120,6 +120,7 @@ router.get('/', jwtAuth.verifyToken, async (req, res) => {
     } = req.query;
 
     console.log('📬 권한별 알림 조회:', { userId, userRole, limit, offset });
+    console.log('📬 요청 헤더:', req.headers.authorization ? 'Authorization 있음' : 'Authorization 없음');
 
     const client = await pool.connect();
     
@@ -298,6 +299,7 @@ router.get('/stats', jwtAuth.verifyToken, async (req, res) => {
     const userRole = req.user?.roleType;
 
     console.log('📊 권한별 알림 통계 조회:', { userId, userRole });
+    console.log('📊 요청 헤더:', req.headers.authorization ? 'Authorization 있음' : 'Authorization 없음');
 
     const client = await pool.connect();
     

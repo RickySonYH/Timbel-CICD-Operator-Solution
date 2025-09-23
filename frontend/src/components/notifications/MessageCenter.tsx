@@ -84,11 +84,15 @@ const MessageCenter: React.FC = () => {
 
   // [advice from AI] 알림 데이터 로드
   const loadNotificationData = async () => {
-    if (!user || !token) return;
+    if (!user || !token) {
+      console.log('❌ 사용자 또는 토큰이 없음:', { user: !!user, token: !!token });
+      return;
+    }
 
     try {
       setLoading(true);
       const apiUrl = getApiUrl();
+      console.log('📡 알림 데이터 로드 시작:', apiUrl);
 
       // 기본 알림 통계 및 메시지 로드
       const [statsResponse, notificationsResponse] = await Promise.all([
@@ -100,14 +104,25 @@ const MessageCenter: React.FC = () => {
         })
       ]);
 
+      console.log('📊 API 응답 상태:', {
+        stats: statsResponse.status,
+        notifications: notificationsResponse.status
+      });
+
       if (statsResponse.ok) {
         const statsData = await statsResponse.json();
+        console.log('📊 통계 데이터:', statsData);
         setStats(statsData);
+      } else {
+        console.error('❌ 통계 API 실패:', statsResponse.status, statsResponse.statusText);
       }
 
       if (notificationsResponse.ok) {
         const notificationsData = await notificationsResponse.json();
+        console.log('📨 알림 데이터:', notificationsData);
         setRecentNotifications(notificationsData.notifications || []);
+      } else {
+        console.error('❌ 알림 API 실패:', notificationsResponse.status, notificationsResponse.statusText);
       }
 
     } catch (error) {
