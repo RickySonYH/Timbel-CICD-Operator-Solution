@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -60,6 +60,7 @@ const MessageCenter: React.FC = () => {
   const [recentNotifications, setRecentNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, token } = useJwtAuthStore();
 
   // [advice from AI] 동적 API URL 결정 로직
@@ -74,6 +75,12 @@ const MessageCenter: React.FC = () => {
       return `http://${currentHost}`;
     }
   };
+
+  // [advice from AI] 경로 변경 감지 디버깅
+  useEffect(() => {
+    console.log('📍 MessageCenter - 현재 경로 변경됨:', location.pathname);
+    console.log('📍 MessageCenter - 전체 URL:', window.location.href);
+  }, [location.pathname]);
 
   // [advice from AI] 알림 데이터 로드
   const loadNotificationData = async () => {

@@ -2,6 +2,7 @@
 // 전체 업무 흐름, PO/PE 성과, 이벤트, CI/CD, 운영 서버 현황을 한눈에 보는 대시보드
 
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   Box,
   Grid,
@@ -51,10 +52,17 @@ interface DashboardData {
 
 const IntegratedHomeDashboard: React.FC = () => {
   const { user, token } = useJwtAuthStore();
+  const location = useLocation();
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+
+  // [advice from AI] 경로 변경 감지 디버깅
+  useEffect(() => {
+    console.log('📍 IntegratedHomeDashboard - 현재 경로 변경됨:', location.pathname);
+    console.log('📍 IntegratedHomeDashboard - 전체 URL:', window.location.href);
+  }, [location.pathname]);
 
   // [advice from AI] API URL 결정
   const getApiUrl = (): string => {

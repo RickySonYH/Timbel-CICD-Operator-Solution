@@ -249,6 +249,11 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
     }
   };
 
+  // [advice from AI] 경로 변경 감지 디버깅
+  useEffect(() => {
+    console.log('📍 현재 경로 변경됨:', location.pathname);
+  }, [location.pathname]);
+
   // [advice from AI] 백스테이지IO 스타일의 사이드바 컴포넌트
   const drawer = (
     <Box>
