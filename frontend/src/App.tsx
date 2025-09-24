@@ -66,6 +66,7 @@ import MessageCenter from './components/notifications/MessageCenter';
 import ApprovalDashboard from './pages/approvals/ApprovalDashboard';
 import ApprovalDashboardTest from './components/approvals/ApprovalDashboardTest';
 import PEDashboard from './pages/pe/PEDashboard';
+import QCDashboard from './pages/qc/QCDashboard';
 import TaskManagement from './pages/pe/TaskManagement';
 import WeeklyReports from './pages/pe/WeeklyReports';
 // [advice from AI] 운영센터 하위 메뉴 페이지들
@@ -194,6 +195,9 @@ function AppContent() {
             {/* PO 전용 라우트 */}
             <Route path="/po-dashboard" element={<PODashboard />} />
             <Route path="/po/progress" element={<ProgressPerformanceManagement />} />
+            
+            {/* QC/QA 전용 라우트 */}
+            <Route path="/qc-dashboard" element={<QCDashboard />} />
           <Route path="/vibe-studio" element={<VibeStudio />} />
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/executive" element={<ExecutiveDashboard />} />

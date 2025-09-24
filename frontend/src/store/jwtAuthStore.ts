@@ -88,13 +88,13 @@ export const useJwtAuthStore = create<AuthState>()(
               // 내부 접속 - 직접 백엔드 포트로
               return 'http://localhost:3001';
             } else {
-              // 외부 접속 - Nginx 프록시를 통해
-              return '/api';
+              // 외부 접속 - 포트 3001 사용
+              return `http://${currentHost.split(':')[0]}:3001`;
             }
           };
           
           const apiUrl = getApiUrl();
-          const response = await fetch(`${apiUrl}/auth/login`, {
+          const response = await fetch(`${apiUrl}/api/auth/login`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

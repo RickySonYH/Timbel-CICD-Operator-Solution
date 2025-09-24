@@ -582,19 +582,33 @@ class CollaborationNotificationCenter {
       const adminIds = adminsResult.rows.map(row => row.id);
       
       if (adminIds.length > 0) {
-        // 기존 approval_messages 테이블 사용 (올바른 스키마)
+        // 통합 메시지 시스템 사용
+        const messageResult = await this.pool.query(`
+          INSERT INTO unified_messages (
+            title, content, message_type, priority, sender_id, metadata
+          ) VALUES ($1, $2, $3, $4, $5, $6)
+          RETURNING id
+        `, [
+          '🆕 새 프로젝트 승인 요청',
+          `"${projectName}" 프로젝트가 생성되어 승인을 기다리고 있습니다.`,
+          'approval_request',
+          3, // high priority
+          createdBy,
+          JSON.stringify({
+            project_id: projectId,
+            event_category: 'project_created',
+            event_source: 'user'
+          })
+        ]);
+        
+        const messageId = messageResult.rows[0].id;
+        
+        // 각 관리자에게 메시지 수신자 추가
         for (const adminId of adminIds) {
           await this.pool.query(`
-            INSERT INTO approval_messages (
-              message_id, recipient_id, sender_id, request_type, subject, content, 
-              priority, message_type, sent_at
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
-          `, [
-            uuidv4(), adminId, createdBy, 'approval',
-            '🆕 새 프로젝트 승인 요청',
-            `"${projectName}" 프로젝트가 생성되어 승인을 기다리고 있습니다.`,
-            'high', 'notification'
-          ]);
+            INSERT INTO unified_message_recipients (message_id, recipient_id)
+            VALUES ($1, $2)
+          `, [messageId, adminId]);
         }
         
         console.log(`✅ 프로젝트 생성 알림 전송: ${projectName}`);
@@ -607,17 +621,32 @@ class CollaborationNotificationCenter {
   // [advice from AI] 프로젝트 승인 알림
   async notifyProjectApproved(projectId, projectName, approvedBy, projectCreator) {
     try {
-      await this.pool.query(`
-        INSERT INTO approval_messages (
-          message_id, recipient_id, sender_id, request_type, subject, content, 
-          priority, message_type, sent_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+      const messageResult = await this.pool.query(`
+        INSERT INTO unified_messages (
+          title, content, message_type, priority, sender_id, metadata
+        ) VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING id
       `, [
-        uuidv4(), projectCreator, approvedBy, 'approval',
         '✅ 프로젝트 승인 완료',
         `"${projectName}" 프로젝트가 승인되었습니다. 이제 PE 할당을 진행할 수 있습니다.`,
-        'medium', 'notification'
+        'approval_result',
+        2, // medium priority
+        approvedBy,
+        JSON.stringify({
+          project_id: projectId,
+          event_category: 'project_approved',
+          event_source: 'user',
+          approval_status: 'approved'
+        })
       ]);
+      
+      const messageId = messageResult.rows[0].id;
+      
+      // 프로젝트 생성자에게 메시지 전송
+      await this.pool.query(`
+        INSERT INTO unified_message_recipients (message_id, recipient_id)
+        VALUES ($1, $2)
+      `, [messageId, projectCreator]);
       
       console.log(`✅ 프로젝트 승인 알림 전송: ${projectName}`);
     } catch (error) {

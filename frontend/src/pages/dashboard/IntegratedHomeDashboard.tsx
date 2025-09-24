@@ -70,7 +70,8 @@ const IntegratedHomeDashboard: React.FC = () => {
     if (currentHost.includes('localhost') || currentHost.includes('127.0.0.1')) {
       return 'http://localhost:3001';
     } else {
-      return '';
+      // 외부 접속 - 포트 3001 사용
+      return `http://${currentHost.split(':')[0]}:3001`;
     }
   };
 
@@ -192,8 +193,7 @@ const IntegratedHomeDashboard: React.FC = () => {
           <Grid item xs={12}>
             <Card>
               <CardContent>
-                <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <WorkflowIcon />
+                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
                   전체 업무 흐름 현황
                 </Typography>
                 
@@ -215,29 +215,7 @@ const IntegratedHomeDashboard: React.FC = () => {
                         {dashboardData.workflow_stats?.pending_approval || 0}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
-                        승인 대기
-                      </Typography>
-                    </Box>
-                  </Grid>
-                  
-                  <Grid item xs={6} sm={3} md={2}>
-                    <Box sx={{ textAlign: 'center', p: 1 }}>
-                      <Typography variant="h4" sx={{ fontWeight: 600, color: '#9c27b0' }}>
-                        {dashboardData.workflow_stats?.available_for_claim || 0}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        선점 가능
-                      </Typography>
-                    </Box>
-                  </Grid>
-                  
-                  <Grid item xs={6} sm={3} md={2}>
-                    <Box sx={{ textAlign: 'center', p: 1 }}>
-                      <Typography variant="h4" sx={{ fontWeight: 600, color: '#3f51b5' }}>
-                        {dashboardData.workflow_stats?.po_claimed || 0}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        PO 선점됨
+                        할당가능
                       </Typography>
                     </Box>
                   </Grid>
@@ -294,8 +272,7 @@ const IntegratedHomeDashboard: React.FC = () => {
           <Grid item xs={12} md={6}>
             <Card sx={{ height: 400 }}>
               <CardContent>
-                <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <TeamIcon />
+                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
                   PO/PE 성과 현황
                 </Typography>
                 
@@ -307,7 +284,7 @@ const IntegratedHomeDashboard: React.FC = () => {
                         <TableCell>역할</TableCell>
                         <TableCell align="right">진행 중</TableCell>
                         <TableCell align="right">이번 달</TableCell>
-                        <TableCell align="right">성공률</TableCell>
+                        <TableCell align="right">진행률</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -342,11 +319,11 @@ const IntegratedHomeDashboard: React.FC = () => {
                             <Typography 
                               variant="body2" 
                               sx={{ 
-                                color: person.success_rate_percent >= 80 ? '#4caf50' : 
-                                       person.success_rate_percent >= 60 ? '#ff9800' : '#f44336'
+                                color: person.progress_rate_percent >= 80 ? '#4caf50' : 
+                                       person.progress_rate_percent >= 60 ? '#ff9800' : '#f44336'
                               }}
                             >
-                              {person.success_rate_percent || 0}%
+                              {person.progress_rate_percent || 0}%
                             </Typography>
                           </TableCell>
                         </TableRow>
@@ -361,8 +338,7 @@ const IntegratedHomeDashboard: React.FC = () => {
           <Grid item xs={12} md={6}>
             <Card sx={{ height: 400 }}>
               <CardContent>
-                <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <CICDIcon />
+                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
                   CI/CD 파이프라인 현황
                 </Typography>
                 
@@ -385,7 +361,7 @@ const IntegratedHomeDashboard: React.FC = () => {
                           {dashboardData.cicd_stats.success_rate_7d || 0}%
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
-                          7일 성공률
+                          7일 진행률
                         </Typography>
                       </Box>
                     </Grid>
@@ -448,8 +424,7 @@ const IntegratedHomeDashboard: React.FC = () => {
           <Grid item xs={12} md={6}>
             <Card sx={{ height: 400 }}>
               <CardContent>
-                <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <EventIcon />
+                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
                   실시간 이벤트 스트림
                 </Typography>
                 
@@ -499,8 +474,7 @@ const IntegratedHomeDashboard: React.FC = () => {
           <Grid item xs={12} md={6}>
             <Card sx={{ height: 400 }}>
               <CardContent>
-                <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <ServerIcon />
+                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
                   운영 서버 현황
                 </Typography>
                 
@@ -602,8 +576,7 @@ const IntegratedHomeDashboard: React.FC = () => {
             <Grid item xs={12}>
               <Card>
                 <CardContent>
-                  <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <PerformanceIcon />
+                  <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
                     내 업무 현황 ({dashboardData.user_role?.toUpperCase()})
                   </Typography>
                   

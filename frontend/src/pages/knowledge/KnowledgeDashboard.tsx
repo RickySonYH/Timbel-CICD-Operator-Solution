@@ -71,7 +71,10 @@ const KnowledgeDashboard: React.FC = () => {
         }
 
         // [advice from AI] 실제 API에서 모든 데이터 조회
-        const apiUrl = process.env.REACT_APP_API_URL || '/api';
+        const currentHost = window.location.host;
+        const apiUrl = currentHost.includes('localhost') || currentHost.includes('127.0.0.1') 
+          ? 'http://localhost:3001/api' 
+          : `http://${currentHost.split(':')[0]}:3001/api`;
         const [
           designAssetsResponse, 
           codeComponentsResponse, 
@@ -203,7 +206,10 @@ const KnowledgeDashboard: React.FC = () => {
         if (!token) return;
 
         // [advice from AI] 최근 등록된 데이터 조회
-        const apiUrl = process.env.REACT_APP_API_URL || '/api';
+        const currentHost = window.location.host;
+        const apiUrl = currentHost.includes('localhost') || currentHost.includes('127.0.0.1') 
+          ? 'http://localhost:3001/api' 
+          : `http://${currentHost.split(':')[0]}:3001/api`;
         const [recentDesignAssets, recentCodeComponents, recentDocuments] = await Promise.all([
           fetch(`${apiUrl}/design-assets?limit=5&sort=created_at:desc`, {
             headers: {

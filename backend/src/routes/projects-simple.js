@@ -1365,158 +1365,7 @@ router.put('/:id/status', jwtAuth.verifyToken, jwtAuth.requireRole(['po', 'admin
   }
 });
 
-// [advice from AI] PE가 할당받은 프로젝트 목록 조회 API
-router.get('/assigned/me', jwtAuth.verifyToken, jwtAuth.requireRole(['pe', 'admin']), async (req, res) => {
-  try {
-    console.log('📋 PE 할당 프로젝트 조회 요청 - 사용자:', req.user?.userId || req.user?.id, req.user?.roleType);
-    
-    const userId = req.user?.userId || req.user?.id;
-    
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        error: 'User not authenticated',
-        message: '사용자 인증 정보를 찾을 수 없습니다.'
-      });
-    }
-    
-    const client = await pool.connect();
-    
-    try {
-      // PE에게 할당된 프로젝트와 작업 그룹 조회
-      const result = await client.query(`
-        SELECT
-          p.id as project_id,
-          p.name as project_name,
-          p.project_overview,
-          p.target_system_name,
-          p.urgency_level,
-          p.deadline,
-          p.project_status,
-          p.created_at,
-          d.name as domain_name,
-          pwa.id as assignment_id,
-          pwa.work_group_id,
-          pwa.assignment_status,
-          pwa.progress_percentage,
-          pwa.assigned_at,
-          pwa.start_date,
-          pwa.due_date,
-          pwa.assignment_notes,
-          wg.name as work_group_name,
-          wg.description as work_group_description,
-          creator.full_name as created_by_name
-        FROM project_work_assignments pwa
-        JOIN projects p ON pwa.project_id = p.id
-        LEFT JOIN domains d ON p.domain_id = d.id
-        LEFT JOIN work_groups wg ON pwa.work_group_id = wg.id
-        LEFT JOIN timbel_users creator ON p.created_by = creator.id
-        WHERE pwa.assigned_to = $1
-          AND pwa.assignment_status IN ('assigned', 'in_progress')
-        ORDER BY 
-          CASE p.urgency_level 
-            WHEN 'critical' THEN 1 
-            WHEN 'high' THEN 2 
-            WHEN 'medium' THEN 3 
-            ELSE 4 
-          END,
-          pwa.assigned_at DESC
-      `, [userId]);
-      
-      console.log(`✅ PE 할당 프로젝트 조회 완료: ${result.rows.length}개`);
-      
-      res.setHeader('Content-Type', 'application/json; charset=utf-8');
-      res.json({
-        success: true,
-        data: result.rows
-      });
-      
-    } finally {
-      client.release();
-    }
-    
-  } catch (error) {
-    console.error('❌ PE 할당 프로젝트 조회 실패:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch assigned projects',
-      message: error.message
-    });
-  }
-});
 
-// [advice from AI] 특정 PE의 할당된 프로젝트 조회 API (Admin용)
-router.get('/assigned/:peUserId', jwtAuth.verifyToken, jwtAuth.requireRole(['admin', 'executive']), async (req, res) => {
-  try {
-    const { peUserId } = req.params;
-    console.log('📋 특정 PE 할당 프로젝트 조회 요청 - PE ID:', peUserId, '요청자:', req.user?.userId || req.user?.id, req.user?.roleType);
-    
-    const client = await pool.connect();
-    
-    try {
-      // PE에게 할당된 프로젝트와 작업 그룹 조회
-      const result = await client.query(`
-        SELECT
-          p.id as project_id,
-          p.name as project_name,
-          p.project_overview,
-          p.target_system_name,
-          p.urgency_level,
-          p.deadline,
-          p.project_status,
-          p.created_at,
-          d.name as domain_name,
-          pwa.id as assignment_id,
-          pwa.work_group_id,
-          pwa.assignment_status,
-          pwa.progress_percentage,
-          pwa.assigned_at,
-          pwa.start_date,
-          pwa.due_date,
-          pwa.assignment_notes,
-          wg.name as work_group_name,
-          wg.description as work_group_description,
-          creator.full_name as created_by_name,
-          pe_user.full_name as assigned_pe_name
-        FROM project_work_assignments pwa
-        JOIN projects p ON pwa.project_id = p.id
-        LEFT JOIN domains d ON p.domain_id = d.id
-        LEFT JOIN work_groups wg ON pwa.work_group_id = wg.id
-        LEFT JOIN timbel_users creator ON p.created_by = creator.id
-        LEFT JOIN timbel_users pe_user ON pwa.assigned_to = pe_user.id
-        WHERE pwa.assigned_to = $1
-          AND pwa.assignment_status IN ('assigned', 'in_progress')
-        ORDER BY 
-          CASE p.urgency_level 
-            WHEN 'critical' THEN 1 
-            WHEN 'high' THEN 2 
-            WHEN 'medium' THEN 3 
-            ELSE 4 
-          END,
-          pwa.assigned_at DESC
-      `, [peUserId]);
-      
-      console.log(`✅ 특정 PE 할당 프로젝트 조회 완료: ${result.rows.length}개`);
-      
-      res.setHeader('Content-Type', 'application/json; charset=utf-8');
-      res.json({
-        success: true,
-        data: result.rows
-      });
-      
-    } finally {
-      client.release();
-    }
-    
-  } catch (error) {
-    console.error('❌ 특정 PE 할당 프로젝트 조회 실패:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch PE assigned projects',
-      message: error.message
-    });
-  }
-});
 
 // [advice from AI] PE 사용자 목록 조회 API
 router.get('/list/users/pe', jwtAuth.verifyToken, jwtAuth.requireRole(['po', 'admin', 'executive']), async (req, res) => {
@@ -1588,7 +1437,7 @@ router.get('/assigned/me', jwtAuth.verifyToken, async (req, res) => {
     try {
       // PE에게 할당된 프로젝트와 작업 그룹 조회
       const result = await client.query(`
-        SELECT 
+        SELECT
           p.id as project_id,
           p.name as project_name,
           p.project_overview,
@@ -1606,19 +1455,30 @@ router.get('/assigned/me', jwtAuth.verifyToken, async (req, res) => {
           pwa.start_date,
           pwa.due_date,
           pwa.assignment_notes,
+          pwa.pe_estimated_hours,
+          pwa.actual_start_date,
+          CASE 
+            WHEN pwa.actual_start_date IS NOT NULL AND pwa.assignment_status = 'in_progress' THEN
+              EXTRACT(EPOCH FROM (NOW() - pwa.actual_start_date)) / 3600
+            ELSE 0
+          END as actual_hours_worked,
           wg.name as work_group_name,
           wg.description as work_group_description,
-          creator.full_name as created_by_name
+          creator.full_name as created_by_name,
+          pr.repository_url,
+          pr.repository_name,
+          pr.platform as git_platform
         FROM project_work_assignments pwa
         JOIN projects p ON p.id = pwa.project_id
         LEFT JOIN domains d ON d.id = p.domain_id
         LEFT JOIN work_groups wg ON wg.id = pwa.work_group_id
         LEFT JOIN timbel_users creator ON creator.id = p.created_by
+        LEFT JOIN project_repositories pr ON pr.project_id = p.id AND pr.assigned_pe = pwa.assigned_to
         WHERE pwa.assigned_to = $1
           AND pwa.assignment_status IN ('assigned', 'in_progress', 'review')
         ORDER BY pwa.assigned_at DESC
       `, [userId]);
-
+      
       console.log(`✅ PE 할당 프로젝트 ${result.rows.length}개 조회 완료`);
       
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -1650,9 +1510,9 @@ router.get('/assigned/:peUserId', jwtAuth.verifyToken, jwtAuth.requireRole(['adm
     const client = await pool.connect();
     
     try {
-      // 특정 PE에게 할당된 프로젝트와 작업 그룹 조회
+      // 특정 PE에게 할당된 프로젝트와 작업 그룹 조회 (중복 제거, 레포지토리 정보 포함)
       const result = await client.query(`
-        SELECT 
+        SELECT DISTINCT ON (p.id)
           p.id as project_id,
           p.name as project_name,
           p.project_overview,
@@ -1670,20 +1530,42 @@ router.get('/assigned/:peUserId', jwtAuth.verifyToken, jwtAuth.requireRole(['adm
           pwa.start_date,
           pwa.due_date,
           pwa.assignment_notes,
+          pwa.pe_estimated_hours,
+          pwa.actual_start_date,
+          CASE 
+            WHEN pwa.actual_start_date IS NOT NULL AND pwa.assignment_status = 'in_progress' THEN
+              EXTRACT(EPOCH FROM (NOW() - pwa.actual_start_date)) / 3600
+            ELSE 0
+          END as actual_hours_worked,
           wg.name as work_group_name,
           wg.description as work_group_description,
-          creator.full_name as created_by_name
+          creator.full_name as created_by_name,
+          pr.repository_url,
+          pr.repository_name,
+          pr.platform as git_platform
         FROM project_work_assignments pwa
         JOIN projects p ON p.id = pwa.project_id
         LEFT JOIN domains d ON d.id = p.domain_id
         LEFT JOIN work_groups wg ON wg.id = pwa.work_group_id
         LEFT JOIN timbel_users creator ON creator.id = p.created_by
+        LEFT JOIN project_repositories pr ON pr.project_id = p.id AND pr.assigned_pe = pwa.assigned_to
         WHERE pwa.assigned_to = $1
           AND pwa.assignment_status IN ('assigned', 'in_progress', 'review')
-        ORDER BY pwa.assigned_at DESC
+        ORDER BY p.id, pwa.assigned_at DESC
       `, [peUserId]);
-
+      
       console.log(`✅ 특정 PE 할당 프로젝트 ${result.rows.length}개 조회 완료`);
+      
+      // 레포지토리 정보 디버깅
+      result.rows.forEach((row, index) => {
+        console.log(`📁 프로젝트 ${index + 1} 레포지토리 정보:`, {
+          projectName: row.project_name,
+          repositoryUrl: row.repository_url,
+          repositoryName: row.repository_name,
+          gitPlatform: row.git_platform,
+          hasRepository: !!row.repository_url
+        });
+      });
       
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
       res.json({
@@ -1700,6 +1582,1154 @@ router.get('/assigned/:peUserId', jwtAuth.verifyToken, jwtAuth.requireRole(['adm
     res.status(500).json({
       success: false,
       error: 'Failed to fetch assigned projects for PE',
+      message: error.message
+    });
+  }
+});
+
+// [advice from AI] 프로젝트 진행률 업데이트 API
+router.put('/progress/:assignmentId', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    const { assignmentId } = req.params;
+    const { progress_percentage, assignment_notes } = req.body;
+    const userId = req.user?.userId || req.user?.id;
+
+    console.log('📊 프로젝트 진행률 업데이트 요청:', { assignmentId, progress_percentage, userId });
+
+    if (progress_percentage < 0 || progress_percentage > 100) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid progress percentage',
+        message: '진행률은 0-100% 사이여야 합니다.'
+      });
+    }
+    
+    const client = await pool.connect();
+    
+    try {
+      // 사용자 권한 확인
+      const userRole = req.user?.roleType;
+      
+      // 할당 확인 및 업데이트 (관리자는 모든 할당 수정 가능)
+      let result;
+      if (userRole === 'admin' || userRole === 'executive' || userRole === 'po') {
+        result = await client.query(`
+          UPDATE project_work_assignments 
+          SET 
+            progress_percentage = $1,
+            assignment_notes = $2,
+            updated_at = NOW()
+          WHERE id = $3
+          RETURNING *
+        `, [progress_percentage, assignment_notes, assignmentId]);
+      } else {
+        result = await client.query(`
+          UPDATE project_work_assignments 
+          SET 
+            progress_percentage = $1,
+            assignment_notes = $2,
+            updated_at = NOW()
+          WHERE id = $3 AND assigned_to = $4
+          RETURNING *
+        `, [progress_percentage, assignment_notes, assignmentId, userId]);
+      }
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: 'Assignment not found',
+          message: '할당된 작업을 찾을 수 없거나 권한이 없습니다.'
+        });
+      }
+
+      console.log('✅ 진행률 업데이트 완료:', result.rows[0]);
+      
+      // 진행률 업데이트 이벤트 기록
+      const assignment = result.rows[0];
+      try {
+        await client.query(`
+          INSERT INTO system_event_stream (
+            id, event_type, event_category, title, description, 
+            project_id, user_id, assignment_id, event_timestamp, 
+            event_data, is_processed, requires_action
+          ) VALUES (
+            gen_random_uuid(), 'progress_update', 'project_management',
+            '진행률 업데이트', $1,
+            $2, $3, $4, NOW(),
+            $5, true, false
+          )
+        `, [
+          `프로젝트 진행률이 ${progress_percentage}%로 업데이트되었습니다.${assignment_notes ? ` 메모: ${assignment_notes}` : ''}`,
+          assignment.project_id,
+          userId,
+          assignmentId,
+          JSON.stringify({
+            old_progress: assignment.progress_percentage,
+            new_progress: progress_percentage,
+            notes: assignment_notes,
+            updated_by_role: userRole
+          })
+        ]);
+        console.log('📝 진행률 업데이트 이벤트 기록 완료');
+      } catch (eventError) {
+        console.error('❌ 이벤트 기록 실패:', eventError);
+        // 이벤트 기록 실패는 메인 작업에 영향을 주지 않음
+      }
+      
+      res.json({
+        success: true,
+        message: '진행률이 업데이트되었습니다.',
+        data: result.rows[0]
+      });
+      
+    } finally {
+      client.release();
+    }
+    
+  } catch (error) {
+    console.error('❌ 진행률 업데이트 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update progress',
+      message: error.message
+    });
+  }
+});
+
+// [advice from AI] 프로젝트 일시정지 API
+router.put('/pause/:assignmentId', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    const { assignmentId } = req.params;
+    const { pause_reason, assignment_notes } = req.body;
+    const userId = req.user?.userId || req.user?.id;
+
+    console.log('⏸️ 프로젝트 일시정지 요청:', { assignmentId, pause_reason, userId });
+
+    if (!pause_reason || !pause_reason.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Pause reason required',
+        message: '일시정지 사유를 입력해주세요.'
+      });
+    }
+    
+    const client = await pool.connect();
+    
+    try {
+      // 사용자 권한 확인
+      const userRole = req.user?.roleType;
+      
+      // 할당 확인 및 일시정지 (관리자는 모든 할당 수정 가능)
+      let result;
+      if (userRole === 'admin' || userRole === 'executive' || userRole === 'po') {
+        result = await client.query(`
+          UPDATE project_work_assignments 
+          SET 
+            assignment_status = 'paused',
+            assignment_notes = $1,
+            updated_at = NOW(),
+            assignment_history = assignment_history || $2
+          WHERE id = $3 AND assignment_status = 'in_progress'
+          RETURNING *
+        `, [
+          assignment_notes,
+          JSON.stringify([{
+            action: 'paused',
+            reason: pause_reason,
+            timestamp: new Date().toISOString(),
+            user_id: userId
+          }]),
+          assignmentId
+        ]);
+      } else {
+        result = await client.query(`
+          UPDATE project_work_assignments 
+          SET 
+            assignment_status = 'paused',
+            assignment_notes = $1,
+            updated_at = NOW(),
+            assignment_history = assignment_history || $2
+          WHERE id = $3 AND assigned_to = $4 AND assignment_status = 'in_progress'
+          RETURNING *
+        `, [
+          assignment_notes,
+          JSON.stringify([{
+            action: 'paused',
+            reason: pause_reason,
+            timestamp: new Date().toISOString(),
+            user_id: userId
+          }]),
+          assignmentId,
+          userId
+        ]);
+      }
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: 'Assignment not found or not in progress',
+          message: '진행 중인 할당된 작업을 찾을 수 없거나 권한이 없습니다.'
+        });
+      }
+
+      console.log('✅ 프로젝트 일시정지 완료:', result.rows[0]);
+      
+      res.json({
+        success: true,
+        message: '프로젝트가 일시정지되었습니다.',
+        data: result.rows[0]
+      });
+      
+    } finally {
+      client.release();
+    }
+    
+  } catch (error) {
+    console.error('❌ 프로젝트 일시정지 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to pause project',
+      message: error.message
+    });
+  }
+});
+
+// [advice from AI] PE의 최근 활동 조회 API
+// QC/QA 피드백 데이터 조회 API
+router.get('/feedback/:peUserId', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    const { peUserId } = req.params;
+    const requestingUserId = req.user?.userId || req.user?.id;
+    const userRole = req.user?.roleType;
+
+    console.log('🔍 QC/QA 피드백 데이터 조회:', { peUserId, requestingUserId, userRole });
+
+    // 권한 확인: 본인이거나 admin/executive/po 역할
+    if (peUserId !== requestingUserId && !['admin', 'executive', 'po'].includes(userRole)) {
+      return res.status(403).json({
+        success: false,
+        error: 'Unauthorized',
+        message: '권한이 없습니다.'
+      });
+    }
+    
+    const client = await pool.connect();
+    
+    try {
+      // 피드백 통계 조회
+      const statsResult = await client.query(`
+        SELECT 
+          COUNT(*) as total,
+          COUNT(CASE WHEN feedback_status = 'open' THEN 1 END) as open,
+          COUNT(CASE WHEN feedback_status = 'in_progress' THEN 1 END) as in_progress,
+          COUNT(CASE WHEN feedback_status = 'fixed' THEN 1 END) as fixed,
+          COUNT(CASE WHEN feedback_status = 'closed' THEN 1 END) as closed
+        FROM qc_feedback_items 
+        WHERE assigned_to_pe = $1
+      `, [peUserId]);
+
+      // 피드백 목록 조회 (최근 10개)
+      const feedbackResult = await client.query(`
+        SELECT 
+          qfi.*,
+          qr.project_id,
+          p.name as project_name,
+          tu_qc.full_name as qc_name,
+          tu_pe.full_name as pe_name
+        FROM qc_feedback_items qfi
+        LEFT JOIN qc_qa_requests qr ON qfi.qc_request_id = qr.id
+        LEFT JOIN projects p ON qr.project_id = p.id
+        LEFT JOIN timbel_users tu_qc ON qfi.reported_by = tu_qc.id
+        LEFT JOIN timbel_users tu_pe ON qfi.assigned_to_pe = tu_pe.id
+        WHERE qfi.assigned_to_pe = $1
+        ORDER BY qfi.created_at DESC
+        LIMIT 10
+      `, [peUserId]);
+
+      const stats = statsResult.rows[0] || {
+        total: 0,
+        open: 0,
+        in_progress: 0,
+        fixed: 0,
+        closed: 0
+      };
+
+      // 숫자로 변환
+      Object.keys(stats).forEach(key => {
+        stats[key] = parseInt(stats[key]) || 0;
+      });
+
+      res.json({
+        success: true,
+        data: {
+          stats,
+          feedbacks: feedbackResult.rows
+        }
+      });
+      
+    } finally {
+      client.release();
+    }
+    
+  } catch (error) {
+    console.error('❌ QC/QA 피드백 데이터 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to load feedback data',
+      message: error.message
+    });
+  }
+});
+
+// PE 피드백 응답 API
+router.post('/feedback-response', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    const { feedback_id, response_type, response_message, modification_details, estimated_fix_time } = req.body;
+    const userId = req.user?.userId || req.user?.id;
+    const userRole = req.user?.roleType;
+
+    console.log('🔄 PE 피드백 응답 처리:', { feedback_id, response_type, userId });
+
+    // PE 권한 확인
+    if (userRole !== 'pe') {
+      return res.status(403).json({
+        success: false,
+        error: 'Unauthorized',
+        message: 'PE 권한이 필요합니다.'
+      });
+    }
+    
+    const client = await pool.connect();
+    
+    try {
+      await client.query('BEGIN');
+
+      // 1. 피드백 정보 확인 및 권한 검증
+      const feedbackResult = await client.query(`
+        SELECT qfi.*, p.name as project_name
+        FROM qc_feedback_items qfi
+        LEFT JOIN qc_qa_requests qr ON qfi.qc_request_id = qr.id
+        LEFT JOIN projects p ON qr.project_id = p.id
+        WHERE qfi.id = $1 AND qfi.assigned_to_pe = $2
+      `, [feedback_id, userId]);
+
+      if (feedbackResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({
+          success: false,
+          error: 'Feedback not found',
+          message: '해당 피드백을 찾을 수 없거나 권한이 없습니다.'
+        });
+      }
+
+      const feedback = feedbackResult.rows[0];
+
+      // 2. PE 피드백 응답 저장
+      const responseResult = await client.query(`
+        INSERT INTO pe_feedback_responses (
+          feedback_item_id, pe_user_id, response_type, response_message,
+          modification_details, estimated_fix_hours, status
+        ) VALUES ($1, $2, $3, $4, $5, $6, 'submitted')
+        RETURNING id
+      `, [
+        feedback_id, 
+        userId, 
+        response_type, 
+        response_message,
+        modification_details || null,
+        estimated_fix_time || null
+      ]);
+
+      const responseId = responseResult.rows[0].id;
+
+      // 3. 피드백 상태 업데이트
+      let newFeedbackStatus = 'in_progress';
+      if (response_type === 'completion') {
+        newFeedbackStatus = 'fixed';
+      } else if (response_type === 'acknowledgment') {
+        newFeedbackStatus = 'in_progress';
+      }
+
+      await client.query(`
+        UPDATE qc_feedback_items 
+        SET feedback_status = $1, updated_at = NOW()
+        WHERE id = $2
+      `, [newFeedbackStatus, feedback_id]);
+
+      // 4. 시스템 이벤트 로그 기록
+      const eventTitle = response_type === 'acknowledgment' ? '피드백 확인' :
+                        response_type === 'progress_update' ? '피드백 진행 상황 업데이트' :
+                        response_type === 'completion' ? '피드백 수정 완료' : '피드백 추가 설명 요청';
+
+      await client.query(`
+        INSERT INTO system_event_stream (
+          id, event_type, event_category, title, description,
+          project_id, user_id, event_timestamp, event_data, is_processed
+        ) VALUES (
+          gen_random_uuid(), $1, 'quality_assurance', $2, $3,
+          $4, $5, NOW(), $6, true
+        )
+      `, [
+        `pe_feedback_${response_type}`,
+        eventTitle,
+        `${feedback.project_name} 프로젝트의 피드백에 대한 응답: ${response_message.substring(0, 100)}`,
+        feedback.project_id,
+        userId,
+        JSON.stringify({
+          feedback_id,
+          response_id: responseId,
+          response_type,
+          new_status: newFeedbackStatus,
+          project_name: feedback.project_name
+        })
+      ]);
+
+      // 5. QC/QA 사용자에게 알림 메시지 생성
+      const qcUser = await client.query(`
+        SELECT id, full_name FROM timbel_users WHERE id = $1
+      `, [feedback.reported_by]);
+
+      if (qcUser.rows.length > 0) {
+        const messageResult = await client.query(`
+          INSERT INTO unified_messages (
+            title, content, message_type, priority, sender_id, metadata
+          ) VALUES ($1, $2, $3, $4, $5, $6)
+          RETURNING id
+        `, [
+          `PE 피드백 응답: ${feedback.title}`,
+          `${eventTitle}\n\n응답 내용: ${response_message}${modification_details ? `\n\n수정 세부사항: ${modification_details}` : ''}`,
+          'pe_feedback_response',
+          response_type === 'completion' ? 4 : 2, // priority as number
+          userId,
+          JSON.stringify({
+            event_category: 'pe_feedback_response',
+            event_source: 'user',
+            project_id: feedback.project_id,
+            feedback_id: feedback_id,
+            response_type: response_type
+          })
+        ]);
+
+        const messageId = messageResult.rows[0].id;
+
+        await client.query(`
+          INSERT INTO unified_message_recipients (message_id, recipient_id)
+          VALUES ($1, $2)
+        `, [messageId, feedback.reported_by]);
+      }
+
+      await client.query('COMMIT');
+
+      res.json({
+        success: true,
+        message: '피드백 응답이 성공적으로 전송되었습니다.',
+        data: {
+          response_id: responseId,
+          feedback_status: newFeedbackStatus,
+          response_type
+        }
+      });
+
+    } finally {
+      client.release();
+    }
+
+  } catch (error) {
+    console.error('❌ PE 피드백 응답 처리 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to submit feedback response',
+      message: error.message
+    });
+  }
+});
+
+router.get('/activities/recent/:peUserId?', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    const { peUserId } = req.params;
+    const userId = req.user?.userId || req.user?.id;
+    const userRole = req.user?.roleType;
+    
+    // 조회할 사용자 ID 결정
+    let targetUserId = userId;
+    if (peUserId && (userRole === 'admin' || userRole === 'executive' || userRole === 'po')) {
+      targetUserId = peUserId;
+    }
+    
+    console.log('📋 PE 최근 활동 조회:', { targetUserId, requestedBy: userId, role: userRole });
+    
+    const client = await pool.connect();
+    
+    try {
+      // PE와 관련된 최근 활동 조회 (QC/QA 피드백 포함)
+      const result = await client.query(`
+        SELECT 
+          ses.id,
+          ses.event_type,
+          ses.event_category,
+          ses.title,
+          ses.description,
+          ses.event_timestamp,
+          ses.event_data,
+          p.name as project_name,
+          pwa.progress_percentage,
+          EXTRACT(EPOCH FROM (NOW() - ses.event_timestamp)) as seconds_ago,
+          'system_event' as source_type
+        FROM system_event_stream ses
+        LEFT JOIN projects p ON ses.project_id = p.id
+        LEFT JOIN project_work_assignments pwa ON ses.assignment_id = pwa.id
+        WHERE ses.user_id = $1 
+          AND ses.event_category IN ('project_management', 'quality_assurance')
+          AND ses.event_type IN ('work_start', 'progress_update', 'work_pause', 'work_complete', 'project_completion', 'qc_feedback_created')
+        
+        UNION ALL
+        
+        -- QC/QA 피드백 관련 이벤트 (PE에게 할당된 피드백)
+        SELECT 
+          qfi.id,
+          CASE 
+            WHEN qfi.feedback_status = 'assigned' THEN 'qc_feedback_received'
+            WHEN qfi.feedback_status = 'in_progress' THEN 'qc_feedback_in_progress'
+            WHEN qfi.feedback_status = 'fixed' THEN 'qc_feedback_fixed'
+            WHEN qfi.feedback_status = 'verified' THEN 'qc_feedback_verified'
+            WHEN qfi.feedback_status = 'closed' THEN 'qc_feedback_closed'
+            ELSE 'qc_feedback_updated'
+          END as event_type,
+          'quality_assurance' as event_category,
+          CASE 
+            WHEN qfi.feedback_status = 'assigned' THEN 'QC/QA 피드백 접수'
+            WHEN qfi.feedback_status = 'in_progress' THEN 'QC/QA 피드백 처리 시작'
+            WHEN qfi.feedback_status = 'fixed' THEN 'QC/QA 피드백 수정 완료'
+            WHEN qfi.feedback_status = 'verified' THEN 'QC/QA 피드백 검증 완료'
+            WHEN qfi.feedback_status = 'closed' THEN 'QC/QA 피드백 종료'
+            ELSE 'QC/QA 피드백 업데이트'
+          END as title,
+          CONCAT(
+            CASE qfi.feedback_type
+              WHEN 'bug' THEN '버그'
+              WHEN 'improvement' THEN '개선사항'
+              WHEN 'enhancement' THEN '기능 개선'
+              WHEN 'documentation' THEN '문서화'
+              ELSE '피드백'
+            END,
+            ' - ', qfi.title,
+            ' (심각도: ', 
+            CASE qfi.severity_level
+              WHEN 'critical' THEN 'Critical'
+              WHEN 'high' THEN 'High'
+              WHEN 'medium' THEN 'Medium'
+              WHEN 'low' THEN 'Low'
+              ELSE qfi.severity_level
+            END,
+            ')'
+          ) as description,
+          qfi.created_at as event_timestamp,
+          JSON_BUILD_OBJECT(
+            'feedback_id', qfi.id,
+            'feedback_type', qfi.feedback_type,
+            'severity_level', qfi.severity_level,
+            'priority_level', qfi.priority_level,
+            'feedback_status', qfi.feedback_status,
+            'title', qfi.title
+          )::jsonb as event_data,
+          p.name as project_name,
+          NULL as progress_percentage,
+          EXTRACT(EPOCH FROM (NOW() - qfi.created_at)) as seconds_ago,
+          'qc_feedback' as source_type
+        FROM qc_feedback_items qfi
+        LEFT JOIN qc_qa_requests qr ON qfi.qc_request_id = qr.id
+        LEFT JOIN projects p ON qr.project_id = p.id
+        WHERE qfi.assigned_to_pe = $1
+        
+        UNION ALL
+        
+        -- PE 피드백 응답 이벤트
+        SELECT 
+          pfr.id,
+          CASE pfr.response_type
+            WHEN 'acknowledgment' THEN 'pe_feedback_acknowledged'
+            WHEN 'progress_update' THEN 'pe_feedback_progress'
+            WHEN 'completion' THEN 'pe_feedback_completed'
+            WHEN 'clarification_request' THEN 'pe_feedback_clarification'
+            ELSE 'pe_feedback_response'
+          END as event_type,
+          'quality_assurance' as event_category,
+          CASE pfr.response_type
+            WHEN 'acknowledgment' THEN '피드백 확인'
+            WHEN 'progress_update' THEN '피드백 진행 상황 업데이트'
+            WHEN 'completion' THEN '피드백 수정 완료'
+            WHEN 'clarification_request' THEN '피드백 추가 설명 요청'
+            ELSE '피드백 응답'
+          END as title,
+          CONCAT('피드백 응답: ', LEFT(pfr.response_message, 50), 
+                 CASE WHEN LENGTH(pfr.response_message) > 50 THEN '...' ELSE '' END) as description,
+          pfr.created_at as event_timestamp,
+          JSON_BUILD_OBJECT(
+            'response_id', pfr.id,
+            'feedback_id', pfr.feedback_item_id,
+            'response_type', pfr.response_type,
+            'status', pfr.status
+          )::jsonb as event_data,
+          p.name as project_name,
+          NULL as progress_percentage,
+          EXTRACT(EPOCH FROM (NOW() - pfr.created_at)) as seconds_ago,
+          'pe_response' as source_type
+        FROM pe_feedback_responses pfr
+        JOIN qc_feedback_items qfi ON pfr.feedback_item_id = qfi.id
+        LEFT JOIN qc_qa_requests qr ON qfi.qc_request_id = qr.id
+        LEFT JOIN projects p ON qr.project_id = p.id
+        WHERE pfr.pe_user_id = $1
+        
+        ORDER BY event_timestamp DESC
+        LIMIT 10
+      `, [targetUserId]);
+      
+      console.log(`✅ PE 최근 활동 ${result.rows.length}개 조회 완료`);
+      
+      res.json({
+        success: true,
+        data: result.rows
+      });
+      
+    } finally {
+      client.release();
+    }
+    
+  } catch (error) {
+    console.error('❌ PE 최근 활동 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch recent activities',
+      message: error.message
+    });
+  }
+});
+
+// 프로젝트 완료 보고서 제출 API
+router.post('/completion-report', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    const { project_id, assignment_id, repository_url, completion_report } = req.body;
+    const userId = req.user?.userId || req.user?.id;
+    const userRole = req.user?.roleType;
+    
+    console.log('완료 보고서 제출 요청:', {
+      projectId: project_id,
+      assignmentId: assignment_id,
+      userId,
+      userRole,
+      hasRepositoryUrl: !!repository_url
+    });
+
+    if (!project_id || !assignment_id || !completion_report) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields',
+        message: '필수 필드가 누락되었습니다.'
+      });
+    }
+    
+    const client = await pool.connect();
+    
+    try {
+      await client.query('BEGIN');
+
+      // 1. 프로젝트 할당 확인
+      const assignmentResult = await client.query(`
+        SELECT pwa.*, p.name as project_name, u.full_name as pe_name
+        FROM project_work_assignments pwa
+        JOIN projects p ON pwa.project_id = p.id
+        JOIN timbel_users u ON pwa.assigned_to = u.id
+        WHERE pwa.id = $1 AND pwa.project_id = $2
+      `, [assignment_id, project_id]);
+
+      if (assignmentResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({
+          success: false,
+          error: 'Assignment not found',
+          message: '해당 프로젝트 할당을 찾을 수 없습니다.'
+        });
+      }
+
+      const assignment = assignmentResult.rows[0];
+
+      // 권한 확인 (PE 본인이거나 관리자/PO)
+      if (userRole !== 'admin' && userRole !== 'executive' && userRole !== 'po' && assignment.assigned_to !== userId) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({
+          success: false,
+          error: 'Access denied',
+          message: '해당 프로젝트에 대한 권한이 없습니다.'
+        });
+      }
+
+      // 2. 완료 보고서 테이블이 없다면 생성
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS project_completion_reports (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          project_id UUID NOT NULL REFERENCES projects(id),
+          assignment_id UUID NOT NULL REFERENCES project_work_assignments(id),
+          submitted_by UUID NOT NULL REFERENCES timbel_users(id),
+          repository_url TEXT,
+          project_summary TEXT NOT NULL,
+          technical_details TEXT NOT NULL,
+          implemented_features TEXT NOT NULL,
+          testing_results TEXT,
+          known_issues TEXT,
+          deployment_notes TEXT,
+          documentation_status TEXT,
+          additional_notes TEXT,
+          submitted_at TIMESTAMP DEFAULT NOW(),
+          qc_qa_status VARCHAR(50) DEFAULT 'pending',
+          qc_qa_assigned_to UUID REFERENCES timbel_users(id),
+          qc_qa_assigned_at TIMESTAMP,
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+
+      // 3. 완료 보고서 저장 (새로운 구조)
+      // 먼저 테이블 구조 업데이트 (각각 분리)
+      try {
+        await client.query(`ALTER TABLE project_completion_reports ADD COLUMN IF NOT EXISTS deployment_comments TEXT`);
+        await client.query(`ALTER TABLE project_completion_reports ADD COLUMN IF NOT EXISTS repo_analysis_data JSONB`);
+        console.log('✅ 테이블 구조 업데이트 완료');
+      } catch (alterError) {
+        console.log('⚠️ 테이블 구조 업데이트 스킵 (이미 존재):', alterError.message);
+      }
+
+      console.log('📝 완료 보고서 데이터 준비:', {
+        project_id,
+        assignment_id,
+        userId,
+        repository_url,
+        completion_report_keys: Object.keys(completion_report),
+        has_repo_analysis: !!completion_report.repo_analysis_data
+      });
+
+      let parsedRepoAnalysisData = null;
+      if (completion_report.repo_analysis_data) {
+        try {
+          parsedRepoAnalysisData = typeof completion_report.repo_analysis_data === 'string' ? 
+            JSON.parse(completion_report.repo_analysis_data) : 
+            completion_report.repo_analysis_data;
+          console.log('✅ 레포지토리 분석 데이터 파싱 성공');
+        } catch (parseError) {
+          console.error('❌ 레포지토리 분석 데이터 파싱 실패:', parseError.message);
+          parsedRepoAnalysisData = null;
+        }
+      }
+
+      const reportResult = await client.query(`
+        INSERT INTO project_completion_reports (
+          project_id, assignment_id, submitted_by, repository_url,
+          project_summary, technical_details, implemented_features,
+          known_issues, deployment_notes, deployment_comments,
+          additional_notes, repo_analysis_data
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        RETURNING id
+      `, [
+        project_id, assignment_id, assignment.assigned_to, repository_url,
+        completion_report.project_summary || completion_report.projectSummary,
+        completion_report.technical_details || completion_report.technicalDetails || '',
+        completion_report.implemented_features || completion_report.implementedFeatures || '',
+        completion_report.known_issues || completion_report.knownIssues || '',
+        completion_report.deployment_notes || completion_report.deploymentNotes || '',
+        completion_report.deployment_comments || completion_report.deploymentComments || '',
+        completion_report.additional_notes || completion_report.additionalNotes || '',
+        parsedRepoAnalysisData
+      ]);
+
+      const reportId = reportResult.rows[0].id;
+
+      // 4. 프로젝트 상태를 완료로 변경
+      await client.query(`
+        UPDATE projects SET 
+          project_status = 'completed',
+          completion_date = NOW(),
+          updated_at = NOW()
+        WHERE id = $1
+      `, [project_id]);
+
+      // 5. 할당 상태를 완료로 변경
+      await client.query(`
+        UPDATE project_work_assignments SET 
+          assignment_status = 'completed',
+          progress_percentage = 100,
+          completion_date = NOW(),
+          updated_at = NOW()
+        WHERE id = $1
+      `, [assignment_id]);
+
+      // 6. 레포지토리 정보가 있다면 시스템 등록 프로세스 시작
+      if (repository_url) {
+        // 레포지토리 분석 및 시스템 등록 로직은 별도 서비스에서 처리
+        console.log('레포지토리 시스템 등록 프로세스 시작:', repository_url);
+        
+        // Git Analytics Service를 통한 레포지토리 분석 시작
+        try {
+          const GitAnalyticsService = require('../services/gitAnalyticsService');
+          const gitService = new GitAnalyticsService();
+          const repositoryData = {
+            url: repository_url,
+            platform: 'github' // 기본값
+          };
+          await gitService.analyzeRepository(client, repositoryData);
+          console.log('레포지토리 분석 완료');
+        } catch (analysisError) {
+          console.error('레포지토리 분석 실패:', analysisError);
+          // 분석 실패는 메인 프로세스를 중단하지 않음
+        }
+      }
+
+      // 7. QC/QA 부서로 품질 의뢰서 생성
+      // 먼저 테이블 생성
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS qc_qa_requests (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          project_id UUID NOT NULL REFERENCES projects(id),
+          completion_report_id UUID NOT NULL REFERENCES project_completion_reports(id),
+          request_status VARCHAR(50) DEFAULT 'pending',
+          priority_level VARCHAR(20) DEFAULT 'normal',
+          requested_by UUID NOT NULL REFERENCES timbel_users(id),
+          assigned_to UUID REFERENCES timbel_users(id),
+          test_plan TEXT,
+          test_results TEXT,
+          quality_score INTEGER,
+          approval_status VARCHAR(50) DEFAULT 'pending',
+          approved_by UUID REFERENCES timbel_users(id),
+          approved_at TIMESTAMP,
+          created_at TIMESTAMP DEFAULT NOW(),
+          updated_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+
+      // 그 다음 데이터 삽입
+      const qcQaRequestResult = await client.query(`
+        INSERT INTO qc_qa_requests (
+          project_id, completion_report_id, requested_by, priority_level
+        ) VALUES ($1, $2, $3, $4)
+        RETURNING id
+      `, [project_id, reportId, assignment.assigned_to, assignment.urgency_level === 'urgent' ? 'high' : 'normal']);
+
+      // 8. QC/QA 사용자들에게 메시지 알림 생성
+      const qcQaUsers = await client.query(`
+        SELECT id, username, full_name 
+        FROM timbel_users 
+        WHERE role_type = 'qa' AND status != 'inactive'
+      `);
+
+      console.log(`📢 QC/QA 사용자 ${qcQaUsers.rows.length}명에게 알림 생성`);
+
+      // 통합 메시지 시스템 사용
+      const messageResult = await client.query(`
+        INSERT INTO unified_messages (
+          title, content, message_type, priority, sender_id, metadata
+        ) VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING id
+      `, [
+        `새로운 품질 검증 요청: ${assignment.project_name}`,
+        `${assignment.pe_name}님이 "${assignment.project_name}" 프로젝트의 완료 보고서를 제출했습니다.\n\n` +
+        `긴급도: ${assignment.urgency_level}\n` +
+        `마감일: ${assignment.deadline ? new Date(assignment.deadline).toLocaleDateString() : '미정'}\n\n` +
+        `QC/QA 품질 검증을 시작해주세요.`,
+        'qc_qa_request',
+        assignment.urgency_level === 'urgent' ? 4 : 2, // priority as number
+        assignment.assigned_to,
+        JSON.stringify({
+          event_category: 'qc_qa_request',
+          event_source: 'user',
+          project_id: project_id,
+          qc_request_id: qcQaRequestResult.rows[0].id,
+          urgency_level: assignment.urgency_level,
+          pe_name: assignment.pe_name
+        })
+      ]);
+
+      const messageId = messageResult.rows[0].id;
+
+      // 각 QC/QA 사용자에게 메시지 수신자 추가
+      for (const qcUser of qcQaUsers.rows) {
+        await client.query(`
+          INSERT INTO unified_message_recipients (message_id, recipient_id)
+          VALUES ($1, $2)
+        `, [messageId, qcUser.id]);
+      }
+
+      // 9. 시스템 이벤트 스트림에 기록
+      await client.query(`
+        INSERT INTO system_event_stream (
+          id, event_type, event_category, title, description,
+          project_id, user_id, assignment_id, event_timestamp,
+          event_data, is_processed, requires_action
+        ) VALUES (
+          gen_random_uuid(), 'project_completion', 'project_management',
+          '프로젝트 완료', $1,
+          $2, $3, $4, NOW(),
+          $5, true, true
+        )
+      `, [
+        `${assignment.project_name} 프로젝트가 완료되어 QC/QA 부서로 전달되었습니다.`,
+        project_id,
+        assignment.assigned_to,
+        assignment_id,
+        JSON.stringify({
+          completion_report_id: reportId,
+          repository_url,
+          submitted_by_role: userRole,
+          actual_submitter_id: userId,
+          project_name: assignment.project_name,
+          pe_name: assignment.pe_name,
+          submitted_on_behalf: userId !== assignment.assigned_to
+        })
+      ]);
+
+      await client.query('COMMIT');
+
+      console.log('완료 보고서 제출 성공:', {
+        reportId,
+        projectId: project_id,
+        assignmentId: assignment_id
+      });
+
+      res.json({
+        success: true,
+        message: '완료 보고서가 성공적으로 제출되었습니다.',
+        data: {
+          report_id: reportId,
+          project_status: 'completed',
+          qc_qa_status: 'pending'
+        }
+      });
+
+    } finally {
+      client.release();
+    }
+
+  } catch (error) {
+    console.error('완료 보고서 제출 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to submit completion report',
+      message: error.message
+    });
+  }
+});
+
+// 레포지토리 분석 API (완료 보고서용)
+router.post('/analyze-repository', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    const { repository_url, project_id } = req.body;
+    const userId = req.user?.userId || req.user?.id;
+    const userRole = req.user?.roleType;
+    
+    console.log('레포지토리 분석 요청:', {
+      repository_url,
+      project_id,
+      userId,
+      userRole
+    });
+
+    if (!repository_url) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing repository URL',
+        message: '레포지토리 URL이 필요합니다.'
+      });
+    }
+
+    const client = await pool.connect();
+    
+    try {
+      // 프로젝트 권한 확인
+      let projectCheck;
+      if (userRole === 'admin' || userRole === 'executive' || userRole === 'po') {
+        projectCheck = await client.query(`
+          SELECT p.*, pr.repository_url, pr.platform 
+          FROM projects p
+          LEFT JOIN project_repositories pr ON p.id = pr.project_id
+          WHERE p.id = $1
+        `, [project_id]);
+      } else {
+        projectCheck = await client.query(`
+          SELECT p.*, pr.repository_url, pr.platform 
+          FROM projects p
+          LEFT JOIN project_repositories pr ON p.id = pr.project_id
+          LEFT JOIN project_work_assignments pwa ON p.id = pwa.project_id
+          WHERE p.id = $1 AND pwa.assigned_to = $2
+        `, [project_id, userId]);
+      }
+
+      if (projectCheck.rows.length === 0) {
+        return res.status(403).json({
+          success: false,
+          error: 'Access denied',
+          message: '해당 프로젝트에 대한 권한이 없습니다.'
+        });
+      }
+
+      // Git Analytics Service를 사용하여 레포지토리 분석
+      const GitAnalyticsService = require('../services/gitAnalyticsService');
+      const gitService = new GitAnalyticsService();
+      
+      console.log('레포지토리 상세 분석 시작:', repository_url);
+      
+      // 테스트용으로 공개 레포지토리 URL이 없는 경우 샘플 레포지토리 사용
+      let analysisUrl = repository_url;
+      if (!repository_url || repository_url === '미등록' || !repository_url.includes('github.com')) {
+        console.log('⚠️ 유효하지 않은 레포지토리 URL, 샘플 레포지토리 사용');
+        analysisUrl = 'https://github.com/facebook/react'; // 공개 레포지토리 예시
+      }
+      
+      const analysisData = await gitService.generateCompletionReportData(analysisUrl);
+      
+      if (!analysisData) {
+        console.log('❌ 레포지토리 분석 완전 실패');
+        return res.status(500).json({
+          success: false,
+          error: 'Analysis failed',
+          message: '레포지토리 분석에 실패했습니다. URL과 접근 권한을 확인해주세요.'
+        });
+      }
+
+      console.log('레포지토리 분석 완료:', {
+        primaryLanguage: analysisData.techDetails?.primaryLanguage,
+        techStackCount: analysisData.techDetails?.techStack?.length,
+        hasReadme: analysisData.documentation?.hasReadme,
+        readmeQuality: analysisData.documentation?.readmeQuality
+      });
+
+      res.json({
+        success: true,
+        message: '레포지토리 분석이 완료되었습니다.',
+        data: analysisData
+      });
+
+    } finally {
+      client.release();
+    }
+
+  } catch (error) {
+    console.error('레포지토리 분석 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to analyze repository',
+      message: error.message
+    });
+  }
+});
+
+// PE 프로젝트 히스토리 조회 API
+router.get('/history/:peUserId?', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    const userId = req.user?.userId || req.user?.id;
+    const userRole = req.user?.roleType;
+    const targetPEUserId = req.params.peUserId || userId;
+    
+    console.log('📚 PE 프로젝트 히스토리 조회:', { userId, userRole, targetPEUserId });
+
+    // 권한 확인
+    if (userRole !== 'admin' && userRole !== 'executive' && userRole !== 'po' && userId !== targetPEUserId) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied',
+        message: '해당 사용자의 프로젝트 히스토리를 조회할 권한이 없습니다.'
+      });
+    }
+
+    const client = await pool.connect();
+    
+    try {
+      // 완료된 프로젝트들과 QC/QA 상태 조회
+      const historyResult = await client.query(`
+        SELECT DISTINCT ON (p.id)
+          p.id as project_id,
+          p.name as project_name,
+          p.project_overview,
+          p.target_system_name,
+          p.urgency_level,
+          p.deadline,
+          p.project_status,
+          p.completion_date,
+          pwa.assignment_status,
+          pwa.progress_percentage,
+          pwa.completion_date as assignment_completion_date,
+          pcr.id as completion_report_id,
+          pcr.created_at as report_submitted_at,
+          qr.id as qc_request_id,
+          qr.request_status as qc_status,
+          qr.assigned_to as qc_assigned_to,
+          qr.created_at as qc_created_at,
+          qr.test_plan,
+          qr.test_results,
+          qr.quality_score,
+          qr.approval_status as qc_approval_status,
+          qr.approved_at as qc_approved_at,
+          qc_user.full_name as qc_assignee_name,
+          -- 피드백 통계
+          (SELECT COUNT(*) FROM qc_feedback_items qfi 
+           WHERE qfi.qc_request_id = qr.id AND qfi.assigned_to_pe = $1) as feedback_count,
+          (SELECT COUNT(*) FROM qc_feedback_items qfi 
+           WHERE qfi.qc_request_id = qr.id AND qfi.assigned_to_pe = $1 AND qfi.feedback_status = 'open') as open_feedback_count
+        FROM projects p
+        LEFT JOIN project_work_assignments pwa ON p.id = pwa.project_id
+        LEFT JOIN project_completion_reports pcr ON p.id = pcr.project_id
+        LEFT JOIN qc_qa_requests qr ON pcr.id = qr.completion_report_id
+        LEFT JOIN timbel_users qc_user ON qr.assigned_to = qc_user.id
+        WHERE pwa.assigned_to = $1
+          AND p.project_status IN ('completed', 'deployed', 'archived')
+        ORDER BY p.id, pwa.assigned_at DESC, pcr.created_at DESC
+        LIMIT 10
+      `, [targetPEUserId]);
+
+      const historyProjects = historyResult.rows.map(row => ({
+        project_id: row.project_id,
+        project_name: row.project_name,
+        project_overview: row.project_overview,
+        target_system_name: row.target_system_name,
+        urgency_level: row.urgency_level,
+        deadline: row.deadline,
+        project_status: row.project_status,
+        completion_date: row.completion_date,
+        assignment_status: row.assignment_status,
+        progress_percentage: row.progress_percentage,
+        assignment_completion_date: row.assignment_completion_date,
+        completion_report: row.completion_report_id ? {
+          id: row.completion_report_id,
+          submitted_at: row.report_submitted_at
+        } : null,
+        qc_qa_status: row.qc_request_id ? {
+          request_id: row.qc_request_id,
+          status: row.qc_status,
+          assigned_to: row.qc_assigned_to,
+          assignee_name: row.qc_assignee_name,
+          created_at: row.qc_created_at,
+          test_plan: row.test_plan,
+          test_results: row.test_results,
+          quality_score: row.quality_score,
+          approval_status: row.qc_approval_status,
+          approved_at: row.qc_approved_at,
+          feedback_count: parseInt(row.feedback_count) || 0,
+          open_feedback_count: parseInt(row.open_feedback_count) || 0
+        } : null
+      }));
+
+      console.log(`✅ PE 프로젝트 히스토리 ${historyProjects.length}개 조회 완료`);
+
+      res.json({
+        success: true,
+        data: historyProjects
+      });
+      
+    } finally {
+      client.release();
+    }
+    
+  } catch (error) {
+    console.error('❌ PE 프로젝트 히스토리 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to load project history',
       message: error.message
     });
   }

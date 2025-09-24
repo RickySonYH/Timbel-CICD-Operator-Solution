@@ -460,6 +460,9 @@ app.use('/api/dashboard', require('./routes/integrated-dashboard'));
 // [advice from AI] 프로젝트 삭제 이중 승인 시스템 API
 app.use('/api/project-deletion', require('./routes/project-deletion'));
 
+// QC/QA 대시보드 API
+app.use('/api/qc', require('./routes/qc-dashboard'));
+
 // [advice from AI] 전역 에러 핸들러 추가
 process.on('uncaughtException', (error) => {
   console.error('❌ Uncaught Exception:', error);

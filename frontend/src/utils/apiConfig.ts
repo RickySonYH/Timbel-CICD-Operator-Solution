@@ -11,17 +11,13 @@ export const getApiUrl = (): string => {
   const currentHost = window.location.host;
   const currentProtocol = window.location.protocol;
   
-  // localhost 또는 rdc.rickyson.com 모두 지원
+  // localhost 또는 127.0.0.1 접속
   if (currentHost.includes('localhost') || currentHost.includes('127.0.0.1')) {
-    return '/api'; // nginx 프록시 사용
+    return 'http://localhost:3001';
   }
   
-  if (currentHost.includes('rdc.rickyson.com')) {
-    return '/api'; // nginx 프록시 사용
-  }
-  
-  // 기본값: 상대 경로
-  return '/api';
+  // 외부 접속 - 포트 3001 사용
+  return `http://${currentHost.split(':')[0]}:3001`;
 };
 
 // [advice from AI] 인증 헤더 생성 유틸리티

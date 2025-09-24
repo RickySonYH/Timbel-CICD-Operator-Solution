@@ -44,7 +44,8 @@ const LoginForm: React.FC = () => {
     if (currentHost === 'localhost:3000' || currentHost === '127.0.0.1:3000') {
       return 'http://localhost:3001';
     } else {
-      return `http://${currentHost.split(':')[0]}:3000`;
+      // 외부 도메인에서는 포트 3001 사용
+      return `http://${currentHost.split(':')[0]}:3001`;
     }
   };
 

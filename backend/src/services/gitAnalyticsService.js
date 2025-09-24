@@ -954,6 +954,348 @@ class GitAnalyticsService {
       throw error;
     }
   }
+
+  // 레포지토리 상세 분석 (README, 코드 구성, 기술 스택)
+  async analyzeRepositoryDetails(repositoryUrl, accessToken = null) {
+    try {
+      const { owner, repo, platform } = this.parseRepositoryUrl(repositoryUrl);
+      console.log('🔍 레포지토리 상세 분석 시작:', repositoryUrl);
+      
+      let headers = {
+        'User-Agent': 'Timbel-Platform/1.0'
+      };
+      
+      if (accessToken) {
+        headers['Authorization'] = platform === 'github' ? `token ${accessToken}` : `Bearer ${accessToken}`;
+      }
+      
+      const analysisResult = {
+        readme_content: '',
+        languages: {},
+        file_structure: {},
+        tech_stack: [],
+        project_stats: {},
+        dependencies: {}
+      };
+      
+      if (platform === 'github') {
+        // 1. README 파일 가져오기
+        try {
+          const readmeResponse = await axios.get(
+            `https://api.github.com/repos/${owner}/${repo}/readme`,
+            { headers, timeout: 10000 }
+          );
+          
+          if (readmeResponse.data && readmeResponse.data.content) {
+            analysisResult.readme_content = Buffer.from(readmeResponse.data.content, 'base64').toString('utf-8');
+            console.log('✅ README 파일 분석 완료');
+          }
+        } catch (error) {
+          console.log('⚠️ README 파일 없음 또는 접근 불가');
+        }
+        
+        // 2. 언어 구성 분석
+        try {
+          const languagesResponse = await axios.get(
+            `https://api.github.com/repos/${owner}/${repo}/languages`,
+            { headers, timeout: 10000 }
+          );
+          
+          analysisResult.languages = languagesResponse.data;
+          console.log('✅ 언어 구성 분석 완료:', Object.keys(languagesResponse.data));
+        } catch (error) {
+          console.log('⚠️ 언어 구성 분석 실패');
+        }
+        
+        // 3. 레포지토리 통계
+        try {
+          const repoResponse = await axios.get(
+            `https://api.github.com/repos/${owner}/${repo}`,
+            { headers, timeout: 10000 }
+          );
+          
+          analysisResult.project_stats = {
+            size: repoResponse.data.size,
+            stars: repoResponse.data.stargazers_count,
+            forks: repoResponse.data.forks_count,
+            open_issues: repoResponse.data.open_issues_count,
+            default_branch: repoResponse.data.default_branch,
+            created_at: repoResponse.data.created_at,
+            updated_at: repoResponse.data.updated_at,
+            description: repoResponse.data.description
+          };
+          console.log('✅ 레포지토리 통계 분석 완료');
+        } catch (error) {
+          console.log('⚠️ 레포지토리 통계 분석 실패');
+        }
+        
+        // 4. 파일 구조 분석 (루트 디렉토리)
+        try {
+          const contentsResponse = await axios.get(
+            `https://api.github.com/repos/${owner}/${repo}/contents`,
+            { headers, timeout: 10000 }
+          );
+          
+          const fileStructure = {};
+          for (const item of contentsResponse.data) {
+            fileStructure[item.name] = {
+              type: item.type,
+              size: item.size
+            };
+          }
+          analysisResult.file_structure = fileStructure;
+          console.log('✅ 파일 구조 분석 완료');
+        } catch (error) {
+          console.log('⚠️ 파일 구조 분석 실패');
+        }
+        
+        // 5. package.json 분석 (Node.js 프로젝트인 경우)
+        try {
+          const packageResponse = await axios.get(
+            `https://api.github.com/repos/${owner}/${repo}/contents/package.json`,
+            { headers, timeout: 10000 }
+          );
+          
+          if (packageResponse.data && packageResponse.data.content) {
+            const packageJson = JSON.parse(Buffer.from(packageResponse.data.content, 'base64').toString('utf-8'));
+            analysisResult.dependencies = {
+              dependencies: packageJson.dependencies || {},
+              devDependencies: packageJson.devDependencies || {},
+              scripts: packageJson.scripts || {}
+            };
+            console.log('✅ package.json 분석 완료');
+          }
+        } catch (error) {
+          console.log('⚠️ package.json 없음 또는 접근 불가');
+        }
+      }
+      
+      // 기술 스택 추론
+      analysisResult.tech_stack = this.inferTechStack(analysisResult);
+      
+      return analysisResult;
+      
+    } catch (error) {
+      console.error('❌ 레포지토리 상세 분석 실패:', error.message);
+      return null;
+    }
+  }
+
+  // 기술 스택 추론
+  inferTechStack(analysisData) {
+    const techStack = [];
+    const languages = analysisData.languages || {};
+    const fileStructure = analysisData.file_structure || {};
+    const dependencies = analysisData.dependencies || {};
+    
+    // 언어별 기술 스택 추론
+    Object.keys(languages).forEach(language => {
+      switch (language.toLowerCase()) {
+        case 'javascript':
+          techStack.push('JavaScript');
+          if (dependencies.dependencies) {
+            if (dependencies.dependencies.react) techStack.push('React');
+            if (dependencies.dependencies.vue) techStack.push('Vue.js');
+            if (dependencies.dependencies.angular) techStack.push('Angular');
+            if (dependencies.dependencies.express) techStack.push('Express.js');
+            if (dependencies.dependencies.next) techStack.push('Next.js');
+          }
+          break;
+        case 'typescript':
+          techStack.push('TypeScript');
+          break;
+        case 'python':
+          techStack.push('Python');
+          if (fileStructure['requirements.txt']) techStack.push('pip');
+          if (fileStructure['Pipfile']) techStack.push('Pipenv');
+          if (fileStructure['pyproject.toml']) techStack.push('Poetry');
+          break;
+        case 'java':
+          techStack.push('Java');
+          if (fileStructure['pom.xml']) techStack.push('Maven');
+          if (fileStructure['build.gradle']) techStack.push('Gradle');
+          break;
+        case 'c#':
+          techStack.push('C#');
+          if (fileStructure['.csproj']) techStack.push('.NET');
+          break;
+        case 'go':
+          techStack.push('Go');
+          break;
+        case 'rust':
+          techStack.push('Rust');
+          break;
+        case 'php':
+          techStack.push('PHP');
+          if (fileStructure['composer.json']) techStack.push('Composer');
+          break;
+      }
+    });
+    
+    // 파일 구조로 추가 기술 스택 추론
+    if (fileStructure['Dockerfile']) techStack.push('Docker');
+    if (fileStructure['docker-compose.yml']) techStack.push('Docker Compose');
+    if (fileStructure['.github']) techStack.push('GitHub Actions');
+    if (fileStructure['Jenkinsfile']) techStack.push('Jenkins');
+    if (fileStructure['kubernetes'] || fileStructure['k8s']) techStack.push('Kubernetes');
+    if (fileStructure['terraform']) techStack.push('Terraform');
+    
+    return [...new Set(techStack)]; // 중복 제거
+  }
+
+  // 완료 보고서용 레포지토리 분석 데이터 생성
+  async generateCompletionReportData(repositoryUrl, accessToken = null) {
+    try {
+      console.log('🔍 완료 보고서용 레포지토리 분석 시작:', repositoryUrl);
+      
+      // 실제 GitHub API 호출
+      const analysisData = await this.analyzeRepositoryDetails(repositoryUrl, accessToken);
+      if (!analysisData) {
+        console.log('⚠️ 레포지토리 분석 실패, 기본 데이터 반환');
+        return this.getDefaultAnalysisData(repositoryUrl);
+      }
+
+      // 언어 비율 계산
+      const languages = analysisData.languages || {};
+      const totalBytes = Object.values(languages).reduce((sum, bytes) => sum + bytes, 0);
+      const languagePercentages = {};
+      
+      Object.entries(languages).forEach(([lang, bytes]) => {
+        languagePercentages[lang] = ((bytes / totalBytes) * 100).toFixed(1);
+      });
+
+      // README에서 주요 정보 추출
+      const readmeContent = analysisData.readme_content || '';
+      const hasInstallInstructions = readmeContent.toLowerCase().includes('install') || readmeContent.toLowerCase().includes('설치');
+      const hasUsageInstructions = readmeContent.toLowerCase().includes('usage') || readmeContent.toLowerCase().includes('사용법');
+      const hasApiDocs = readmeContent.toLowerCase().includes('api') || readmeContent.toLowerCase().includes('endpoint');
+
+      return {
+        // 기술적 세부사항용 데이터
+        techDetails: {
+          primaryLanguage: Object.keys(languages)[0] || 'Unknown',
+          languageBreakdown: languagePercentages,
+          techStack: analysisData.tech_stack,
+          dependencies: Object.keys(analysisData.dependencies.dependencies || {}),
+          devDependencies: Object.keys(analysisData.dependencies.devDependencies || {}),
+          repositorySize: analysisData.project_stats.size || 0,
+          fileCount: Object.keys(analysisData.file_structure).length
+        },
+        
+        // 구현된 기능용 데이터
+        features: {
+          hasDockerization: analysisData.file_structure['Dockerfile'] ? true : false,
+          hasCiCd: analysisData.file_structure['.github'] ? true : false,
+          hasTests: Object.keys(analysisData.dependencies.devDependencies || {}).some(dep => 
+            dep.includes('test') || dep.includes('jest') || dep.includes('mocha') || dep.includes('cypress')
+          ),
+          hasLinting: Object.keys(analysisData.dependencies.devDependencies || {}).some(dep => 
+            dep.includes('eslint') || dep.includes('prettier') || dep.includes('lint')
+          )
+        },
+        
+        // 문서화 상태용 데이터
+        documentation: {
+          hasReadme: readmeContent.length > 0,
+          readmeLength: readmeContent.length,
+          hasInstallInstructions,
+          hasUsageInstructions,
+          hasApiDocs,
+          readmeQuality: this.assessReadmeQuality(readmeContent)
+        },
+        
+        // 배포 노트용 데이터
+        deployment: {
+          hasDockerfile: analysisData.file_structure['Dockerfile'] ? true : false,
+          hasDockerCompose: analysisData.file_structure['docker-compose.yml'] ? true : false,
+          hasPackageJson: analysisData.file_structure['package.json'] ? true : false,
+          hasRequirements: analysisData.file_structure['requirements.txt'] ? true : false,
+          buildScripts: Object.keys(analysisData.dependencies.scripts || {}),
+          defaultBranch: analysisData.project_stats.default_branch || 'main'
+        },
+        
+        // 원본 분석 데이터
+        rawAnalysis: analysisData
+      };
+
+    } catch (error) {
+      console.error('❌ 완료 보고서용 데이터 생성 실패:', error.message);
+      return null;
+    }
+  }
+
+  // README 품질 평가
+  assessReadmeQuality(readmeContent) {
+    if (!readmeContent || readmeContent.length === 0) {
+      return 'poor';
+    }
+    
+    const content = readmeContent.toLowerCase();
+    let score = 0;
+    
+    // 기본 섹션 체크
+    if (content.includes('# ') || content.includes('## ')) score += 20; // 제목 구조
+    if (content.includes('install') || content.includes('설치')) score += 20; // 설치 방법
+    if (content.includes('usage') || content.includes('사용법') || content.includes('example')) score += 20; // 사용법
+    if (content.includes('api') || content.includes('endpoint')) score += 15; // API 문서
+    if (content.includes('license') || content.includes('라이선스')) score += 10; // 라이선스
+    if (content.includes('contribute') || content.includes('기여')) score += 10; // 기여 방법
+    if (readmeContent.length > 1000) score += 5; // 충분한 길이
+    
+    if (score >= 80) return 'excellent';
+    if (score >= 60) return 'good';
+    if (score >= 40) return 'fair';
+    return 'poor';
+  }
+
+  // 기본 분석 데이터 생성 (API 호출 실패 시 사용)
+  getDefaultAnalysisData(repositoryUrl) {
+    console.log('📋 기본 분석 데이터 생성:', repositoryUrl);
+    
+    return {
+      techDetails: {
+        primaryLanguage: 'Unknown',
+        languageBreakdown: {},
+        techStack: [],
+        dependencies: [],
+        devDependencies: [],
+        repositorySize: 0,
+        fileCount: 0
+      },
+      features: {
+        hasDockerization: false,
+        hasCiCd: false,
+        hasTests: false,
+        hasLinting: false
+      },
+      documentation: {
+        hasReadme: false,
+        readmeLength: 0,
+        hasInstallInstructions: false,
+        hasUsageInstructions: false,
+        hasApiDocs: false,
+        readmeQuality: 'poor'
+      },
+      deployment: {
+        hasDockerfile: false,
+        hasDockerCompose: false,
+        hasPackageJson: false,
+        hasRequirements: false,
+        buildScripts: [],
+        defaultBranch: 'main'
+      },
+      rawAnalysis: {
+        readme_content: '레포지토리에 접근할 수 없거나 README 파일이 없습니다.',
+        languages: {},
+        file_structure: {},
+        tech_stack: [],
+        project_stats: {
+          description: '레포지토리 정보를 가져올 수 없습니다.'
+        },
+        dependencies: {}
+      }
+    };
+  }
 }
 
 module.exports = GitAnalyticsService;

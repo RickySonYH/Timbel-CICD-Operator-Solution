@@ -64,23 +64,22 @@ router.get('/overview', jwtAuth.verifyToken, async (req, res) => {
             WHEN u.role_type = 'pe' AND pwa.assigned_to = u.id AND pwa.assignment_status = 'completed' THEN 1
           END) as total_completed,
           CASE 
-            WHEN COUNT(CASE WHEN u.role_type = 'po' THEN p.id WHEN u.role_type = 'pe' THEN pwa.id END) > 0 THEN
+            WHEN u.role_type = 'pe' AND COUNT(pwa.id) > 0 THEN
+              ROUND(AVG(CASE WHEN pwa.progress_percentage IS NOT NULL THEN pwa.progress_percentage END), 1)
+            WHEN u.role_type = 'po' AND COUNT(p.id) > 0 THEN
               ROUND(
-                COUNT(CASE 
-                  WHEN u.role_type = 'po' AND p.project_status = 'completed' THEN 1
-                  WHEN u.role_type = 'pe' AND pwa.assignment_status = 'completed' THEN 1
-                END) * 100.0 / 
-                COUNT(CASE WHEN u.role_type = 'po' THEN p.id WHEN u.role_type = 'pe' THEN pwa.id END), 2
+                COUNT(CASE WHEN p.project_status = 'completed' THEN 1 END) * 100.0 / 
+                COUNT(p.id), 1
               )
             ELSE 0
-          END as success_rate_percent
+          END as progress_rate_percent
         FROM timbel_users u
         LEFT JOIN projects p ON u.id = p.claimed_by_po
         LEFT JOIN project_work_assignments pwa ON u.id = pwa.assigned_to
         WHERE u.role_type IN ('po', 'pe')
         GROUP BY u.id, u.full_name, u.role_type
         HAVING COUNT(CASE WHEN u.role_type = 'po' THEN p.id WHEN u.role_type = 'pe' THEN pwa.id END) > 0
-        ORDER BY success_rate_percent DESC, monthly_completed DESC
+        ORDER BY progress_rate_percent DESC, monthly_completed DESC
         LIMIT 10
       `);
       

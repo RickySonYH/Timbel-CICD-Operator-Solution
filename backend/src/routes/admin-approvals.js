@@ -774,15 +774,26 @@ router.get('/dashboard-stats', jwtAuth.verifyToken, jwtAuth.requireRole(['admin'
     const client = await pool.connect();
     
     try {
-      // 프로젝트 요약 통계
+      // 프로젝트 요약 통계 (상태 우선순위 적용)
       const projectSummaryQuery = `
         SELECT 
-          COUNT(*) as total_projects,
-          COUNT(CASE WHEN approval_status = 'pending' THEN 1 END) as pending_approvals,
-          COUNT(CASE WHEN approval_status = 'approved' AND project_status = 'planning' THEN 1 END) as approved_waiting_po,
-          COUNT(CASE WHEN project_status = 'in_progress' OR project_status = 'development' THEN 1 END) as active_projects,
-          COUNT(CASE WHEN project_status = 'completed' THEN 1 END) as completed_projects
-        FROM projects
+          COUNT(DISTINCT p.id) as total_projects,
+          COUNT(DISTINCT CASE 
+            WHEN p.approval_status = 'pending' THEN p.id 
+          END) as pending_approvals,
+          COUNT(DISTINCT CASE 
+            WHEN p.approval_status = 'approved' AND p.project_status = 'planning' THEN p.id 
+          END) as approved_waiting_po,
+          COUNT(DISTINCT CASE 
+            WHEN p.approval_status = 'approved' 
+            AND pwa.assignment_status IN ('assigned', 'in_progress') 
+            THEN p.id 
+          END) as active_projects,
+          COUNT(DISTINCT CASE 
+            WHEN p.project_status = 'completed' THEN p.id 
+          END) as completed_projects
+        FROM projects p
+        LEFT JOIN project_work_assignments pwa ON p.id = pwa.project_id
       `;
       
       const projectSummary = await client.query(projectSummaryQuery);
@@ -809,24 +820,30 @@ router.get('/dashboard-stats', jwtAuth.verifyToken, jwtAuth.requireRole(['admin'
       
       const projectStats = await client.query(projectStatusQuery);
       
-      // PE 작업 분배 통계
+      // PE 작업 분배 통계 (PO 대시보드와 동일한 구조)
       const peWorkloadQuery = `
         SELECT 
-          u.id,
-          u.username,
-          u.full_name,
-          COUNT(pwa.id) as current_assignments,
-          CASE 
-            WHEN COUNT(pwa.id) >= 5 THEN 'High'
-            WHEN COUNT(pwa.id) >= 3 THEN 'Medium'
-            ELSE 'Low'
-          END as workload_level
+          u.id as pe_id,
+          u.full_name as pe_name,
+          COALESCE(pwa_stats.total_assignments, 0) as total_assignments,
+          COALESCE(pwa_stats.active_assignments, 0) as active_assignments,
+          COALESCE(pwa_stats.completed_assignments, 0) as completed_assignments,
+          COALESCE(pwa_stats.avg_progress, 0.0) as avg_progress,
+          COALESCE(pwa_stats.current_workload_hours, 0) as current_workload_hours
         FROM timbel_users u
-        LEFT JOIN project_work_assignments pwa ON u.id = pwa.assigned_to 
-          AND pwa.assignment_status IN ('assigned', 'in_progress')
+        LEFT JOIN (
+          SELECT 
+            assigned_to,
+            COUNT(*) as total_assignments,
+            COUNT(CASE WHEN assignment_status IN ('assigned', 'in_progress') THEN 1 END) as active_assignments,
+            COUNT(CASE WHEN assignment_status = 'completed' THEN 1 END) as completed_assignments,
+            ROUND(AVG(CASE WHEN progress_percentage IS NOT NULL THEN progress_percentage END), 1) as avg_progress,
+            SUM(CASE WHEN assignment_status IN ('assigned', 'in_progress') THEN COALESCE(estimated_hours, 8) END) as current_workload_hours
+          FROM project_work_assignments
+          GROUP BY assigned_to
+        ) pwa_stats ON u.id = pwa_stats.assigned_to
         WHERE u.role_type = 'pe' AND u.is_active = true
-        GROUP BY u.id, u.username, u.full_name
-        ORDER BY current_assignments DESC
+        ORDER BY pwa_stats.total_assignments DESC NULLS LAST, u.full_name
       `;
       
       const peWorkload = await client.query(peWorkloadQuery);
@@ -872,7 +889,14 @@ router.get('/dashboard-stats', jwtAuth.verifyToken, jwtAuth.requireRole(['admin'
           }
         },
         approval_trends: recentApprovals.rows || [],
-        pe_workload: peWorkload.rows || [],
+        pe_workload: peWorkload.rows.map(row => ({
+          ...row,
+          total_assignments: parseInt(row.total_assignments) || 0,
+          active_assignments: parseInt(row.active_assignments) || 0,
+          completed_assignments: parseInt(row.completed_assignments) || 0,
+          avg_progress: parseFloat(row.avg_progress) || 0,
+          current_workload_hours: parseInt(row.current_workload_hours) || 0
+        })) || [],
         knowledge_usage_stats: {
           total_assets: 0,
           usage_this_month: 0,
@@ -946,8 +970,8 @@ router.get('/projects', jwtAuth.verifyToken, jwtAuth.requireRole(['admin', 'exec
             queryParams.push('approved', 'planning');
             break;
           case 'in_progress':
-            whereClause = 'WHERE p.project_status IN ($1, $2)';
-            queryParams.push('in_progress', 'development');
+            whereClause = 'WHERE p.approval_status = $1 AND pwa.assignment_status IN ($2, $3)';
+            queryParams.push('approved', 'assigned', 'in_progress');
             break;
           case 'completed':
             whereClause = 'WHERE p.project_status = $1';
@@ -957,7 +981,7 @@ router.get('/projects', jwtAuth.verifyToken, jwtAuth.requireRole(['admin', 'exec
       }
       
       const projectListQuery = `
-        SELECT 
+        SELECT DISTINCT ON (p.id)
           p.id as project_id,
           p.name as project_name,
           p.project_overview as description,
@@ -980,7 +1004,7 @@ router.get('/projects', jwtAuth.verifyToken, jwtAuth.requireRole(['admin', 'exec
         LEFT JOIN timbel_users pe ON pwa.assigned_to = pe.id
         LEFT JOIN work_groups wg ON pwa.work_group_id = wg.id
         ${whereClause}
-        ORDER BY p.created_at DESC
+        ORDER BY p.id, p.created_at DESC
       `;
       
       const result = await client.query(projectListQuery, queryParams);
@@ -1097,6 +1121,29 @@ router.put('/projects/:id/status',
         updateParams.push(id);
         
         await client.query(updateQuery, updateParams);
+        
+        // 승인 취소 시 모든 할당 삭제 및 초기화
+        if (approval_status === 'pending' && currentApprovalStatus === 'approved') {
+          console.log('🔄 승인 취소로 인한 할당 삭제 및 초기화 시작...');
+          
+          // 모든 할당 삭제
+          await client.query(`
+            DELETE FROM project_work_assignments 
+            WHERE project_id = $1
+          `, [id]);
+          
+          // 프로젝트 진행률 및 관련 데이터 초기화
+          await client.query(`
+            UPDATE projects SET 
+              progress_percentage = 0,
+              project_status = 'planning',
+              claimed_by_po = NULL,
+              po_claimed_at = NULL
+            WHERE id = $1
+          `, [id]);
+          
+          console.log('✅ 승인 취소로 인한 데이터 초기화 완료');
+        }
         
         // PE 변경 처리 (새로운 PE가 지정된 경우)
         let peChangeInfo = null;

@@ -1,7 +1,7 @@
 // [advice from AI] 백스테이지IO 스타일의 메인 레이아웃 컴포넌트
 // 사이드바, 헤더, 메인 컨텐츠 영역을 포함한 전체 레이아웃 구조
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Drawer,
@@ -19,12 +19,17 @@ import {
   Collapse,
   Tooltip,
   Button,
-  Chip
+  Chip,
+  Badge,
+  Popover,
+  Paper,
+  ListItemAvatar,
+  Avatar,
+  CircularProgress
 } from '@mui/material';
 // [advice from AI] 접기/펼치기 아이콘만 복원
-import { ExpandLess as ExpandLessIcon, ExpandMore as ExpandMoreIcon } from '@mui/icons-material';
+import { ExpandLess as ExpandLessIcon, ExpandMore as ExpandMoreIcon, Notifications as NotificationsIcon } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useEffect } from 'react';
 import UserInfo from './UserInfo';
 import { useJwtAuthStore } from '../../store/jwtAuthStore';
 
@@ -64,7 +69,7 @@ const roleDashboards = [
   { text: '최고 관리자', path: '/executive', hasSubMenu: false },
   { text: 'PO 대시보드', path: '/po-dashboard', hasSubMenu: true }, // 프로젝트 관리, PE 관리, 요구사항 관리
   { text: 'PE 대시보드', path: '/pe-workspace', hasSubMenu: true }, // PE 작업 대시보드 및 하위 기능들
-  { text: 'QA/QC 센터', path: '/qa-center', hasSubMenu: false }, // 향후 테스트 계획, 품질 검사, 결함 관리 등
+  { text: 'QC/QA 대시보드', path: '/qc-dashboard', hasSubMenu: false }, // 품질 검증 및 테스트 관리
   { text: '운영 센터', path: '/operations', hasSubMenu: true }, // 현재 4개 하위 센터
 ];
 
@@ -131,7 +136,102 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
   const [knowledgeOpen, setKnowledgeOpen] = useState(false);
   const [approvalOpen, setApprovalOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
-  const { user } = useJwtAuthStore();
+  const { user, token } = useJwtAuthStore();
+  
+  // [advice from AI] 알림 상태 관리
+  const [notificationCount, setNotificationCount] = useState(0);
+  const [loading, setLoading] = useState(false);
+  
+  // [advice from AI] 알림 미리보기 상태
+  const [notificationAnchor, setNotificationAnchor] = useState<HTMLElement | null>(null);
+  const [recentNotifications, setRecentNotifications] = useState<any[]>([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
+
+  // [advice from AI] API URL 생성 함수
+  const getApiUrl = () => {
+    if (typeof window !== 'undefined') {
+      const hostname = window.location.hostname;
+      if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        return 'http://localhost:3001';
+      } else {
+        return `http://${hostname}:3001`;
+      }
+    }
+    return 'http://localhost:3001';
+  };
+
+  // [advice from AI] 알림 데이터 로드
+  const loadNotificationCount = async () => {
+    if (!user || !token) return;
+
+    try {
+      setLoading(true);
+      const apiUrl = getApiUrl();
+      
+      const response = await fetch(`${apiUrl}/api/notifications/stats`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // 읽지 않은 메시지 수 계산
+        const unreadCount = (data.unread_messages || 0) + 
+                           (data.my_pending_approvals || 0) + 
+                           (data.my_pending_requests || 0);
+        setNotificationCount(unreadCount);
+      }
+    } catch (error) {
+      console.error('❌ 알림 데이터 로드 실패:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // [advice from AI] 최근 알림 미리보기 로드
+  const loadRecentNotifications = async () => {
+    if (!user || !token) return;
+
+    try {
+      setLoadingNotifications(true);
+      const apiUrl = getApiUrl();
+      
+      const response = await fetch(`${apiUrl}/api/notifications?limit=5`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setRecentNotifications(data.notifications || data.data || []);
+      }
+    } catch (error) {
+      console.error('❌ 최근 알림 로드 실패:', error);
+    } finally {
+      setLoadingNotifications(false);
+    }
+  };
+
+  // [advice from AI] 알림 미리보기 열기/닫기
+  const handleNotificationClick = (event: React.MouseEvent<HTMLElement>) => {
+    if (notificationAnchor) {
+      setNotificationAnchor(null);
+    } else {
+      setNotificationAnchor(event.currentTarget);
+      loadRecentNotifications();
+    }
+  };
+
+  // [advice from AI] 컴포넌트 마운트 시 알림 로드
+  useEffect(() => {
+    loadNotificationCount();
+    
+    // 30초마다 알림 새로고침
+    const interval = setInterval(loadNotificationCount, 30000);
+    return () => clearInterval(interval);
+  }, [user, token]);
 
   // [advice from AI] 역할별 대시보드 자동 리다이렉트 - 비활성화 (홈 화면을 통합 모니터링으로 설정)
   // useEffect(() => {
@@ -169,10 +269,10 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
       level: 2, 
       description: 'PE(프로젝트 엔지니어) 전용 기능입니다.' 
     },
-    '/qa-center': { 
-      roles: ['admin', 'executive', 'po', 'qa'], 
+    '/qc-dashboard': { 
+      roles: ['admin', 'executive', 'qa'], 
       level: 3, 
-      description: 'QA/QC 전용 기능입니다.' 
+      description: 'QC/QA 전용 기능입니다.' 
     },
     '/operations': { 
       roles: ['admin', 'executive', 'operations'], 
@@ -1110,15 +1210,36 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
             {title}
           </Typography>
           
-          {/* [advice from AI] 메시지 센터로 이동하는 버튼 */}
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={() => navigate('/message-center')}
-            sx={{ mr: 2 }}
+          {/* [advice from AI] 메시지 센터 미리보기 버튼 (알림 배지 포함) */}
+          <Badge 
+            variant={notificationCount > 0 ? "dot" : "standard"}
+            color="error"
+            sx={{ 
+              mr: 2,
+              '& .MuiBadge-dot': {
+                width: 8,
+                height: 8,
+                borderRadius: '50%'
+              }
+            }}
           >
-            메시지 센터
-          </Button>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={handleNotificationClick}
+              startIcon={<NotificationsIcon />}
+              sx={{ 
+                borderColor: notificationCount > 0 ? 'error.main' : 'divider',
+                color: notificationCount > 0 ? 'error.main' : 'text.primary',
+                '&:hover': {
+                  borderColor: notificationCount > 0 ? 'error.dark' : 'primary.main',
+                  backgroundColor: notificationCount > 0 ? 'error.light' : 'action.hover'
+                }
+              }}
+            >
+              메시지 센터
+            </Button>
+          </Badge>
           
           {/* [advice from AI] 사용자 정보 표시 */}
           <UserInfo />
@@ -1183,6 +1304,141 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
       >
         {children}
       </Box>
+
+      {/* [advice from AI] 알림 미리보기 팝오버 */}
+      <Popover
+        open={Boolean(notificationAnchor)}
+        anchorEl={notificationAnchor}
+        onClose={() => setNotificationAnchor(null)}
+        anchorOrigin={{
+          vertical: 'bottom',
+          horizontal: 'right',
+        }}
+        transformOrigin={{
+          vertical: 'top',
+          horizontal: 'right',
+        }}
+        PaperProps={{
+          sx: {
+            width: 400,
+            maxHeight: 500,
+            mt: 1
+          }
+        }}
+      >
+        <Box sx={{ p: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+              최근 알림
+            </Typography>
+            {notificationCount > 0 && (
+              <Chip 
+                label="NEW" 
+                size="small" 
+                color="error"
+                sx={{ 
+                  fontSize: '0.7rem',
+                  height: 20,
+                  fontWeight: 600
+                }}
+              />
+            )}
+          </Box>
+          
+          {loadingNotifications ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+              <CircularProgress size={24} />
+            </Box>
+          ) : recentNotifications.length > 0 ? (
+            <List sx={{ py: 0 }}>
+              {recentNotifications.slice(0, 5).map((notification, index) => (
+                <ListItem 
+                  key={notification.id || index}
+                  sx={{ 
+                    px: 0,
+                    py: 1,
+                    borderBottom: index < 4 ? '1px solid' : 'none',
+                    borderColor: 'divider'
+                  }}
+                >
+                  <ListItemAvatar>
+                    <Avatar
+                      sx={{
+                        width: 32,
+                        height: 32,
+                        backgroundColor: notification.message_type === 'error' ? 'error.main' :
+                                        notification.message_type === 'warning' ? 'warning.main' :
+                                        notification.message_type === 'success' ? 'success.main' : 'info.main',
+                      }}
+                    >
+                      <NotificationsIcon sx={{ fontSize: 16 }} />
+                    </Avatar>
+                  </ListItemAvatar>
+                  <ListItemText
+                    primary={
+                      <Typography variant="body2" sx={{ fontWeight: 500, fontSize: '0.875rem' }}>
+                        {notification.title || notification.subject || '알림'}
+                      </Typography>
+                    }
+                    secondary={
+                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
+                        {notification.message || notification.content || '내용 없음'}
+                      </Typography>
+                    }
+                  />
+                  {!notification.is_read && (
+                    <Chip
+                      label="NEW"
+                      size="small"
+                      color="primary"
+                      sx={{ fontSize: '0.6rem', height: 16, ml: 1 }}
+                    />
+                  )}
+                </ListItem>
+              ))}
+            </List>
+          ) : (
+            <Box sx={{ textAlign: 'center', py: 3 }}>
+              <Typography variant="body2" color="text.secondary">
+                새로운 알림이 없습니다
+              </Typography>
+            </Box>
+          )}
+          
+          <Divider sx={{ my: 2 }} />
+          
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button
+              fullWidth
+              variant="outlined"
+              size="small"
+              onClick={() => {
+                setNotificationAnchor(null);
+                navigate('/message-center');
+              }}
+            >
+              전체 보기
+            </Button>
+            <Button
+              fullWidth
+              variant="contained"
+              size="small"
+              onClick={() => {
+                setNotificationAnchor(null);
+                // 메시지 생성 페이지로 이동하거나 다이얼로그 열기
+                navigate('/message-center');
+                // 추후 메시지 생성 다이얼로그를 바로 열 수 있도록 쿼리 파라미터 추가
+                setTimeout(() => {
+                  const createButton = document.querySelector('[data-testid="create-message-button"]') as HTMLElement;
+                  if (createButton) createButton.click();
+                }, 500);
+              }}
+            >
+              메시지 작성
+            </Button>
+          </Box>
+        </Box>
+      </Popover>
     </Box>
   );
 };

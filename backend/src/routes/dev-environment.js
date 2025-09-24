@@ -1015,41 +1015,32 @@ router.post('/projects/:id/work-start-approval', jwtAuth.verifyToken, jwtAuth.re
     try {
       await client.query('BEGIN');
 
-      // PE 할당 확인
+      // 프로젝트에 할당된 PE 확인 (승인자와 관계없이)
       let assignmentCheck = await client.query(`
-        SELECT pwa.*, p.name as project_name
+        SELECT pwa.*, p.name as project_name, u.full_name as pe_name
         FROM project_work_assignments pwa
         JOIN projects p ON pwa.project_id = p.id
-        WHERE pwa.project_id = $1 AND pwa.assigned_to = $2 AND pwa.assignment_status = 'assigned'
-      `, [projectId, userId]);
+        JOIN timbel_users u ON pwa.assigned_to = u.id
+        WHERE pwa.project_id = $1 AND pwa.assignment_status IN ('assigned', 'in_progress')
+        ORDER BY pwa.assigned_at DESC
+        LIMIT 1
+      `, [projectId]);
 
       let assignment;
       if (assignmentCheck.rows.length === 0) {
-        // 작업 할당이 없으면 자동으로 생성
-        console.log('⚠️ 작업 할당이 없어서 자동 생성합니다:', { projectId, userId });
-        
-        const createAssignment = await client.query(`
-          INSERT INTO project_work_assignments (
-            id, project_id, assigned_to, assignment_status, assigned_by, 
-            assignment_type, priority_level, assigned_at
-          ) VALUES (
-            gen_random_uuid(), $1, $2, 'assigned', $2, 
-            'development', 'medium', NOW()
-          )
-          RETURNING *
-        `, [projectId, userId]);
-        
-        assignment = createAssignment.rows[0];
-        
-        // 프로젝트 이름을 가져오기 위해 추가 쿼리
-        const projectInfo = await client.query(`
-          SELECT name FROM projects WHERE id = $1
-        `, [projectId]);
-        
-        assignment.project_name = projectInfo.rows[0].name;
-        console.log('✅ 작업 할당 자동 생성 완료:', assignment.id);
+        return res.status(404).json({
+          success: false,
+          error: 'Assignment not found',
+          message: '해당 프로젝트에 할당된 PE를 찾을 수 없습니다.'
+        });
       } else {
         assignment = assignmentCheck.rows[0];
+        console.log('✅ 프로젝트 할당 확인:', {
+          assignmentId: assignment.id,
+          assignedTo: assignment.assigned_to,
+          peName: assignment.pe_name,
+          approver: userId
+        });
       }
 
       // 1. 레포지토리 등록
@@ -1065,7 +1056,7 @@ router.post('/projects/:id/work-start-approval', jwtAuth.verifyToken, jwtAuth.re
         }
       );
 
-      // 2. 할당 정보 업데이트 (승인 과정 데이터 포함)
+      // 2. 할당 정보 업데이트 (승인 과정 데이터 및 승인자 정보 포함)
       await client.query(`
         UPDATE project_work_assignments 
         SET 
@@ -1075,14 +1066,17 @@ router.post('/projects/:id/work-start-approval', jwtAuth.verifyToken, jwtAuth.re
           pe_estimated_hours = $2,
           difficulty_feedback = $3,
           pe_notes = $4,
+          approved_by = $5,
+          approved_at = NOW(),
           progress_percentage = 5, -- 작업 시작으로 5% 진행률
           updated_at = NOW()
-        WHERE id = $5
+        WHERE id = $6
       `, [
         pe_estimated_completion_date,
         estimated_hours,
         difficulty_feedback,
         work_start_confirmation,
+        userId, // 승인자 ID
         assignment.id
       ]);
 
@@ -1172,6 +1166,41 @@ router.post('/projects/:id/work-start-approval', jwtAuth.verifyToken, jwtAuth.re
         }
       } catch (notificationError) {
         console.warn('⚠️ 작업 시작 알림 전송 실패:', notificationError.message);
+      }
+
+      // 작업 시작 이벤트 기록
+      try {
+        await client.query(`
+          INSERT INTO system_event_stream (
+            id, event_type, event_category, title, description, 
+            project_id, user_id, assignment_id, event_timestamp, 
+            event_data, is_processed, requires_action, repository_url
+          ) VALUES (
+            gen_random_uuid(), 'work_start', 'project_management',
+            '작업 시작', $1,
+            $2, $3, $4, NOW(),
+            $5, true, false, $6
+          )
+        `, [
+          `프로젝트 작업이 시작되었습니다. 예상 완료일: ${pe_estimated_completion_date}, 예상 시간: ${estimated_hours}시간`,
+          projectId,
+          userId, // 승인자 (관리자)
+          assignment.id,
+          JSON.stringify({
+            repository_url,
+            estimated_hours,
+            pe_estimated_completion_date,
+            difficulty_feedback,
+            requirements_feedback: requirements_feedback.substring(0, 200),
+            approved_by_role: req.user?.roleType,
+            assigned_pe: assignment.assigned_to
+          }),
+          repository_url
+        ]);
+        console.log('📝 작업 시작 이벤트 기록 완료');
+      } catch (eventError) {
+        console.error('❌ 이벤트 기록 실패:', eventError);
+        // 이벤트 기록 실패는 메인 작업에 영향을 주지 않음
       }
 
       await client.query('COMMIT');

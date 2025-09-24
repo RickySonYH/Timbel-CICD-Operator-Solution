@@ -125,71 +125,105 @@ router.get('/', jwtAuth.verifyToken, async (req, res) => {
     const client = await pool.connect();
     
     try {
-      // 기존 approval_messages 테이블에서 사용자별 메시지 조회 (올바른 필드명)
+      // 메시지 센터와 기존 approval_messages를 통합하여 조회
+      let notifications = [];
+      
+      // 통합 메시지 시스템에서 사용자별 메시지 조회
       let query = `
         SELECT 
-          am.message_id as id,
-          am.subject as title,
-          am.content as message,
-          am.message_type,
-          am.priority,
-          am.sent_at as created_at,
-          am.is_read,
+          um.id,
+          um.title,
+          um.content as message,
+          um.message_type,
+          um.priority,
+          um.created_at,
+          umr.is_read,
           sender.full_name as sender_name,
           sender.role_type as sender_role,
-          am.metadata
-        FROM approval_messages am
-        LEFT JOIN timbel_users sender ON am.sender_id = sender.id
-        WHERE am.recipient_id = $1
+          um.metadata,
+          'unified_system' as source
+        FROM unified_messages um
+        JOIN unified_message_recipients umr ON um.id = umr.message_id
+        LEFT JOIN timbel_users sender ON um.sender_id = sender.id
+        WHERE umr.recipient_id = $1
+          AND umr.is_deleted = FALSE
+          AND um.status = 'active'
+          AND (um.expires_at IS NULL OR um.expires_at > NOW())
       `;
       
       const params = [userId];
       let paramIndex = 2;
       
       if (message_type) {
-        query += ` AND am.message_type = $${paramIndex}`;
+        query += ` AND um.message_type = $${paramIndex}`;
         params.push(message_type);
         paramIndex++;
       }
       
       if (is_read !== null) {
-        query += ` AND am.is_read = $${paramIndex}`;
+        query += ` AND umr.is_read = $${paramIndex}`;
         params.push(is_read === 'true');
         paramIndex++;
       }
       
       if (priority) {
-        query += ` AND am.priority = $${paramIndex}`;
-        params.push(priority);
+        query += ` AND um.priority = $${paramIndex}`;
+        params.push(parseInt(priority));
         paramIndex++;
       }
       
-      query += ` ORDER BY am.sent_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
-      params.push(parseInt(limit), parseInt(offset));
+      query += ` ORDER BY um.created_at DESC`;
       
-      const result = await client.query(query, params);
+      try {
+        console.log('📨 통합 메시지 시스템 쿼리 실행:', query);
+        console.log('📨 쿼리 파라미터:', params);
+        const messageResult = await client.query(query, params);
+        console.log('📨 통합 메시지 조회 결과:', messageResult.rows.length, '개');
+        console.log('📨 통합 메시지 전체 데이터:', messageResult.rows.map(r => ({ id: r.id, title: r.title, created_at: r.created_at, is_read: r.is_read })));
+        notifications = notifications.concat(messageResult.rows);
+      } catch (error) {
+        console.log('⚠️ 통합 메시지 시스템 조회 오류:', error.message);
+      }
       
-      // 읽지 않은 메시지 개수
-      const unreadCountResult = await client.query(`
-        SELECT COUNT(*) as count
-        FROM approval_messages
-        WHERE recipient_id = $1 AND is_read = FALSE
-      `, [userId]);
+      // 시간순으로 정렬하고 페이지네이션 적용
+      console.log('📋 전체 알림 개수 (정렬 전):', notifications.length);
+      notifications.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      console.log('📋 정렬 후 최신 3개:', notifications.slice(0, 3).map(n => ({ id: n.id, title: n.title, created_at: n.created_at, source: n.source })));
+      const paginatedNotifications = notifications.slice(parseInt(offset), parseInt(offset) + parseInt(limit));
       
-      const unreadCount = parseInt(unreadCountResult.rows[0].count);
+      // 읽지 않은 메시지 개수 계산 (통합 시스템)
+      let unreadCount = 0;
+      
+      try {
+        const unreadResult = await client.query(`
+          SELECT COUNT(*) as count
+          FROM unified_messages um
+          JOIN unified_message_recipients umr ON um.id = umr.message_id
+          WHERE umr.recipient_id = $1 
+            AND umr.is_read = FALSE 
+            AND umr.is_deleted = FALSE
+            AND um.status = 'active'
+            AND (um.expires_at IS NULL OR um.expires_at > NOW())
+        `, [userId]);
+        
+        unreadCount = parseInt(unreadResult.rows[0].count) || 0;
+      } catch (error) {
+        console.log('⚠️ 통합 메시지 시스템 읽지 않은 메시지 계산 오류:', error.message);
+      }
       
       res.json({
         success: true,
-        data: result.rows,
+        data: paginatedNotifications,
+        notifications: paginatedNotifications, // MessageCenter에서 사용하는 필드명
         pagination: {
           limit: parseInt(limit),
           offset: parseInt(offset),
-          total: result.rows.length,
-          hasMore: result.rows.length === parseInt(limit)
+          total: notifications.length,
+          hasMore: notifications.length > parseInt(offset) + parseInt(limit)
         },
         stats: {
           unread_count: unreadCount,
-          total_count: result.rows.length
+          total_count: notifications.length
         }
       });
       
@@ -333,14 +367,18 @@ router.get('/stats', jwtAuth.verifyToken, async (req, res) => {
       
       if (userRole === 'admin' || userRole === 'executive') {
         // 관리자: 승인 대기 프로젝트 통계
+        // 통합 메시지 시스템에서 승인 대기 통계 조회
         const adminStatsResult = await client.query(`
           SELECT 
-            COUNT(*) as pending_approvals,
-            COUNT(CASE WHEN urgency_level = 'critical' THEN 1 END) as urgent_approvals,
-            COUNT(CASE WHEN is_urgent_development = TRUE THEN 1 END) as urgent_development_projects
-          FROM projects
-          WHERE approval_status = 'pending'
-        `);
+            COUNT(CASE WHEN um.message_type IN ('approval_request', 'budget_approval') AND umr.is_read = FALSE THEN 1 END) as pending_approvals,
+            COUNT(CASE WHEN um.message_type IN ('approval_request', 'budget_approval') AND um.priority >= 3 AND umr.is_read = FALSE THEN 1 END) as urgent_approvals,
+            COUNT(CASE WHEN um.message_type = 'approval_request' AND um.priority = 4 AND umr.is_read = FALSE THEN 1 END) as urgent_development_projects
+          FROM unified_messages um
+          JOIN unified_message_recipients umr ON um.id = umr.message_id
+          WHERE umr.recipient_id = $1
+            AND umr.is_deleted = FALSE
+            AND um.status = 'active'
+        `, [userId]);
         
         roleSpecificStats = {
           pending_approvals: parseInt(adminStatsResult.rows[0].pending_approvals),
@@ -537,13 +575,13 @@ router.post('/:messageId/read', jwtAuth.verifyToken, async (req, res) => {
     const { messageId } = req.params;
     const userId = req.user?.userId || req.user?.id;
 
-    console.log('📖 알림 읽음 처리:', { messageId, userId });
+    console.log('📖 알림 읽음 처리 (통합 시스템):', { messageId, userId });
 
     const client = await pool.connect();
     
     try {
       await client.query(
-        'UPDATE approval_messages SET is_read = TRUE, read_at = NOW() WHERE message_id = $1 AND recipient_id = $2',
+        'UPDATE unified_message_recipients SET is_read = TRUE, read_at = NOW() WHERE message_id = $1 AND recipient_id = $2',
         [messageId, userId]
       );
       
@@ -562,6 +600,316 @@ router.post('/:messageId/read', jwtAuth.verifyToken, async (req, res) => {
       success: false,
       message: '알림 읽음 처리에 실패했습니다.',
       error: error.message
+    });
+  }
+});
+
+// QC/QA 피드백 알림 통계 API
+router.get('/feedback-stats', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    const userId = req.user?.userId || req.user?.id;
+    const userRole = req.user?.roleType;
+    
+    console.log('📊 QC/QA 피드백 알림 통계 조회:', { userId, userRole });
+
+    const client = await pool.connect();
+    
+    try {
+      let stats = {
+        my_pending_approvals: 0,
+        my_pending_requests: 0,
+        unread_messages: 0,
+        total_notifications: 0,
+        qc_feedback_stats: {
+          new_feedbacks: 0,
+          pending_responses: 0,
+          completed_feedbacks: 0
+        }
+      };
+
+      if (userRole === 'pe') {
+        // PE용 QC/QA 피드백 통계
+        const feedbackStats = await client.query(`
+          SELECT 
+            COUNT(CASE WHEN feedback_status = 'open' THEN 1 END) as new_feedbacks,
+            COUNT(CASE WHEN feedback_status = 'in_progress' THEN 1 END) as pending_responses,
+            COUNT(CASE WHEN feedback_status = 'fixed' THEN 1 END) as completed_feedbacks,
+            COUNT(*) as total_feedbacks
+          FROM qc_feedback_items 
+          WHERE assigned_to_pe = $1
+        `, [userId]);
+
+        // 읽지 않은 피드백 관련 메시지
+        const unreadMessages = await client.query(`
+          SELECT COUNT(*) as count
+          FROM user_messages 
+          WHERE recipient_id = $1 
+            AND is_read = false 
+            AND message_type IN ('qc_qa_request', 'pe_feedback_response')
+        `, [userId]);
+
+        stats.qc_feedback_stats = {
+          new_feedbacks: parseInt(feedbackStats.rows[0].new_feedbacks) || 0,
+          pending_responses: parseInt(feedbackStats.rows[0].pending_responses) || 0,
+          completed_feedbacks: parseInt(feedbackStats.rows[0].completed_feedbacks) || 0
+        };
+        stats.unread_messages = parseInt(unreadMessages.rows[0].count) || 0;
+        stats.total_notifications = stats.qc_feedback_stats.new_feedbacks + stats.unread_messages;
+
+      } else if (userRole === 'qa') {
+        // QC/QA용 통계
+        const qcStats = await client.query(`
+          SELECT 
+            COUNT(CASE WHEN request_status = 'pending' THEN 1 END) as pending_requests,
+            COUNT(CASE WHEN request_status = 'in_progress' THEN 1 END) as in_progress_requests,
+            COUNT(CASE WHEN request_status = 'completed' THEN 1 END) as completed_requests
+          FROM qc_qa_requests 
+          WHERE assigned_to = $1 OR assigned_to IS NULL
+        `, [userId]);
+
+        // 읽지 않은 PE 응답 메시지
+        const unreadMessages = await client.query(`
+          SELECT COUNT(*) as count
+          FROM user_messages 
+          WHERE recipient_id = $1 
+            AND is_read = false 
+            AND message_type = 'pe_feedback_response'
+        `, [userId]);
+
+        stats.my_pending_requests = parseInt(qcStats.rows[0].pending_requests) || 0;
+        stats.unread_messages = parseInt(unreadMessages.rows[0].count) || 0;
+        stats.total_notifications = stats.my_pending_requests + stats.unread_messages;
+      }
+
+      res.json({
+        success: true,
+        data: stats
+      });
+
+    } finally {
+      client.release();
+    }
+
+  } catch (error) {
+    console.error('❌ QC/QA 피드백 알림 통계 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      message: 'QC/QA 피드백 알림 통계 조회에 실패했습니다.',
+      error: error.message
+    });
+  }
+});
+
+// QC/QA 피드백 관련 메시지 목록 API
+router.get('/feedback-messages', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    const userId = req.user?.userId || req.user?.id;
+    const userRole = req.user?.roleType;
+    const { limit = 20, offset = 0 } = req.query;
+    
+    console.log('📬 QC/QA 피드백 메시지 조회:', { userId, userRole, limit, offset });
+
+    const client = await pool.connect();
+    
+    try {
+      let messages = [];
+
+      if (userRole === 'pe') {
+        // PE용 QC/QA 피드백 관련 메시지
+        const result = await client.query(`
+          SELECT 
+            um.id,
+            um.title,
+            um.content,
+            um.message_type,
+            um.priority,
+            um.is_read,
+            um.created_at,
+            sender.full_name as sender_name,
+            p.name as project_name,
+            qfi.title as feedback_title,
+            qfi.feedback_status,
+            qfi.severity_level
+          FROM user_messages um
+          LEFT JOIN timbel_users sender ON um.sender_id = sender.id
+          LEFT JOIN projects p ON um.related_project_id = p.id
+          LEFT JOIN qc_feedback_items qfi ON um.related_qc_request_id = qfi.qc_request_id
+          WHERE um.recipient_id = $1 
+            AND um.message_type IN ('qc_qa_request', 'pe_feedback_response')
+          ORDER BY um.created_at DESC
+          LIMIT $2 OFFSET $3
+        `, [userId, limit, offset]);
+
+        messages = result.rows;
+
+      } else if (userRole === 'qa') {
+        // QC/QA용 PE 응답 메시지
+        const result = await client.query(`
+          SELECT 
+            um.id,
+            um.title,
+            um.content,
+            um.message_type,
+            um.priority,
+            um.is_read,
+            um.created_at,
+            sender.full_name as sender_name,
+            p.name as project_name
+          FROM user_messages um
+          LEFT JOIN timbel_users sender ON um.sender_id = sender.id
+          LEFT JOIN projects p ON um.related_project_id = p.id
+          WHERE um.recipient_id = $1 
+            AND um.message_type = 'pe_feedback_response'
+          ORDER BY um.created_at DESC
+          LIMIT $2 OFFSET $3
+        `, [userId, limit, offset]);
+
+        messages = result.rows;
+      }
+
+      res.json({
+        success: true,
+        data: messages
+      });
+
+    } finally {
+      client.release();
+    }
+
+  } catch (error) {
+    console.error('❌ QC/QA 피드백 메시지 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      message: 'QC/QA 피드백 메시지 조회에 실패했습니다.',
+      error: error.message
+    });
+  }
+});
+
+// [advice from AI] 메시지 생성 API
+router.post('/messages/create', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    const userId = req.user?.userId || req.user?.id;
+    const { title, message, messageType, priority, recipients, eventCategory, eventSource } = req.body;
+    
+    console.log('📝 메시지 생성 요청:', { 
+      userId, 
+      title, 
+      messageType, 
+      priority, 
+      recipientCount: recipients?.length 
+    });
+
+    if (!title || !message || !recipients || recipients.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields',
+        message: '제목, 내용, 수신자는 필수입니다.'
+      });
+    }
+
+    const client = await pool.connect();
+    
+    try {
+      await client.query('BEGIN');
+      
+      // 통합 메시지 시스템 사용 (테이블은 이미 생성됨)
+      
+      // 메시지 생성
+      const messageResult = await client.query(`
+        INSERT INTO unified_messages (
+          title, content, message_type, priority, sender_id, metadata
+        ) VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING id
+      `, [
+        title, 
+        message, 
+        messageType || 'info', 
+        priority || 1, 
+        userId,
+        JSON.stringify({
+          event_category: eventCategory || 'manual_message',
+          event_source: eventSource || 'user'
+        })
+      ]);
+      
+      const messageId = messageResult.rows[0].id;
+      
+      // 수신자 추가
+      for (const recipientId of recipients) {
+        await client.query(`
+          INSERT INTO unified_message_recipients (message_id, recipient_id)
+          VALUES ($1, $2)
+        `, [messageId, recipientId]);
+      }
+      
+      await client.query('COMMIT');
+      
+      console.log(`✅ 메시지 생성 완료: ${messageId} - ${title}`);
+      
+      res.json({
+        success: true,
+        message: '메시지가 성공적으로 생성되었습니다.',
+        messageId
+      });
+      
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+    
+  } catch (error) {
+    console.error('❌ 메시지 생성 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to create message',
+      message: error.message
+    });
+  }
+});
+
+// [advice from AI] 사용자 목록 조회 API
+router.get('/users/list', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    const userId = req.user?.userId || req.user?.id;
+    
+    console.log('👥 사용자 목록 조회 요청:', { userId });
+
+    const client = await pool.connect();
+    
+    try {
+      const result = await client.query(`
+        SELECT 
+          id,
+          full_name,
+          role_type,
+          email,
+          status
+        FROM timbel_users 
+        WHERE status != 'inactive'
+          AND id != $1
+        ORDER BY role_type, full_name
+      `, [userId]);
+      
+      console.log(`✅ 사용자 목록 조회 완료: ${result.rows.length}명`);
+      
+      res.json({
+        success: true,
+        users: result.rows
+      });
+      
+    } finally {
+      client.release();
+    }
+    
+  } catch (error) {
+    console.error('❌ 사용자 목록 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to load users',
+      message: error.message
     });
   }
 });

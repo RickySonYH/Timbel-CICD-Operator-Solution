@@ -33,18 +33,27 @@ class MessageCenterService {
     try {
       await client.query('BEGIN');
       
-      // 메시지 생성
+      // 통합 메시지 시스템 사용
       const messageResult = await client.query(`
-        INSERT INTO message_center (
-          title, message, message_type, event_category, event_source,
-          project_id, related_user_id, assignment_id, metadata,
-          priority, expires_at, created_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        INSERT INTO unified_messages (
+          title, content, message_type, priority, sender_id, expires_at, metadata
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING id
       `, [
-        title, message, messageType, eventCategory, eventSource,
-        projectId, relatedUserId, assignmentId, JSON.stringify(metadata),
-        priority, expiresAt, createdBy
+        title, 
+        message, 
+        messageType, 
+        priority,
+        createdBy,
+        expiresAt,
+        JSON.stringify({
+          event_category: eventCategory,
+          event_source: eventSource,
+          project_id: projectId,
+          related_user_id: relatedUserId,
+          assignment_id: assignmentId,
+          ...metadata
+        })
       ]);
       
       const messageId = messageResult.rows[0].id;
@@ -56,7 +65,7 @@ class MessageCenterService {
         ).join(', ');
         
         await client.query(`
-          INSERT INTO message_recipients (message_id, recipient_user_id)
+          INSERT INTO unified_message_recipients (message_id, recipient_id)
           VALUES ${recipientValues}
         `, [messageId, ...recipients]);
       }

@@ -119,10 +119,10 @@ const ExecutiveDashboard: React.FC = () => {
   // [advice from AI] API URL 생성 함수
   const getApiUrl = () => {
     const currentHost = window.location.host;
-    if (currentHost.includes('rdc.rickyson.com')) {
-      return `http://${currentHost.split(':')[0]}:3000`;
+    if (currentHost.includes('localhost') || currentHost.includes('127.0.0.1')) {
+      return 'http://localhost:3001';
     }
-    return 'http://localhost:3001';
+    return `http://${currentHost.split(':')[0]}:3001`;
   };
   
   // [advice from AI] 카드 클릭 핸들러 - 프로젝트 리스트 다이얼로그 열기
@@ -907,7 +907,22 @@ const ExecutiveDashboard: React.FC = () => {
                       {dashboardData.pe_workload.map((pe) => (
                         <TableRow key={pe.pe_name} hover>
                           <TableCell sx={{ fontWeight: 600 }}>
-                            {pe.pe_name}
+                            <Button
+                              variant="text"
+                              sx={{ 
+                                p: 0, 
+                                minWidth: 'auto',
+                                fontWeight: 600,
+                                color: 'primary.main',
+                                '&:hover': {
+                                  backgroundColor: 'transparent',
+                                  textDecoration: 'underline'
+                                }
+                              }}
+                              onClick={() => navigate(`/pe-dashboard?peId=${pe.pe_id}&peName=${encodeURIComponent(pe.pe_name)}`)}
+                            >
+                              {pe.pe_name}
+                            </Button>
                           </TableCell>
                           <TableCell>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -937,7 +952,7 @@ const ExecutiveDashboard: React.FC = () => {
                                 color={getProgressColor(pe.avg_progress || 0)}
                               />
                               <Typography variant="caption" sx={{ minWidth: '40px' }}>
-                                {pe.avg_progress?.toFixed(0) || 0}%
+                                {typeof pe.avg_progress === 'number' ? pe.avg_progress.toFixed(0) : 0}%
                               </Typography>
                             </Box>
                           </TableCell>
@@ -980,7 +995,7 @@ const ExecutiveDashboard: React.FC = () => {
                           사용 횟수: {usage.usage_count}회 • 사용자: {usage.unique_users}명
                         </Typography>
                         <Typography variant="caption" color="success.main" sx={{ fontWeight: 600 }}>
-                          절약시간: {usage.total_time_saved?.toFixed(1) || 0}시간
+                          절약시간: {typeof usage.total_time_saved === 'number' ? usage.total_time_saved.toFixed(1) : 0}시간
                         </Typography>
                       </Box>
                     </Box>
@@ -1021,7 +1036,7 @@ const ExecutiveDashboard: React.FC = () => {
                   <Typography variant="body2">프로젝트 완료율</Typography>
                   <Typography variant="h6" color="success.main" sx={{ fontWeight: 600 }}>
                     {dashboardData.summary.total_projects > 0 
-                      ? ((dashboardData.summary.completed_projects / dashboardData.summary.total_projects) * 100).toFixed(1)
+                      ? (((dashboardData.summary.completed_projects || 0) / (dashboardData.summary.total_projects || 1)) * 100).toFixed(1)
                       : 0}%
                   </Typography>
                 </Box>
@@ -1031,7 +1046,7 @@ const ExecutiveDashboard: React.FC = () => {
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Typography variant="body2">총 절약 시간</Typography>
                   <Typography variant="h6" color="info.main" sx={{ fontWeight: 600 }}>
-                    {dashboardData.knowledge_usage.reduce((sum, usage) => sum + (usage.total_time_saved || 0), 0).toFixed(1)}시간
+                    {(dashboardData.knowledge_usage?.reduce((sum, usage) => sum + (usage.total_time_saved || 0), 0) || 0).toFixed(1)}시간
                   </Typography>
                 </Box>
               </Box>

@@ -38,7 +38,7 @@ router.get('/dashboard-stats', jwtAuth.verifyToken, jwtAuth.requireRole(['po', '
         SELECT 
           COUNT(*) as total_projects,
           COUNT(CASE WHEN approval_status = 'approved' AND project_status = 'planning' THEN 1 END) as approved_projects,
-          COUNT(CASE WHEN project_status IN ('in_progress', 'development') THEN 1 END) as assigned_projects,
+          COUNT(CASE WHEN approval_status = 'approved' AND project_status IN ('in_progress', 'development') THEN 1 END) as assigned_projects,
           COUNT(CASE WHEN project_status = 'completed' THEN 1 END) as completed_projects,
           COUNT(CASE WHEN deadline < CURRENT_DATE AND project_status NOT IN ('completed', 'cancelled') THEN 1 END) as overdue_projects
         FROM projects
