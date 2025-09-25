@@ -472,6 +472,9 @@ app.use('/api/deployment', require('./routes/deployment'));
 // [advice from AI] CI/CD 파이프라인 관리 API
 app.use('/api/operations/cicd', require('./routes/cicd-pipeline'));
 
+// [advice from AI] GitHub 통합 API
+app.use('/api/operations/github', require('./routes/github-integration'));
+
 // [advice from AI] 전역 에러 핸들러 추가
 process.on('uncaughtException', (error) => {
   console.error('❌ Uncaught Exception:', error);

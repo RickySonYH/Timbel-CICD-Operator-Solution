@@ -35,6 +35,7 @@ import {
   Tooltip
 } from '@mui/material';
 import { useJwtAuthStore } from '../../store/jwtAuthStore';
+import GitHubRepositoryAnalyzer from './GitHubRepositoryAnalyzer';
 
 // [advice from AI] 파이프라인 상태 인터페이스
 interface PipelineStatus {
@@ -233,6 +234,21 @@ const CICDPipelineManagement: React.FC = () => {
       </Paper>
 
       {/* 파이프라인 현황 탭 */}
+      {currentTab === 0 && (
+        <Box>
+          {/* GitHub 저장소 분석기 */}
+          <Box sx={{ mb: 4 }}>
+            <GitHubRepositoryAnalyzer 
+              onAnalysisComplete={(analysis) => {
+                console.log('✅ GitHub 저장소 분석 완료:', analysis);
+                // 분석 결과를 기반으로 파이프라인 자동 생성 제안 등 추가 로직
+              }}
+            />
+          </Box>
+        </Box>
+      )}
+
+      {/* 기존 파이프라인 현황 탭 내용 */}
       {currentTab === 0 && (
         <Box>
           {/* 액션 버튼 */}

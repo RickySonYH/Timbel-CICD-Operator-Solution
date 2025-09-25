@@ -85,12 +85,16 @@ const peWorkspaceSubMenus = [
   { text: '진행 상황 보고', path: '/pe-workspace/reports', highlight: false }, // 업무 관리와 주간 보고서 통합
 ];
 
-// [advice from AI] 운영센터 하위 메뉴 (모든 센터 하이라이트 적용)
+// [advice from AI] 운영센터 하위 메뉴 (CI/CD 통합 관리로 개선)
 const operationsSubMenus = [
-  { text: '테넌트 관리 센터', path: '/operations/tenant-center', highlight: true },
-  { text: 'CI/CD 및 서비스 관리', path: '/operations/cicd-services', highlight: true },
-  { text: '모니터링', path: '/operations/monitoring', highlight: true },
+  { text: '운영 대시보드', path: '/operations', highlight: true },
+  { text: 'CI/CD 파이프라인', path: '/operations/cicd', highlight: true },
   { text: '인프라 관리', path: '/operations/infrastructure', highlight: true },
+  { text: '멀티테넌트 관리', path: '/operations/multi-tenant', highlight: true },
+  { text: '모니터링', path: '/operations/monitoring', highlight: true },
+  { text: '자동배포', path: '/operations/auto-deploy', highlight: false },
+  { text: '하드웨어 계산기', path: '/operations/hardware-calc', highlight: false },
+  { text: '서비스 설정', path: '/operations/service-config', highlight: false }
 ];
 
 // [advice from AI] 시스템 관리 하위 메뉴
@@ -278,6 +282,41 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
       roles: ['admin', 'executive', 'operations'], 
       level: 4, 
       description: '운영팀 전용 기능입니다.' 
+    },
+    '/operations/cicd': { 
+      roles: ['admin', 'executive', 'operations'], 
+      level: 4, 
+      description: 'CI/CD 파이프라인 관리는 운영팀 전용 기능입니다.' 
+    },
+    '/operations/infrastructure': { 
+      roles: ['admin', 'executive', 'operations'], 
+      level: 4, 
+      description: '인프라 관리는 운영팀 전용 기능입니다.' 
+    },
+    '/operations/multi-tenant': { 
+      roles: ['admin', 'executive', 'operations'], 
+      level: 4, 
+      description: '멀티테넌트 관리는 운영팀 전용 기능입니다.' 
+    },
+    '/operations/monitoring': { 
+      roles: ['admin', 'executive', 'operations'], 
+      level: 4, 
+      description: '시스템 모니터링은 운영팀 전용 기능입니다.' 
+    },
+    '/operations/auto-deploy': { 
+      roles: ['admin', 'executive', 'operations'], 
+      level: 4, 
+      description: '자동배포 관리는 운영팀 전용 기능입니다.' 
+    },
+    '/operations/hardware-calc': { 
+      roles: ['admin', 'executive', 'operations'], 
+      level: 4, 
+      description: '하드웨어 계산기는 운영팀 전용 기능입니다.' 
+    },
+    '/operations/service-config': { 
+      roles: ['admin', 'executive', 'operations'], 
+      level: 4, 
+      description: '서비스 설정은 운영팀 전용 기능입니다.' 
     },
     '/catalog/knowledge/design': { 
       roles: ['admin', 'executive', 'designer', 'pe'], 

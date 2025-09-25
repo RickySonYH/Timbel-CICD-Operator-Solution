@@ -243,7 +243,7 @@ function AppContent() {
           <Route path="/operations/hardware-calc" element={<Navigate to="/operations/infrastructure-center?tab=1" replace />} />
           <Route path="/operations/service-config" element={<Navigate to="/operations/tools-center?tab=1" replace />} />
           <Route path="/operations/auto-deploy" element={<Navigate to="/operations/tools-center?tab=0" replace />} />
-          <Route path="/operations/cicd" element={<Navigate to="/operations/cicd-services?tab=1" replace />} />
+          <Route path="/operations/cicd" element={<CICDPage />} />
           <Route path="/operations/monitoring" element={<Navigate to="/operations/monitoring-center" replace />} />
           <Route path="/operations/infrastructure" element={<Navigate to="/operations/infrastructure-center" replace />} />
           

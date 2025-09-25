@@ -78,11 +78,6 @@ const OperationsCenter: React.FC = () => {
             aria-controls="operations-tabpanel-1"
           />
           <Tab 
-            label="CI/CD 파이프라인" 
-            id="operations-tab-2"
-            aria-controls="operations-tabpanel-2"
-          />
-          <Tab 
             label="모니터링" 
             id="operations-tab-3"
             aria-controls="operations-tabpanel-3"

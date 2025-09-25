@@ -192,3 +192,128 @@ LEFT JOIN LATERAL (
 ) dh ON true;
 
 GRANT SELECT ON cicd_pipeline_details TO timbel_app;
+
+-- [advice from AI] GitHub 저장소 분석 결과 저장 테이블
+CREATE TABLE IF NOT EXISTS github_repository_analysis (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    repository_url TEXT UNIQUE NOT NULL,
+    repository_name VARCHAR(255) NOT NULL,
+    analysis_data JSONB NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- GitHub 저장소 메트릭 히스토리 테이블 (문서 가이드 기반)
+CREATE TABLE IF NOT EXISTS enhanced_repo_metrics (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    repository_url TEXT REFERENCES github_repository_analysis(repository_url),
+    metric_date DATE NOT NULL,
+    
+    -- 기존 메트릭 강화
+    commits_count INTEGER DEFAULT 0,
+    prs_opened INTEGER DEFAULT 0,
+    prs_merged INTEGER DEFAULT 0,
+    issues_opened INTEGER DEFAULT 0,
+    issues_closed INTEGER DEFAULT 0,
+    
+    -- DORA 메트릭
+    deployment_frequency DECIMAL DEFAULT 0, -- 일일 배포 횟수
+    lead_time_minutes INTEGER DEFAULT 0, -- 커밋 → 배포 소요시간
+    mttr_minutes INTEGER DEFAULT 0, -- 평균 복구 시간
+    change_failure_rate DECIMAL DEFAULT 0, -- 배포 실패율
+    
+    -- 코드 품질 메트릭
+    test_coverage_percentage DECIMAL DEFAULT 0,
+    code_complexity_score INTEGER DEFAULT 0,
+    technical_debt_hours DECIMAL DEFAULT 0,
+    security_vulnerabilities INTEGER DEFAULT 0,
+    
+    -- 협업 메트릭
+    avg_pr_review_time_hours DECIMAL DEFAULT 0,
+    cross_team_contributions INTEGER DEFAULT 0,
+    knowledge_sharing_score DECIMAL DEFAULT 0,
+    
+    -- 추가 메타데이터
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMP DEFAULT NOW(),
+    
+    CONSTRAINT unique_repo_date UNIQUE (repository_url, metric_date)
+);
+
+-- CI/CD 파이프라인 실행 기록 (문서 가이드 기반)
+CREATE TABLE IF NOT EXISTS cicd_pipeline_executions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    repository_url TEXT REFERENCES github_repository_analysis(repository_url),
+    pipeline_type VARCHAR(50), -- 'github-actions', 'jenkins', 'argocd'
+    execution_id VARCHAR(255),
+    status VARCHAR(50), -- 'running', 'success', 'failed', 'cancelled'
+    trigger_event VARCHAR(100), -- 'push', 'pull_request', 'manual', 'scheduled'
+    branch_name VARCHAR(255),
+    commit_sha VARCHAR(40),
+    started_at TIMESTAMP,
+    completed_at TIMESTAMP,
+    duration_seconds INTEGER,
+    pipeline_config JSONB,
+    logs_url TEXT,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 인덱스 생성
+CREATE INDEX IF NOT EXISTS idx_github_repo_analysis_url ON github_repository_analysis(repository_url);
+CREATE INDEX IF NOT EXISTS idx_github_repo_analysis_updated ON github_repository_analysis(updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_enhanced_repo_metrics_repo_date ON enhanced_repo_metrics(repository_url, metric_date DESC);
+CREATE INDEX IF NOT EXISTS idx_cicd_executions_repo ON cicd_pipeline_executions(repository_url, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_cicd_executions_status ON cicd_pipeline_executions(status, created_at DESC);
+
+-- 트리거: updated_at 자동 업데이트
+DROP TRIGGER IF EXISTS trigger_github_repo_analysis_updated_at ON github_repository_analysis;
+CREATE TRIGGER trigger_github_repo_analysis_updated_at
+    BEFORE UPDATE ON github_repository_analysis
+    FOR EACH ROW
+    EXECUTE FUNCTION update_cicd_updated_at();
+
+-- 권한 설정
+GRANT SELECT, INSERT, UPDATE, DELETE ON github_repository_analysis TO timbel_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON enhanced_repo_metrics TO timbel_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON cicd_pipeline_executions TO timbel_app;
+
+-- 샘플 데이터
+INSERT INTO github_repository_analysis (
+    repository_url,
+    repository_name,
+    analysis_data
+) VALUES 
+(
+    'https://github.com/example/sample-app',
+    'example/sample-app',
+    '{
+        "repository": {
+            "name": "sample-app",
+            "fullName": "example/sample-app",
+            "description": "Sample application for testing",
+            "language": "JavaScript",
+            "stars": 42,
+            "forks": 8,
+            "size": 1024,
+            "defaultBranch": "main",
+            "isPrivate": false
+        },
+        "cicdPatterns": {
+            "hasGithubActions": true,
+            "hasJenkinsfile": false,
+            "hasDockerfile": true,
+            "hasDockerCompose": true,
+            "hasKubernetesManifests": false,
+            "hasArgocdConfig": false,
+            "workflows": ["CI", "Deploy"]
+        },
+        "metrics": {
+            "commits": 156,
+            "contributors": 5,
+            "pullRequests": 23,
+            "issues": 12,
+            "releases": 3
+        }
+    }'
+)
+ON CONFLICT (repository_url) DO NOTHING;
