@@ -1455,7 +1455,7 @@ const PODashboard: React.FC = () => {
               <Card>
                 <CardContent>
                   <Typography variant="h6" sx={{ mb: 3, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
-                    🚀 배포 현황
+                    배포 현황
                     <Chip 
                       label={deploymentStats?.total_deployments || 0} 
                       size="small" 
@@ -1472,41 +1472,41 @@ const PODashboard: React.FC = () => {
                       {/* 배포 통계 요약 */}
                       <Grid container spacing={2} sx={{ mb: 3 }}>
                         <Grid item xs={12} sm={3}>
-                          <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'success.light', color: 'white' }}>
-                            <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+                          <Paper sx={{ p: 2, textAlign: 'center' }}>
+                            <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'success.main' }}>
                               {deploymentStats.active_deployments || 0}
                             </Typography>
-                            <Typography variant="body2">
+                            <Typography variant="body2" color="text.secondary">
                               활성 배포
                             </Typography>
                           </Paper>
                         </Grid>
                         <Grid item xs={12} sm={3}>
-                          <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'info.light', color: 'white' }}>
-                            <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+                          <Paper sx={{ p: 2, textAlign: 'center' }}>
+                            <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'info.main' }}>
                               {deploymentStats.pending_deployments || 0}
                             </Typography>
-                            <Typography variant="body2">
+                            <Typography variant="body2" color="text.secondary">
                               대기 중
                             </Typography>
                           </Paper>
                         </Grid>
                         <Grid item xs={12} sm={3}>
-                          <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'warning.light', color: 'white' }}>
-                            <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+                          <Paper sx={{ p: 2, textAlign: 'center' }}>
+                            <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'error.main' }}>
                               {deploymentStats.failed_deployments || 0}
                             </Typography>
-                            <Typography variant="body2">
+                            <Typography variant="body2" color="text.secondary">
                               실패
                             </Typography>
                           </Paper>
                         </Grid>
                         <Grid item xs={12} sm={3}>
-                          <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'primary.light', color: 'white' }}>
-                            <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+                          <Paper sx={{ p: 2, textAlign: 'center' }}>
+                            <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
                               {Math.round(deploymentStats.success_rate || 0)}%
                             </Typography>
-                            <Typography variant="body2">
+                            <Typography variant="body2" color="text.secondary">
                               성공률
                             </Typography>
                           </Paper>
@@ -1545,15 +1545,20 @@ const PODashboard: React.FC = () => {
                                   />
                                 </TableCell>
                                 <TableCell align="center">
-                                  <Chip
-                                    label={deployment.status}
-                                    size="small"
-                                    color={
-                                      deployment.status === 'success' ? 'success' :
-                                      deployment.status === 'failed' ? 'error' :
-                                      deployment.status === 'pending' ? 'warning' : 'default'
-                                    }
-                                  />
+                                  <Typography 
+                                    variant="body2" 
+                                    sx={{ 
+                                      fontWeight: 600,
+                                      color: 
+                                        deployment.status === 'success' ? 'success.main' :
+                                        deployment.status === 'failed' ? 'error.main' :
+                                        deployment.status === 'pending' ? 'warning.main' : 'text.primary'
+                                    }}
+                                  >
+                                    {deployment.status === 'success' ? '성공' :
+                                     deployment.status === 'failed' ? '실패' :
+                                     deployment.status === 'pending' ? '대기중' : deployment.status}
+                                  </Typography>
                                 </TableCell>
                                 <TableCell align="center">
                                   <Typography variant="body2">
