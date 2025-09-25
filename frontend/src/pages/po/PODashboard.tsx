@@ -106,6 +106,11 @@ const PODashboard: React.FC = () => {
   const [workloadAnalyticsDialog, setWorkloadAnalyticsDialog] = useState(false);
   const [loadingPEs, setLoadingPEs] = useState(false);
   
+  // 프로젝트 리스크 분석 상태
+  const [riskAnalytics, setRiskAnalytics] = useState<any>(null);
+  const [loadingRiskAnalytics, setLoadingRiskAnalytics] = useState(false);
+  const [riskAnalysisDialog, setRiskAnalysisDialog] = useState(false);
+  
   // [advice from AI] 통합 설정 다이얼로그 상태
   const [settingsDialog, setSettingsDialog] = useState(false);
   const [settingsTab, setSettingsTab] = useState('pe_assignment'); // 'pe_assignment', 'project_edit', 'status_change'
@@ -224,6 +229,35 @@ const PODashboard: React.FC = () => {
       }
     } catch (error) {
       console.error('❌ 업무 부하 분산 분석 로딩 실패:', error);
+    }
+  };
+
+  // 프로젝트 리스크 분석 데이터 로딩
+  const loadProjectRiskAnalytics = async () => {
+    setLoadingRiskAnalytics(true);
+    try {
+      console.log('🔍 프로젝트 리스크 분석 로드 시작...');
+      
+      const response = await fetch(`${getApiUrl()}/api/po/project-risk-analysis`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          setRiskAnalytics(result.data);
+          console.log('✅ 프로젝트 리스크 분석 로드 완료:', result.data);
+        }
+      } else {
+        console.error('❌ 프로젝트 리스크 분석 로드 실패:', response.status);
+      }
+    } catch (error) {
+      console.error('❌ 프로젝트 리스크 분석 로드 오류:', error);
+    } finally {
+      setLoadingRiskAnalytics(false);
     }
   };
 
@@ -585,6 +619,7 @@ const PODashboard: React.FC = () => {
       loadQcProgressData();
       loadPePerformanceAnalytics();
       loadWorkloadDistributionAnalytics();
+      loadProjectRiskAnalytics();
       
       // 주기적 데이터 새로고침 (30초마다)
       const interval = setInterval(() => {
@@ -593,6 +628,7 @@ const PODashboard: React.FC = () => {
         loadQcProgressData();
         loadPePerformanceAnalytics();
         loadWorkloadDistributionAnalytics();
+        loadProjectRiskAnalytics();
       }, 30000);
       
       return () => clearInterval(interval);
@@ -773,7 +809,7 @@ const PODashboard: React.FC = () => {
 
           {/* QC/QA 승인 완료 알림 섹션 */}
           {qcApprovalNotifications.length > 0 && (
-            <Grid container spacing={3} sx={{ mb: 4 }}>
+          <Grid container spacing={3} sx={{ mb: 4 }}>
               <Grid item xs={12}>
                 <Card sx={{ backgroundColor: '#fff3e0', border: '2px solid #ff9800' }}>
                   <CardContent>
@@ -791,7 +827,7 @@ const PODashboard: React.FC = () => {
                         <Card key={notification.id || index} sx={{ mb: 2, border: '1px solid #ffcc02' }}>
                           <CardContent sx={{ py: 2 }}>
                             <Grid container spacing={2} alignItems="center">
-                              <Grid item xs={12} md={8}>
+        <Grid item xs={12} md={8}>
                                 <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
                                   {notification.title || 'QC/QA 검증 승인 완료'}
                                 </Typography>
@@ -952,8 +988,8 @@ const PODashboard: React.FC = () => {
           {/* PE 성과 분석 및 업무 부하 분산 모니터링 */}
           <Grid container spacing={3} sx={{ mb: 4 }}>
             <Grid item xs={12} md={6}>
-              <Card>
-                <CardContent>
+          <Card>
+            <CardContent>
                   <Typography variant="h6" sx={{ mb: 3, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
                     📊 PE 성과 분석
                     <Chip 
@@ -1212,6 +1248,172 @@ const PODashboard: React.FC = () => {
             </Grid>
           </Grid>
 
+          {/* 프로젝트 리스크 분석 */}
+          <Grid container spacing={3} sx={{ mb: 4 }}>
+            <Grid item xs={12}>
+              <Card>
+                <CardContent>
+                  <Typography variant="h6" sx={{ mb: 3, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    🚨 프로젝트 리스크 분석
+                    <Chip 
+                      label={riskAnalytics?.risk_projects?.length || 0} 
+                      size="small" 
+                      color="warning" 
+                    />
+                  </Typography>
+                  
+                  {loadingRiskAnalytics ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                      <CircularProgress />
+                    </Box>
+                  ) : !riskAnalytics?.risk_projects || riskAnalytics.risk_projects.length === 0 ? (
+                    <Alert severity="success">
+                      현재 리스크가 감지된 프로젝트가 없습니다.
+                    </Alert>
+                  ) : (
+                    <Box>
+                      {/* 리스크 요약 */}
+                      <Box sx={{ mb: 3, p: 2, bgcolor: 'warning.50', borderRadius: 1 }}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 2 }}>
+                          리스크 요약
+                        </Typography>
+                        <Grid container spacing={2}>
+                          <Grid item xs={6} md={2}>
+                            <Typography variant="caption" color="text.secondary">전체</Typography>
+                            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                              {riskAnalytics.risk_summary?.total_projects || 0}
+                            </Typography>
+                          </Grid>
+                          <Grid item xs={6} md={2}>
+                            <Typography variant="caption" color="error.main">위험</Typography>
+                            <Typography variant="h6" sx={{ fontWeight: 600, color: 'error.main' }}>
+                              {riskAnalytics.risk_summary?.critical_risk_count || 0}
+                            </Typography>
+                          </Grid>
+                          <Grid item xs={6} md={2}>
+                            <Typography variant="caption" color="warning.main">높음</Typography>
+                            <Typography variant="h6" sx={{ fontWeight: 600, color: 'warning.main' }}>
+                              {riskAnalytics.risk_summary?.high_risk_count || 0}
+                            </Typography>
+                          </Grid>
+                          <Grid item xs={6} md={2}>
+                            <Typography variant="caption" color="info.main">보통</Typography>
+                            <Typography variant="h6" sx={{ fontWeight: 600, color: 'info.main' }}>
+                              {riskAnalytics.risk_summary?.medium_risk_count || 0}
+                            </Typography>
+                          </Grid>
+                          <Grid item xs={6} md={2}>
+                            <Typography variant="caption" color="success.main">낮음</Typography>
+                            <Typography variant="h6" sx={{ fontWeight: 600, color: 'success.main' }}>
+                              {riskAnalytics.risk_summary?.low_risk_count || 0}
+                            </Typography>
+                          </Grid>
+                          <Grid item xs={6} md={2}>
+                            <Typography variant="caption" color="text.secondary">평균점수</Typography>
+                            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                              {riskAnalytics.risk_summary?.avg_risk_score || 0}
+                            </Typography>
+                          </Grid>
+                        </Grid>
+                      </Box>
+
+                      {/* 고위험 프로젝트 목록 */}
+                      <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 300 }}>
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>프로젝트명</TableCell>
+                              <TableCell align="center">리스크점수</TableCell>
+                              <TableCell align="center">우선순위</TableCell>
+                              <TableCell align="center">담당PE</TableCell>
+                              <TableCell align="center">마감일</TableCell>
+                              <TableCell align="center">리스크요인</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {riskAnalytics.risk_projects.slice(0, 5).map((project: any) => (
+                              <TableRow key={project.id}>
+                                <TableCell>
+                                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                    {project.project_name}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell align="center">
+                                  <Chip
+                                    label={project.risk_score}
+                                    size="small"
+                                    color={
+                                      project.risk_score >= 70 ? 'error' :
+                                      project.risk_score >= 40 ? 'warning' :
+                                      project.risk_score >= 20 ? 'info' : 'success'
+                                    }
+                                  />
+                                </TableCell>
+                                <TableCell align="center">
+                                  <Chip
+                                    label={project.urgency_level}
+                                    size="small"
+                                    variant="outlined"
+                                    color={
+                                      project.urgency_level === 'critical' ? 'error' :
+                                      project.urgency_level === 'high' ? 'warning' : 'default'
+                                    }
+                                  />
+                                </TableCell>
+                                <TableCell align="center">
+                                  <Typography variant="body2">
+                                    {project.pe_name || '미할당'}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell align="center">
+                                  <Typography variant="body2" color={
+                                    project.deadline && new Date(project.deadline) < new Date() ? 'error.main' : 'text.secondary'
+                                  }>
+                                    {project.deadline ? new Date(project.deadline).toLocaleDateString() : '-'}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell align="center">
+                                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                                    {project.risk_factors?.slice(0, 2).map((factor: string, index: number) => (
+                                      <Chip
+                                        key={index}
+                                        label={
+                                          factor === 'deadline_overdue' ? '마감초과' :
+                                          factor === 'deadline_approaching' ? '마감임박' :
+                                          factor === 'low_progress' ? '진행지연' :
+                                          factor === 'unassigned' ? '미할당' :
+                                          factor === 'not_started' ? '미시작' :
+                                          factor === 'high_priority_delayed' ? '우선순위지연' : factor
+                                        }
+                                        size="small"
+                                        variant="outlined"
+                                        sx={{ fontSize: '0.7rem' }}
+                                      />
+                                    ))}
+                                  </Box>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+
+                      <Box sx={{ mt: 2, textAlign: 'center' }}>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          onClick={() => setRiskAnalysisDialog(true)}
+                        >
+                          상세 분석 보기
+                        </Button>
+                      </Box>
+                    </Box>
+                  )}
+                </CardContent>
+              </Card>
+            </Grid>
+          </Grid>
+
           {/* PE 작업 현황 및 긴급 사항 */}
           <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} md={8}>
@@ -1278,32 +1480,32 @@ const PODashboard: React.FC = () => {
                                 </Box>
                               </TableCell>
                               <TableCell>
-                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                    <Chip 
+                                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                      <Chip 
                                       label={pe.active_assignments > 0 ? `작업중` : `대기중`} 
-                                      size="small"
+                                size="small"
                                       color={pe.active_assignments > 0 ? "success" : "default"}
-                                      variant="outlined"
-                                    />
+                                        variant="outlined"
+                              />
                                     {pe.avg_progress > 0 && (
-                                      <Chip
+                              <Chip
                                         label={`평균 ${pe.avg_progress?.toFixed(0) || 0}%`} 
-                                        size="small"
+                                size="small"
                                         color={pe.avg_progress > 70 ? "success" : pe.avg_progress > 40 ? "warning" : "error"}
                                         variant="outlined"
-                                      />
+                              />
                                     )}
-                                  </Box>
-                                  <Typography variant="caption" color="text.secondary">
+                            </Box>
+                                    <Typography variant="caption" color="text.secondary">
                                     {pe.active_assignments > 0 
                                       ? `${pe.active_assignments}개 프로젝트 진행중`
                                       : pe.completed_assignments > 0 
                                         ? `최근 ${pe.completed_assignments}개 완료`
                                         : '할당 대기중'
                                     }
-                                  </Typography>
-                                </Box>
+                                    </Typography>
+                          </Box>
                               </TableCell>
                               <TableCell sx={{ width: '200px' }}>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -2585,12 +2787,196 @@ const PODashboard: React.FC = () => {
           <DialogActions>
             <Button onClick={() => setWorkloadAnalyticsDialog(false)}>
               닫기
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+        {/* 프로젝트 리스크 분석 상세 다이얼로그 */}
+        <Dialog 
+          open={riskAnalysisDialog} 
+          onClose={() => setRiskAnalysisDialog(false)}
+          maxWidth="xl"
+          fullWidth
+        >
+          <DialogTitle>
+            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+              🚨 프로젝트 리스크 분석 상세 보고서
+            </Typography>
+          </DialogTitle>
+          <DialogContent>
+            {riskAnalytics && (
+              <Box sx={{ mt: 2 }}>
+                {/* 전체 리스크 요약 */}
+                <Card sx={{ mb: 3 }}>
+                  <CardContent>
+                    <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                      전체 리스크 현황
+                    </Typography>
+                    <Grid container spacing={3}>
+                      <Grid item xs={12} md={2}>
+                        <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                          <Typography variant="h4" sx={{ fontWeight: 700 }}>
+                            {riskAnalytics.risk_summary?.total_projects || 0}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">전체 프로젝트</Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={12} md={2}>
+                        <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'error.50', borderRadius: 1 }}>
+                          <Typography variant="h4" sx={{ fontWeight: 700, color: 'error.main' }}>
+                            {riskAnalytics.risk_summary?.critical_risk_count || 0}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">위험 (70+)</Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={12} md={2}>
+                        <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'warning.50', borderRadius: 1 }}>
+                          <Typography variant="h4" sx={{ fontWeight: 700, color: 'warning.main' }}>
+                            {riskAnalytics.risk_summary?.high_risk_count || 0}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">높음 (40-69)</Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={12} md={2}>
+                        <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'info.50', borderRadius: 1 }}>
+                          <Typography variant="h4" sx={{ fontWeight: 700, color: 'info.main' }}>
+                            {riskAnalytics.risk_summary?.medium_risk_count || 0}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">보통 (20-39)</Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={12} md={2}>
+                        <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'success.50', borderRadius: 1 }}>
+                          <Typography variant="h4" sx={{ fontWeight: 700, color: 'success.main' }}>
+                            {riskAnalytics.risk_summary?.low_risk_count || 0}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">낮음 (0-19)</Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={12} md={2}>
+                        <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'primary.50', borderRadius: 1 }}>
+                          <Typography variant="h4" sx={{ fontWeight: 700, color: 'primary.main' }}>
+                            {riskAnalytics.risk_summary?.avg_risk_score || 0}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">평균 점수</Typography>
+                        </Box>
+                      </Grid>
+                    </Grid>
+                  </CardContent>
+                </Card>
+
+                {/* 전체 프로젝트 리스크 목록 */}
+                <Card>
+                  <CardContent>
+                    <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                      프로젝트별 리스크 상세
+                    </Typography>
+                    <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 500 }}>
+                      <Table size="small" stickyHeader>
+                        <TableHead>
+                          <TableRow>
+                            <TableCell sx={{ fontWeight: 600 }}>프로젝트명</TableCell>
+                            <TableCell align="center" sx={{ fontWeight: 600 }}>리스크점수</TableCell>
+                            <TableCell align="center" sx={{ fontWeight: 600 }}>우선순위</TableCell>
+                            <TableCell align="center" sx={{ fontWeight: 600 }}>담당PE</TableCell>
+                            <TableCell align="center" sx={{ fontWeight: 600 }}>진행률</TableCell>
+                            <TableCell align="center" sx={{ fontWeight: 600 }}>마감일</TableCell>
+                            <TableCell align="center" sx={{ fontWeight: 600 }}>예상완료일</TableCell>
+                            <TableCell align="center" sx={{ fontWeight: 600 }}>리스크요인</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {riskAnalytics.risk_projects.map((project: any) => (
+                            <TableRow key={project.id}>
+                              <TableCell>
+                                <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                  {project.project_name}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="center">
+                                <Chip
+                                  label={project.risk_score}
+                                  size="small"
+                                  color={
+                                    project.risk_score >= 70 ? 'error' :
+                                    project.risk_score >= 40 ? 'warning' :
+                                    project.risk_score >= 20 ? 'info' : 'success'
+                                  }
+                                />
+                              </TableCell>
+                              <TableCell align="center">
+                                <Chip
+                                  label={project.urgency_level}
+                                  size="small"
+                                  variant="outlined"
+                                  color={
+                                    project.urgency_level === 'critical' ? 'error' :
+                                    project.urgency_level === 'high' ? 'warning' : 'default'
+                                  }
+                                />
+                              </TableCell>
+                              <TableCell align="center">
+                                <Typography variant="body2">
+                                  {project.pe_name || '미할당'}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="center">
+                                <Typography variant="body2">
+                                  {project.progress_percentage ? `${project.progress_percentage}%` : '0%'}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="center">
+                                <Typography variant="body2" color={
+                                  project.deadline && new Date(project.deadline) < new Date() ? 'error.main' : 'text.secondary'
+                                }>
+                                  {project.deadline ? new Date(project.deadline).toLocaleDateString() : '-'}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="center">
+                                <Typography variant="body2" color="text.secondary">
+                                  {project.estimated_completion_date ? 
+                                    new Date(project.estimated_completion_date).toLocaleDateString() : '-'}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="center">
+                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                                  {project.risk_factors?.map((factor: string, index: number) => (
+                                    <Chip
+                                      key={index}
+                                      label={
+                                        factor === 'deadline_overdue' ? '마감초과' :
+                                        factor === 'deadline_approaching' ? '마감임박' :
+                                        factor === 'low_progress' ? '진행지연' :
+                                        factor === 'unassigned' ? '미할당' :
+                                        factor === 'not_started' ? '미시작' :
+                                        factor === 'high_priority_delayed' ? '우선순위지연' : factor
+                                      }
+                                      size="small"
+                                      variant="outlined"
+                                      sx={{ fontSize: '0.7rem' }}
+                                    />
+                                  ))}
+                                </Box>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </CardContent>
+                </Card>
+              </Box>
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setRiskAnalysisDialog(false)}>
+              닫기
             </Button>
           </DialogActions>
         </Dialog>
 
-      </Container>
-    );
-  };
+    </Container>
+  );
+};
 
-  export default PODashboard;
+export default PODashboard;

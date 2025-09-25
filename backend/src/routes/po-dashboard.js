@@ -972,4 +972,142 @@ router.get('/workload-distribution-analytics', async (req, res) => {
   }
 });
 
+// PO용 프로젝트 리스크 분석 API
+router.get('/project-risk-analysis', async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    console.log('🔍 PO용 프로젝트 리스크 분석 시작');
+
+    // 프로젝트 리스크 분석
+    const riskAnalysisResult = await client.query(`
+      SELECT 
+        p.id,
+        p.name as project_name,
+        p.urgency_level,
+        p.deadline,
+        p.created_at,
+        p.project_status,
+        p.approval_status,
+        pwa.assignment_status,
+        pwa.progress_percentage,
+        pwa.actual_start_date,
+        pwa.pe_estimated_hours,
+        pe.full_name as pe_name,
+        pe.id as pe_id,
+        -- 리스크 점수 계산 (0-100)
+        CASE 
+          -- 데드라인 리스크 (40점)
+          WHEN p.deadline IS NOT NULL AND p.deadline < NOW() THEN 40
+          WHEN p.deadline IS NOT NULL AND p.deadline < NOW() + INTERVAL '7 days' THEN 30
+          WHEN p.deadline IS NOT NULL AND p.deadline < NOW() + INTERVAL '14 days' THEN 20
+          ELSE 0
+        END +
+        CASE 
+          -- 진행률 리스크 (30점)
+          WHEN pwa.progress_percentage IS NULL OR pwa.progress_percentage < 10 THEN 30
+          WHEN pwa.progress_percentage < 30 THEN 20
+          WHEN pwa.progress_percentage < 50 THEN 10
+          ELSE 0
+        END +
+        CASE 
+          -- 할당 상태 리스크 (20점)
+          WHEN p.approval_status = 'approved' AND pwa.assignment_status IS NULL THEN 20
+          WHEN pwa.assignment_status = 'assigned' AND pwa.actual_start_date IS NULL THEN 15
+          ELSE 0
+        END +
+        CASE 
+          -- 우선순위 리스크 (10점)
+          WHEN p.urgency_level = 'critical' AND pwa.progress_percentage < 50 THEN 10
+          WHEN p.urgency_level = 'high' AND pwa.progress_percentage < 30 THEN 5
+          ELSE 0
+        END as risk_score,
+        -- 리스크 유형 식별
+        ARRAY_REMOVE(ARRAY[
+          CASE WHEN p.deadline IS NOT NULL AND p.deadline < NOW() THEN 'deadline_overdue' END,
+          CASE WHEN p.deadline IS NOT NULL AND p.deadline < NOW() + INTERVAL '7 days' THEN 'deadline_approaching' END,
+          CASE WHEN pwa.progress_percentage IS NULL OR pwa.progress_percentage < 10 THEN 'low_progress' END,
+          CASE WHEN p.approval_status = 'approved' AND pwa.assignment_status IS NULL THEN 'unassigned' END,
+          CASE WHEN pwa.assignment_status = 'assigned' AND pwa.actual_start_date IS NULL THEN 'not_started' END,
+          CASE WHEN p.urgency_level IN ('critical', 'high') AND pwa.progress_percentage < 30 THEN 'high_priority_delayed' END
+        ], NULL) as risk_factors,
+        -- 예상 완료일 계산
+        CASE 
+          WHEN pwa.actual_start_date IS NOT NULL AND pwa.pe_estimated_hours IS NOT NULL AND pwa.progress_percentage > 0 THEN
+            pwa.actual_start_date + INTERVAL '1 hour' * (pwa.pe_estimated_hours * (100 - pwa.progress_percentage) / 100)
+          ELSE NULL
+        END as estimated_completion_date
+      FROM projects p
+      LEFT JOIN project_work_assignments pwa ON p.id = pwa.project_id
+      LEFT JOIN timbel_users pe ON pwa.assigned_to = pe.id
+      WHERE p.project_status NOT IN ('cancelled', 'completed', 'on_hold')
+        AND p.approval_status IN ('approved', 'pending')
+      ORDER BY risk_score DESC, p.deadline ASC
+    `);
+
+    // 리스크 요약 통계
+    const riskSummaryResult = await client.query(`
+      WITH risk_analysis AS (
+        SELECT 
+          p.id,
+          CASE 
+            WHEN p.deadline IS NOT NULL AND p.deadline < NOW() THEN 40
+            WHEN p.deadline IS NOT NULL AND p.deadline < NOW() + INTERVAL '7 days' THEN 30
+            WHEN p.deadline IS NOT NULL AND p.deadline < NOW() + INTERVAL '14 days' THEN 20
+            ELSE 0
+          END +
+          CASE 
+            WHEN pwa.progress_percentage IS NULL OR pwa.progress_percentage < 10 THEN 30
+            WHEN pwa.progress_percentage < 30 THEN 20
+            WHEN pwa.progress_percentage < 50 THEN 10
+            ELSE 0
+          END +
+          CASE 
+            WHEN p.approval_status = 'approved' AND pwa.assignment_status IS NULL THEN 20
+            WHEN pwa.assignment_status = 'assigned' AND pwa.actual_start_date IS NULL THEN 15
+            ELSE 0
+          END +
+          CASE 
+            WHEN p.urgency_level = 'critical' AND pwa.progress_percentage < 50 THEN 10
+            WHEN p.urgency_level = 'high' AND pwa.progress_percentage < 30 THEN 5
+            ELSE 0
+          END as risk_score
+        FROM projects p
+        LEFT JOIN project_work_assignments pwa ON p.id = pwa.project_id
+        WHERE p.project_status NOT IN ('cancelled', 'completed', 'on_hold')
+          AND p.approval_status IN ('approved', 'pending')
+      )
+      SELECT 
+        COUNT(*) as total_projects,
+        COUNT(CASE WHEN risk_score >= 70 THEN 1 END) as critical_risk_count,
+        COUNT(CASE WHEN risk_score >= 40 AND risk_score < 70 THEN 1 END) as high_risk_count,
+        COUNT(CASE WHEN risk_score >= 20 AND risk_score < 40 THEN 1 END) as medium_risk_count,
+        COUNT(CASE WHEN risk_score < 20 THEN 1 END) as low_risk_count,
+        ROUND(AVG(risk_score), 1) as avg_risk_score
+      FROM risk_analysis
+    `);
+
+    console.log(`✅ 프로젝트 리스크 분석 완료: ${riskAnalysisResult.rows.length}개 프로젝트 분석`);
+
+    res.json({
+      success: true,
+      data: {
+        risk_projects: riskAnalysisResult.rows,
+        risk_summary: riskSummaryResult.rows[0] || {}
+      },
+      message: '프로젝트 리스크 분석이 완료되었습니다.'
+    });
+
+  } catch (error) {
+    console.error('❌ 프로젝트 리스크 분석 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to analyze project risks',
+      message: '프로젝트 리스크 분석에 실패했습니다.'
+    });
+  } finally {
+    client.release();
+  }
+});
+
 module.exports = router;
