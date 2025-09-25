@@ -453,7 +453,7 @@ const PEDashboard: React.FC = () => {
         }
       } else {
         // PE 본인인 경우 자신의 프로젝트 로드
-        await loadAssignedProjects();
+      await loadAssignedProjects();
         await loadProjectHistory(user?.id);
         await loadFeedbackData(user?.id);
       }

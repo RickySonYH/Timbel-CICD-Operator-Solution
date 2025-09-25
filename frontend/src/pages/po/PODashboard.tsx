@@ -110,6 +110,11 @@ const PODashboard: React.FC = () => {
   const [riskAnalytics, setRiskAnalytics] = useState<any>(null);
   const [loadingRiskAnalytics, setLoadingRiskAnalytics] = useState(false);
   const [riskAnalysisDialog, setRiskAnalysisDialog] = useState(false);
+
+  // 배포 현황 상태
+  const [deploymentStats, setDeploymentStats] = useState<any>(null);
+  const [loadingDeploymentStats, setLoadingDeploymentStats] = useState(false);
+  const [deploymentDialog, setDeploymentDialog] = useState(false);
   
   // [advice from AI] 통합 설정 다이얼로그 상태
   const [settingsDialog, setSettingsDialog] = useState(false);
@@ -258,6 +263,35 @@ const PODashboard: React.FC = () => {
       console.error('❌ 프로젝트 리스크 분석 로드 오류:', error);
     } finally {
       setLoadingRiskAnalytics(false);
+    }
+  };
+
+  // 배포 현황 데이터 로딩
+  const loadDeploymentStats = async () => {
+    setLoadingDeploymentStats(true);
+    try {
+      console.log('🔍 배포 현황 로드 시작...');
+      
+      const response = await fetch(`${getApiUrl()}/api/po/deployment-stats`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          setDeploymentStats(result.data);
+          console.log('✅ 배포 현황 로드 완료:', result.data);
+        }
+      } else {
+        console.error('❌ 배포 현황 로드 실패:', response.status);
+      }
+    } catch (error) {
+      console.error('❌ 배포 현황 로드 오류:', error);
+    } finally {
+      setLoadingDeploymentStats(false);
     }
   };
 
@@ -620,6 +654,7 @@ const PODashboard: React.FC = () => {
       loadPePerformanceAnalytics();
       loadWorkloadDistributionAnalytics();
       loadProjectRiskAnalytics();
+      loadDeploymentStats();
       
       // 주기적 데이터 새로고침 (30초마다)
       const interval = setInterval(() => {
@@ -629,6 +664,7 @@ const PODashboard: React.FC = () => {
         loadPePerformanceAnalytics();
         loadWorkloadDistributionAnalytics();
         loadProjectRiskAnalytics();
+        loadDeploymentStats();
       }, 30000);
       
       return () => clearInterval(interval);
@@ -1408,6 +1444,157 @@ const PODashboard: React.FC = () => {
                         </Button>
                       </Box>
                     </Box>
+                  )}
+                </CardContent>
+              </Card>
+            </Grid>
+          </Grid>
+
+          {/* 배포 현황 */}
+          <Grid container spacing={3} sx={{ mb: 4 }}>
+            <Grid item xs={12}>
+              <Card>
+                <CardContent>
+                  <Typography variant="h6" sx={{ mb: 3, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    🚀 배포 현황
+                    <Chip 
+                      label={deploymentStats?.total_deployments || 0} 
+                      size="small" 
+                      color="primary" 
+                    />
+                  </Typography>
+
+                  {loadingDeploymentStats ? (
+                    <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+                      <CircularProgress />
+                    </Box>
+                  ) : deploymentStats ? (
+                    <Box>
+                      {/* 배포 통계 요약 */}
+                      <Grid container spacing={2} sx={{ mb: 3 }}>
+                        <Grid item xs={12} sm={3}>
+                          <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'success.light', color: 'white' }}>
+                            <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+                              {deploymentStats.active_deployments || 0}
+                            </Typography>
+                            <Typography variant="body2">
+                              활성 배포
+                            </Typography>
+                          </Paper>
+                        </Grid>
+                        <Grid item xs={12} sm={3}>
+                          <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'info.light', color: 'white' }}>
+                            <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+                              {deploymentStats.pending_deployments || 0}
+                            </Typography>
+                            <Typography variant="body2">
+                              대기 중
+                            </Typography>
+                          </Paper>
+                        </Grid>
+                        <Grid item xs={12} sm={3}>
+                          <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'warning.light', color: 'white' }}>
+                            <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+                              {deploymentStats.failed_deployments || 0}
+                            </Typography>
+                            <Typography variant="body2">
+                              실패
+                            </Typography>
+                          </Paper>
+                        </Grid>
+                        <Grid item xs={12} sm={3}>
+                          <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'primary.light', color: 'white' }}>
+                            <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
+                              {Math.round(deploymentStats.success_rate || 0)}%
+                            </Typography>
+                            <Typography variant="body2">
+                              성공률
+                            </Typography>
+                          </Paper>
+                        </Grid>
+                      </Grid>
+
+                      {/* 최근 배포 목록 */}
+                      <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 300 }}>
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>프로젝트명</TableCell>
+                              <TableCell align="center">환경</TableCell>
+                              <TableCell align="center">상태</TableCell>
+                              <TableCell align="center">배포일시</TableCell>
+                              <TableCell align="center">담당자</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {(deploymentStats.recent_deployments || []).slice(0, 5).map((deployment: any, index: number) => (
+                              <TableRow key={index}>
+                                <TableCell>
+                                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                    {deployment.project_name}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell align="center">
+                                  <Chip
+                                    label={deployment.environment}
+                                    size="small"
+                                    variant="outlined"
+                                    color={
+                                      deployment.environment === 'production' ? 'error' :
+                                      deployment.environment === 'staging' ? 'warning' : 'info'
+                                    }
+                                  />
+                                </TableCell>
+                                <TableCell align="center">
+                                  <Chip
+                                    label={deployment.status}
+                                    size="small"
+                                    color={
+                                      deployment.status === 'success' ? 'success' :
+                                      deployment.status === 'failed' ? 'error' :
+                                      deployment.status === 'pending' ? 'warning' : 'default'
+                                    }
+                                  />
+                                </TableCell>
+                                <TableCell align="center">
+                                  <Typography variant="body2">
+                                    {deployment.deployed_at ? new Date(deployment.deployed_at).toLocaleDateString() : '-'}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell align="center">
+                                  <Typography variant="body2">
+                                    {deployment.deployed_by || '-'}
+                                  </Typography>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                            {(!deploymentStats.recent_deployments || deploymentStats.recent_deployments.length === 0) && (
+                              <TableRow>
+                                <TableCell colSpan={5} align="center">
+                                  <Typography variant="body2" color="text.secondary">
+                                    최근 배포 내역이 없습니다.
+                                  </Typography>
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+
+                      <Box sx={{ mt: 2, textAlign: 'center' }}>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          onClick={() => setDeploymentDialog(true)}
+                        >
+                          배포 관리 페이지로 이동
+                        </Button>
+                      </Box>
+                    </Box>
+                  ) : (
+                    <Alert severity="info">
+                      배포 현황 데이터를 불러올 수 없습니다.
+                    </Alert>
                   )}
                 </CardContent>
               </Card>
@@ -2971,9 +3158,9 @@ const PODashboard: React.FC = () => {
           <DialogActions>
             <Button onClick={() => setRiskAnalysisDialog(false)}>
               닫기
-            </Button>
-          </DialogActions>
-        </Dialog>
+          </Button>
+        </DialogActions>
+      </Dialog>
 
     </Container>
   );

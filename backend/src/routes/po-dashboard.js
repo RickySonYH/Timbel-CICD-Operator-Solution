@@ -1110,4 +1110,117 @@ router.get('/project-risk-analysis', async (req, res) => {
   }
 });
 
+// [advice from AI] 배포 현황 통계 API
+router.get('/deployment-stats', jwtAuth.verifyToken, jwtAuth.requireRole(['po', 'admin', 'executive']), async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    console.log('📊 배포 현황 통계 조회 시작...');
+
+    // 배포 현황 통계 (시뮬레이션 데이터)
+    const deploymentStatsResult = {
+      total_deployments: 45,
+      active_deployments: 12,
+      pending_deployments: 3,
+      failed_deployments: 2,
+      success_rate: 87.5,
+      recent_deployments: [
+        {
+          project_name: 'ECP-AI 챗봇 시스템',
+          environment: 'production',
+          status: 'success',
+          deployed_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+          deployed_by: '신백엔드'
+        },
+        {
+          project_name: 'K8S 모니터링 대시보드',
+          environment: 'staging',
+          status: 'success',
+          deployed_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+          deployed_by: '박관리'
+        },
+        {
+          project_name: 'AI 추천 엔진',
+          environment: 'development',
+          status: 'pending',
+          deployed_at: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+          deployed_by: '김개발'
+        },
+        {
+          project_name: '사용자 인증 시스템',
+          environment: 'production',
+          status: 'failed',
+          deployed_at: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+          deployed_by: '이운영'
+        },
+        {
+          project_name: '데이터 분석 플랫폼',
+          environment: 'staging',
+          status: 'success',
+          deployed_at: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
+          deployed_by: '신백엔드'
+        }
+      ]
+    };
+
+    // 인프라 현황 통계 (deployment_infrastructure 테이블에서 조회)
+    let infrastructureStats = {
+      total_services: 0,
+      healthy_services: 0,
+      warning_services: 0,
+      error_services: 0
+    };
+
+    try {
+      const infraResult = await client.query(`
+        SELECT 
+          COUNT(*) as total_services,
+          COUNT(CASE WHEN status = 'active' AND health_status = 'healthy' THEN 1 END) as healthy_services,
+          COUNT(CASE WHEN status = 'active' AND health_status = 'warning' THEN 1 END) as warning_services,
+          COUNT(CASE WHEN status = 'active' AND health_status = 'error' THEN 1 END) as error_services
+        FROM deployment_infrastructure
+        WHERE status = 'active'
+      `);
+      
+      if (infraResult.rows.length > 0) {
+        infrastructureStats = {
+          total_services: parseInt(infraResult.rows[0].total_services) || 0,
+          healthy_services: parseInt(infraResult.rows[0].healthy_services) || 0,
+          warning_services: parseInt(infraResult.rows[0].warning_services) || 0,
+          error_services: parseInt(infraResult.rows[0].error_services) || 0
+        };
+      }
+    } catch (infraError) {
+      console.log('⚠️ 인프라 테이블 조회 실패 (테이블이 없을 수 있음):', infraError.message);
+    }
+
+    const responseData = {
+      ...deploymentStatsResult,
+      infrastructure: infrastructureStats,
+      environments: {
+        production: { deployments: 15, success_rate: 92 },
+        staging: { deployments: 18, success_rate: 89 },
+        development: { deployments: 12, success_rate: 83 }
+      }
+    };
+
+    console.log('✅ 배포 현황 통계 조회 완료');
+    
+    res.json({
+      success: true,
+      data: responseData
+    });
+
+  } catch (error) {
+    console.error('❌ 배포 현황 통계 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch deployment statistics',
+      message: '배포 현황 통계 조회에 실패했습니다.'
+    });
+  } finally {
+    client.release();
+  }
+});
+
 module.exports = router;
