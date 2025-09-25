@@ -139,13 +139,17 @@ const ProjectManagement: React.FC = () => {
   const [filterUrgency, setFilterUrgency] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // [advice from AI] 동적 API URL 결정 로직
+  // [advice from AI] 동적 API URL 결정 로직 (수정됨)
   const getApiUrl = (): string => {
     const currentHost = window.location.host;
+    console.log('🌐 현재 호스트:', currentHost);
+    
     if (currentHost === 'localhost:3000' || currentHost === '127.0.0.1:3000') {
+      console.log('🏠 로컬 환경 - 직접 백엔드 포트 사용');
       return 'http://localhost:3001';
     } else {
-      return '';
+      console.log('🌍 외부 환경 - 포트 3001 사용');
+      return `http://${currentHost.split(':')[0]}:3001`;
     }
   };
 

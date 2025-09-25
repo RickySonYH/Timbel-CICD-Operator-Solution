@@ -62,6 +62,20 @@ const DomainManagement: React.FC = () => {
   const [domains, setDomains] = useState<DomainInfo[]>([]);
   const [filteredDomains, setFilteredDomains] = useState<DomainInfo[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+
+  // [advice from AI] 동적 API URL 결정 로직
+  const getApiUrl = (): string => {
+    const currentHost = window.location.host;
+    console.log('🌐 현재 호스트:', currentHost);
+    
+    if (currentHost === 'localhost:3000' || currentHost === '127.0.0.1:3000') {
+      console.log('🏠 로컬 환경 - 직접 백엔드 포트 사용');
+      return 'http://localhost:3001';
+    } else {
+      console.log('🌍 외부 환경 - 포트 3001 사용');
+      return `http://${currentHost.split(':')[0]}:3001`;
+    }
+  };
   const [regionFilter, setRegionFilter] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
   const [loading, setLoading] = useState(true);
@@ -108,10 +122,12 @@ const DomainManagement: React.FC = () => {
         }
 
          console.log('🔄 도메인 목록 요청 시작...'); // [advice from AI] 디버깅용 로그
-         console.log('  - 요청 URL: /api/domains');
+         const apiUrl = getApiUrl();
+         const fullUrl = `${apiUrl}/api/domains`;
+         console.log('  - 요청 URL:', fullUrl);
          console.log('  - 요청 헤더:', { 'Authorization': `Bearer ${token.substring(0, 20)}...` });
          
-         const response = await fetch('/api/domains', {
+         const response = await fetch(fullUrl, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
 
@@ -170,7 +186,7 @@ const DomainManagement: React.FC = () => {
   // [advice from AI] 새 도메인 생성
   const handleCreateDomain = async () => {
     try {
-       const response = await fetch('/api/domains', {
+       const response = await fetch(`${getApiUrl()}/api/domains`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -212,7 +228,7 @@ const DomainManagement: React.FC = () => {
   // [advice from AI] 도메인 상세 보기 - 연관 데이터 포함
   const handleViewDomain = async (domain: DomainInfo) => {
     try {
-      const response = await fetch(`/api/domains/${domain.id}`, {
+      const response = await fetch(`${getApiUrl()}/api/domains/${domain.id}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -254,7 +270,7 @@ const DomainManagement: React.FC = () => {
     if (!selectedDomain) return;
     
     try {
-      const response = await fetch(`/api/domains/${selectedDomain.id}`, {
+      const response = await fetch(`${getApiUrl()}/api/domains/${selectedDomain.id}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -271,7 +287,7 @@ const DomainManagement: React.FC = () => {
       const result = await response.json();
       if (result.success) {
         // 목록 새로고침
-        const response2 = await fetch('/api/domains', {
+        const response2 = await fetch(`${getApiUrl()}/api/domains`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (response2.ok) {
@@ -298,7 +314,7 @@ const DomainManagement: React.FC = () => {
     }
     
     try {
-      const response = await fetch(`/api/domains/${selectedDomain.id}`, {
+      const response = await fetch(`${getApiUrl()}/api/domains/${selectedDomain.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -328,7 +344,7 @@ const DomainManagement: React.FC = () => {
       }
       if (result.success) {
         // 목록 새로고침
-        const response2 = await fetch('/api/domains', {
+        const response2 = await fetch(`${getApiUrl()}/api/domains`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (response2.ok) {
