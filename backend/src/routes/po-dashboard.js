@@ -1223,4 +1223,82 @@ router.get('/deployment-stats', jwtAuth.verifyToken, jwtAuth.requireRole(['po', 
   }
 });
 
+// [advice from AI] 배포 가능한 프로젝트 목록 API
+router.get('/deployment-ready-projects', jwtAuth.verifyToken, jwtAuth.requireRole(['po', 'admin', 'executive']), async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    console.log('📊 배포 가능한 프로젝트 목록 조회 시작...');
+
+    // QC/QA 승인이 완료된 프로젝트 조회 (시뮬레이션 데이터)
+    const deploymentReadyProjects = [
+      {
+        id: 'proj-001',
+        project_name: 'ECP-AI 챗봇 시스템',
+        description: '고객 상담을 위한 AI 기반 챗봇 시스템',
+        tech_stack: ['React', 'Node.js', 'Python', 'TensorFlow'],
+        repository_url: 'https://github.com/company/ecp-ai-chatbot',
+        assigned_pe: '신백엔드',
+        priority_level: 'high',
+        qc_approval_date: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+        metadata: {
+          docker_image: 'ecp-ai/chatbot:v1.2.0',
+          port: 3000,
+          database_required: true,
+          external_apis: ['OpenAI', 'Slack']
+        }
+      },
+      {
+        id: 'proj-002',
+        project_name: 'K8S 모니터링 대시보드',
+        description: '쿠버네티스 클러스터 모니터링 및 관리 대시보드',
+        tech_stack: ['Vue.js', 'Go', 'Prometheus', 'Grafana'],
+        repository_url: 'https://github.com/company/k8s-monitoring',
+        assigned_pe: '박관리',
+        priority_level: 'critical',
+        qc_approval_date: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+        metadata: {
+          docker_image: 'k8s-tools/monitor:v2.1.0',
+          port: 8080,
+          database_required: false,
+          external_apis: ['Kubernetes API', 'Prometheus']
+        }
+      },
+      {
+        id: 'proj-003',
+        project_name: 'AI 추천 엔진',
+        description: '사용자 행동 분석 기반 개인화 추천 시스템',
+        tech_stack: ['Python', 'FastAPI', 'Redis', 'PostgreSQL'],
+        repository_url: 'https://github.com/company/ai-recommendation',
+        assigned_pe: '김개발',
+        priority_level: 'normal',
+        qc_approval_date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+        metadata: {
+          docker_image: 'ai-engine/recommender:v1.0.0',
+          port: 8000,
+          database_required: true,
+          external_apis: ['Analytics API']
+        }
+      }
+    ];
+
+    console.log('✅ 배포 가능한 프로젝트 목록 조회 완료');
+    
+    res.json({
+      success: true,
+      data: deploymentReadyProjects
+    });
+
+  } catch (error) {
+    console.error('❌ 배포 가능한 프로젝트 목록 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch deployment ready projects',
+      message: '배포 가능한 프로젝트 목록 조회에 실패했습니다.'
+    });
+  } finally {
+    client.release();
+  }
+});
+
 module.exports = router;

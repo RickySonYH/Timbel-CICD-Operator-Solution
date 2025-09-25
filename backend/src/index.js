@@ -466,6 +466,9 @@ app.use('/api/qc', require('./routes/qc-dashboard'));
 // [advice from AI] 배포 인프라 관리 API
 app.use('/api/deployment-infrastructure', require('./routes/deployment-infrastructure'));
 
+// [advice from AI] 배포 실행 관리 API
+app.use('/api/deployment', require('./routes/deployment'));
+
 // [advice from AI] 전역 에러 핸들러 추가
 process.on('uncaughtException', (error) => {
   console.error('❌ Uncaught Exception:', error);

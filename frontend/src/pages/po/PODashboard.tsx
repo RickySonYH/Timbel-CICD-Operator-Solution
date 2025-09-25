@@ -12,6 +12,7 @@ import {
 import {
   Close as CloseIcon
 } from '@mui/icons-material';
+import DeploymentRequestDialog from '../../components/deployment/DeploymentRequestDialog';
 import { useJwtAuthStore } from '../../store/jwtAuthStore';
 import { useNavigate } from 'react-router-dom';
 
@@ -1587,7 +1588,7 @@ const PODashboard: React.FC = () => {
                           size="small"
                           onClick={() => setDeploymentDialog(true)}
                         >
-                          배포 관리 페이지로 이동
+                          배포 요청하기
                         </Button>
                       </Box>
                     </Box>
@@ -3161,6 +3162,12 @@ const PODashboard: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* 배포 요청 다이얼로그 */}
+      <DeploymentRequestDialog
+        open={deploymentDialog}
+        onClose={() => setDeploymentDialog(false)}
+      />
 
     </Container>
   );
