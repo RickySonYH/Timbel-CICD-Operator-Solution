@@ -218,12 +218,131 @@ const QCDashboard: React.FC = () => {
   const [failureHistory, setFailureHistory] = useState<any[]>([]);
   const [allActivityLogs, setAllActivityLogs] = useState<any[]>([]);
   const [allFailureHistory, setAllFailureHistory] = useState<any[]>([]);
+  
+  // QC 검증 승인 상태
+  const [approvalDialog, setApprovalDialog] = useState(false);
+  const [selectedRequestForApproval, setSelectedRequestForApproval] = useState<QCRequest | null>(null);
+  const [approvalData, setApprovalData] = useState({
+    approval_notes: '',
+    quality_score: 85
+  });
+  const [submittingApproval, setSubmittingApproval] = useState(false);
+  
+  // 검증 완료 보고서 상태
+  const [verificationReportDialog, setVerificationReportDialog] = useState(false);
+  const [verificationReportData, setVerificationReportData] = useState({
+    // 프로젝트 요약 (자동 입력)
+    projectSummary: '',
+    
+    // 테스트 실행 결과
+    testExecutionSummary: '',
+    totalTestCases: 0,
+    passedTestCases: 0,
+    failedTestCases: 0,
+    testCoverage: '',
+    
+    // 품질 평가
+    qualityScore: 85,
+    functionalityScore: 0,
+    reliabilityScore: 0,
+    usabilityScore: 0,
+    performanceScore: 0,
+    securityScore: 0,
+    
+    // 발견된 이슈 및 해결 상태
+    criticalIssues: '',
+    majorIssues: '',
+    minorIssues: '',
+    resolvedIssues: '',
+    
+    // 권장사항 및 개선점
+    recommendations: '',
+    improvementSuggestions: '',
+    
+    // 배포 승인 여부
+    deploymentRecommendation: 'approved', // approved, conditional, rejected
+    deploymentConditions: '',
+    
+    // 추가 노트
+    additionalNotes: ''
+  });
   const [historyDialog, setHistoryDialog] = useState(false);
   const [selectedRequestForHistory, setSelectedRequestForHistory] = useState<QCRequest | null>(null);
+
+  // 테스트 진행 상황 저장 함수
+  const saveTestProgress = async (requestId: string, progressData: any, category: string, step: number) => {
+    try {
+      const response = await fetch(`${getApiUrl()}/api/qc/save-test-progress/${requestId}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          test_progress: progressData,
+          current_category: category,
+          current_step: step
+        })
+      });
+
+      if (response.ok) {
+        console.log('💾 테스트 진행 상황 저장 완료');
+      } else {
+        console.error('❌ 테스트 진행 상황 저장 실패');
+      }
+    } catch (error) {
+      console.error('❌ 테스트 진행 상황 저장 중 오류:', error);
+    }
+  };
+
+  // 테스트 진행 상황 불러오기 함수
+  const loadTestProgress = async (requestId: string) => {
+    try {
+      const response = await fetch(`${getApiUrl()}/api/qc/load-test-progress/${requestId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.data) {
+          console.log('📂 저장된 테스트 진행 상황 발견:', result.data);
+          return result.data;
+        }
+      }
+    } catch (error) {
+      console.error('❌ 테스트 진행 상황 불러오기 중 오류:', error);
+    }
+    return null;
+  };
+
+  // 테스트 진행 상황 삭제 함수
+  const clearTestProgress = async (requestId: string) => {
+    try {
+      const response = await fetch(`${getApiUrl()}/api/qc/clear-test-progress/${requestId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        console.log('🗑️ 테스트 진행 상황 삭제 완료');
+      }
+    } catch (error) {
+      console.error('❌ 테스트 진행 상황 삭제 중 오류:', error);
+    }
+  };
 
   // 테스트 실행 시작 함수
   const handleStartTestExecution = async (request: QCRequest) => {
     setSelectedTestRequest(request);
+    
+    // 먼저 저장된 진행 상황이 있는지 확인
+    const savedProgress = await loadTestProgress(request.id);
     
     try {
       const apiUrl = getApiUrl();
@@ -268,11 +387,64 @@ const QCDashboard: React.FC = () => {
           completed: false
         }));
         
-        setTestExecutionData(executionItems);
-        setTestCategories(categories);
-        setCurrentTestStep(0);
-        setCurrentCategoryItems(categories[0]?.items || []);
-        setTestProgress(0);
+        // 저장된 진행 상황이 있으면 복원
+        if (savedProgress && savedProgress.test_progress) {
+          console.log('📂 저장된 진행 상황 복원 중...');
+          
+          // 저장된 테스트 상태 복원
+          const restoredExecutionItems = executionItems.map((item: any) => {
+            const savedItem = savedProgress.test_progress[item.id];
+            if (savedItem) {
+              return {
+                ...item,
+                status: savedItem.status || 'pending',
+                notes: savedItem.notes || ''
+              };
+            }
+            return item;
+          });
+          
+          // 카테고리별 아이템 상태 복원
+          const restoredCategories = categories.map(category => ({
+            ...category,
+            items: category.items.map((item: any) => {
+              const savedItem = savedProgress.test_progress[item.id];
+              if (savedItem) {
+                return {
+                  ...item,
+                  status: savedItem.status || 'pending',
+                  notes: savedItem.notes || ''
+                };
+              }
+              return item;
+            })
+          }));
+          
+          // 현재 카테고리와 스텝 복원
+          const currentStep = Math.min(savedProgress.current_step || 0, categories.length - 1);
+          
+          setTestExecutionData(restoredExecutionItems);
+          setTestCategories(restoredCategories);
+          setCurrentTestStep(currentStep);
+          setCurrentCategoryItems(restoredCategories[currentStep]?.items || []);
+          
+          // 진행률 계산
+          const completedCount = restoredExecutionItems.filter((item: any) => 
+            item.status === 'passed' || item.status === 'failed'
+          ).length;
+          setTestProgress(Math.round((completedCount / restoredExecutionItems.length) * 100));
+          
+          alert(`저장된 테스트 진행 상황을 불러왔습니다.\n\n` +
+                `진행률: ${completedCount}/${restoredExecutionItems.length} (${Math.round((completedCount / restoredExecutionItems.length) * 100)}%)\n` +
+                `마지막 저장: ${new Date(savedProgress.last_saved_at).toLocaleString()}`);
+        } else {
+          setTestExecutionData(executionItems);
+          setTestCategories(categories);
+          setCurrentTestStep(0);
+          setCurrentCategoryItems(categories[0]?.items || []);
+          setTestProgress(0);
+        }
+        
         setTestExecutionDialog(true);
       } else {
         alert('테스트 계획을 불러올 수 없습니다.');
@@ -350,8 +522,8 @@ const QCDashboard: React.FC = () => {
     setFailedItemIssueDialog(true);
   };
 
-  // 개별 테스트 항목 상태 업데이트
-  const handleTestItemUpdate = (itemId: number, status: string, notes: string = '') => {
+  // 개별 테스트 항목 상태 업데이트 (자동 저장 포함)
+  const handleTestItemUpdate = async (itemId: number, status: string, notes: string = '') => {
     // 실패 상태로 변경될 때만 이슈 레포트 다이얼로그 열기 (토글로 되돌리는 경우 제외)
     if (status === 'failed') {
       const failedItem = currentCategoryItems.find(item => item.id === itemId);
@@ -366,6 +538,23 @@ const QCDashboard: React.FC = () => {
           ? { ...item, status, notes, execution_time: new Date().toISOString() }
           : item
       );
+      
+      // 자동 저장 (비동기로 실행하여 UI 블록 방지)
+      setTimeout(async () => {
+        if (selectedTestRequest) {
+          const progressData = updatedData.reduce((acc: any, item: any) => {
+            acc[item.id] = {
+              status: item.status,
+              notes: item.notes || '',
+              execution_time: item.execution_time
+            };
+            return acc;
+          }, {});
+          
+          const currentCategory = testCategories[currentTestStep]?.name || '';
+          await saveTestProgress(selectedTestRequest.id, progressData, currentCategory, currentTestStep);
+        }
+      }, 500); // 0.5초 디바운스
       
       // 현재 카테고리 항목들도 업데이트
       setCurrentCategoryItems(prevItems => 
@@ -431,6 +620,12 @@ const QCDashboard: React.FC = () => {
 
       if (response.ok) {
         alert(`테스트 실행이 완료되었습니다.\n품질 점수: ${qualityScore}점 (통과: ${passedItems}/${totalItems})`);
+        
+        // 저장된 진행 상황 삭제 (테스트 완료)
+        if (selectedTestRequest) {
+          await clearTestProgress(selectedTestRequest.id);
+        }
+        
         setTestExecutionDialog(false);
         setTestExecutionData([]);
         setTestProgress(0);
@@ -790,6 +985,182 @@ const QCDashboard: React.FC = () => {
     }
     
     setFeedbackDialog(true);
+  };
+
+  // QC 검증 승인 다이얼로그 열기 (검증 완료 보고서 작성)
+  const handleOpenApprovalDialog = async (request: QCRequest) => {
+    setSelectedRequestForApproval(request);
+    
+    try {
+      // 테스트 실행 결과 데이터 로드
+      const testResultsResponse = await fetch(`${getApiUrl()}/api/qc/test-results/${request.id}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      let testResults = {};
+      if (testResultsResponse.ok) {
+        testResults = await testResultsResponse.json();
+      }
+      
+      // 피드백 통계 로드
+      const feedbackResponse = await fetch(`${getApiUrl()}/api/qc/feedback-stats/${request.id}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      let feedbackStats = {};
+      if (feedbackResponse.ok) {
+        feedbackStats = await feedbackResponse.json();
+      }
+      
+      // 검증 완료 보고서 데이터 자동 입력
+      setVerificationReportData({
+        projectSummary: `프로젝트명: ${request.project_name}\n` +
+                       `대상 시스템: ${request.target_system || '미지정'}\n` +
+                       `요청자: ${request.pe_name}\n` +
+                       `검증 기간: ${new Date(request.created_at).toLocaleDateString()} ~ ${new Date().toLocaleDateString()}\n` +
+                       `검증 담당자: ${user?.full_name || '시스템'}`,
+        
+        testExecutionSummary: `총 ${testResults.total_tests || 0}개의 테스트 케이스를 실행하였으며, ` +
+                             `${testResults.passed_tests || 0}개 통과, ${testResults.failed_tests || 0}개 실패하였습니다.`,
+        totalTestCases: testResults.total_tests || 0,
+        passedTestCases: testResults.passed_tests || 0,
+        failedTestCases: testResults.failed_tests || 0,
+        testCoverage: testResults.coverage || '85%',
+        
+        qualityScore: request.quality_score || 85,
+        functionalityScore: testResults.functionality_score || 85,
+        reliabilityScore: testResults.reliability_score || 80,
+        usabilityScore: testResults.usability_score || 75,
+        performanceScore: testResults.performance_score || 80,
+        securityScore: testResults.security_score || 90,
+        
+        criticalIssues: feedbackStats.critical_count ? `${feedbackStats.critical_count}건의 치명적 이슈가 발견되었습니다.` : '치명적 이슈가 발견되지 않았습니다.',
+        majorIssues: feedbackStats.major_count ? `${feedbackStats.major_count}건의 주요 이슈가 발견되었습니다.` : '주요 이슈가 발견되지 않았습니다.',
+        minorIssues: feedbackStats.minor_count ? `${feedbackStats.minor_count}건의 경미한 이슈가 발견되었습니다.` : '경미한 이슈가 발견되지 않았습니다.',
+        resolvedIssues: feedbackStats.resolved_count ? `${feedbackStats.resolved_count}건의 이슈가 해결되었습니다.` : '',
+        
+        recommendations: '품질 기준을 충족하며 배포 가능한 상태입니다.',
+        improvementSuggestions: '지속적인 코드 품질 관리 및 테스트 커버리지 향상을 권장합니다.',
+        
+        deploymentRecommendation: (request.quality_score || 85) >= 80 ? 'approved' : 'conditional',
+        deploymentConditions: (request.quality_score || 85) < 80 ? '품질 점수 80점 이상 달성 후 배포 권장' : '',
+        
+        additionalNotes: ''
+      });
+      
+    } catch (error) {
+      console.error('❌ 검증 보고서 데이터 로드 실패:', error);
+      // 기본값으로 설정
+      setVerificationReportData({
+        projectSummary: `프로젝트명: ${request.project_name}\n검증 담당자: ${user?.full_name || '시스템'}`,
+        testExecutionSummary: '테스트 실행 결과를 확인 중입니다.',
+        totalTestCases: 0,
+        passedTestCases: 0,
+        failedTestCases: 0,
+        testCoverage: '85%',
+        qualityScore: request.quality_score || 85,
+        functionalityScore: 85,
+        reliabilityScore: 80,
+        usabilityScore: 75,
+        performanceScore: 80,
+        securityScore: 90,
+        criticalIssues: '치명적 이슈가 발견되지 않았습니다.',
+        majorIssues: '주요 이슈가 발견되지 않았습니다.',
+        minorIssues: '경미한 이슈가 발견되지 않았습니다.',
+        resolvedIssues: '',
+        recommendations: '품질 기준을 충족하며 배포 가능한 상태입니다.',
+        improvementSuggestions: '지속적인 코드 품질 관리를 권장합니다.',
+        deploymentRecommendation: 'approved',
+        deploymentConditions: '',
+        additionalNotes: ''
+      });
+    }
+    
+    setVerificationReportDialog(true);
+  };
+
+  // 검증 완료 보고서 제출 및 승인 처리
+  const handleSubmitVerificationReport = async () => {
+    if (!selectedRequestForApproval) return;
+    
+    // 필수 필드 검증
+    if (!verificationReportData.testExecutionSummary.trim() || !verificationReportData.recommendations.trim()) {
+      alert('테스트 실행 요약과 권장사항은 필수 입력 항목입니다.');
+      return;
+    }
+    
+    try {
+      setSubmittingApproval(true);
+      
+      const response = await fetch(`${getApiUrl()}/api/qc/approve-verification/${selectedRequestForApproval.id}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          verification_report: verificationReportData,
+          quality_score: verificationReportData.qualityScore,
+          approval_notes: `검증 완료 보고서와 함께 승인되었습니다. 배포 권장사항: ${verificationReportData.deploymentRecommendation}`
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        alert(`검증 완료 보고서가 제출되고 승인이 완료되었습니다!\n\n` +
+              `프로젝트: ${selectedRequestForApproval.project_name}\n` +
+              `품질 점수: ${verificationReportData.qualityScore}점\n` +
+              `배포 권장: ${verificationReportData.deploymentRecommendation === 'approved' ? '승인' : 
+                          verificationReportData.deploymentRecommendation === 'conditional' ? '조건부 승인' : '보류'}\n\n` +
+              `PO에게 시스템 등록 결정 알림이 전송되었습니다.`);
+        
+        setVerificationReportDialog(false);
+        setSelectedRequestForApproval(null);
+        setVerificationReportData({
+          projectSummary: '',
+          testExecutionSummary: '',
+          totalTestCases: 0,
+          passedTestCases: 0,
+          failedTestCases: 0,
+          testCoverage: '',
+          qualityScore: 85,
+          functionalityScore: 0,
+          reliabilityScore: 0,
+          usabilityScore: 0,
+          performanceScore: 0,
+          securityScore: 0,
+          criticalIssues: '',
+          majorIssues: '',
+          minorIssues: '',
+          resolvedIssues: '',
+          recommendations: '',
+          improvementSuggestions: '',
+          deploymentRecommendation: 'approved',
+          deploymentConditions: '',
+          additionalNotes: ''
+        });
+        
+        // 대시보드 데이터 새로고침
+        loadDashboardData();
+        
+        console.log('✅ 검증 완료 보고서 제출 및 승인 완료:', result);
+      } else {
+        const error = await response.json();
+        alert(`검증 완료 보고서 제출 실패: ${error.message || '알 수 없는 오류'}`);
+        console.error('❌ 검증 완료 보고서 제출 실패:', error);
+      }
+    } catch (error) {
+      console.error('❌ 검증 완료 보고서 제출 중 오류:', error);
+      alert('검증 완료 보고서 제출 중 오류가 발생했습니다.');
+    } finally {
+      setSubmittingApproval(false);
+    }
   };
 
   // 테스트 항목 재설정 다이얼로그 열기 (기존 테스트 계획 다이얼로그 재사용)
@@ -1315,6 +1686,7 @@ const QCDashboard: React.FC = () => {
                     <TableCell sx={{ minWidth: 100 }}>요청자</TableCell>
                     <TableCell sx={{ minWidth: 80 }}>우선순위</TableCell>
                     <TableCell sx={{ minWidth: 100 }}>상태</TableCell>
+                    <TableCell sx={{ minWidth: 120 }}>테스트 진행률</TableCell>
                     <TableCell sx={{ minWidth: 100 }}>승인상태</TableCell>
                     <TableCell sx={{ minWidth: 80 }}>품질점수</TableCell>
                     <TableCell sx={{ minWidth: 100 }}>요청일</TableCell>
@@ -1350,6 +1722,18 @@ const QCDashboard: React.FC = () => {
                           color={getStatusColor(request.request_status) as any}
                           size="small"
                         />
+                      </TableCell>
+                      <TableCell>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <LinearProgress 
+                            variant="determinate" 
+                            value={request.test_progress_percentage || 0}
+                            sx={{ width: 60, height: 6, borderRadius: 3 }}
+                          />
+                          <Typography variant="caption" sx={{ minWidth: 35 }}>
+                            {request.test_progress_percentage || 0}%
+                          </Typography>
+                        </Box>
                       </TableCell>
                       <TableCell>
                         <Chip 
@@ -1397,12 +1781,43 @@ const QCDashboard: React.FC = () => {
                                 '&:hover': {
                                   backgroundColor: '#f3e5f5',
                                   borderColor: '#7b1fa2'
-                                }
+                                },
+                                mr: 1
                               }}
                             >
                               테스트 항목 재설정
                             </Button>
                           </>
+                        )}
+                        
+                        {request.request_status === 'completed' && request.approval_status !== 'approved' && (
+                          <Button
+                            variant="contained"
+                            size="small"
+                            color="success"
+                            onClick={() => handleOpenApprovalDialog(request)}
+                            sx={{
+                              backgroundColor: '#2e7d32',
+                              '&:hover': {
+                                backgroundColor: '#1b5e20'
+                              }
+                            }}
+                          >
+                            검증 승인
+                          </Button>
+                        )}
+                        
+                        {request.approval_status === 'approved' && (
+                          <Chip 
+                            label="승인 완료" 
+                            color="success" 
+                            size="small"
+                            sx={{ 
+                              backgroundColor: '#4caf50',
+                              color: 'white',
+                              fontWeight: 'bold'
+                            }}
+                          />
                         )}
                       </TableCell>
                     </TableRow>
@@ -1900,12 +2315,26 @@ const QCDashboard: React.FC = () => {
         fullWidth
       >
         <DialogTitle>
-          테스트 실행 - {selectedTestRequest?.project_name}
-          {testCategories.length > 0 && (
-            <Typography variant="subtitle2" color="text.secondary">
-              {testCategories[currentTestStep]?.name} ({currentTestStep + 1}/{testCategories.length})
-            </Typography>
-          )}
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Box>
+              테스트 실행 - {selectedTestRequest?.project_name}
+              {testCategories.length > 0 && (
+                <Typography variant="subtitle2" color="text.secondary">
+                  {testCategories[currentTestStep]?.name} ({currentTestStep + 1}/{testCategories.length})
+                </Typography>
+              )}
+            </Box>
+            <Chip 
+              label="자동 저장됨" 
+              size="small" 
+              color="success" 
+              sx={{ 
+                backgroundColor: '#4caf50',
+                color: 'white',
+                fontWeight: 'bold'
+              }}
+            />
+          </Box>
         </DialogTitle>
         <DialogContent>
           {/* 단계 표시 */}
@@ -2038,6 +2467,28 @@ const QCDashboard: React.FC = () => {
         <DialogActions>
           <Button onClick={() => setTestExecutionDialog(false)}>
             취소
+          </Button>
+          
+          <Button
+            variant="outlined"
+            onClick={async () => {
+              if (selectedTestRequest) {
+                const progressData = testExecutionData.reduce((acc: any, item: any) => {
+                  acc[item.id] = {
+                    status: item.status,
+                    notes: item.notes || '',
+                    execution_time: item.execution_time
+                  };
+                  return acc;
+                }, {});
+                
+                const currentCategory = testCategories[currentTestStep]?.name || '';
+                await saveTestProgress(selectedTestRequest.id, progressData, currentCategory, currentTestStep);
+                alert('테스트 진행 상황이 수동으로 저장되었습니다.');
+              }
+            }}
+          >
+            수동 저장
           </Button>
           
           <Button
@@ -2768,6 +3219,294 @@ const QCDashboard: React.FC = () => {
         <DialogActions>
           <Button onClick={() => setHistoryDialog(false)}>
             닫기
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* 검증 완료 보고서 다이얼로그 */}
+      <Dialog 
+        open={verificationReportDialog} 
+        onClose={() => setVerificationReportDialog(false)}
+        maxWidth="lg"
+        fullWidth
+      >
+        <DialogTitle>
+          검증 완료 보고서 작성
+          {selectedRequestForApproval && (
+            <Typography variant="subtitle2" color="text.secondary">
+              프로젝트: {selectedRequestForApproval.project_name}
+            </Typography>
+          )}
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ mt: 2 }}>
+            <Grid container spacing={3}>
+              {/* 프로젝트 요약 */}
+              <Grid item xs={12}>
+                <Typography variant="h6" gutterBottom>
+                  프로젝트 요약
+                </Typography>
+                <Paper variant="outlined" sx={{ p: 2, backgroundColor: '#f5f5f5' }}>
+                  <Typography variant="body2" sx={{ whiteSpace: 'pre-line' }}>
+                    {verificationReportData.projectSummary}
+                  </Typography>
+                </Paper>
+              </Grid>
+
+              {/* 테스트 실행 결과 */}
+              <Grid item xs={12}>
+                <Typography variant="h6" gutterBottom>
+                  테스트 실행 결과
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={4}
+                      label="테스트 실행 요약"
+                      value={verificationReportData.testExecutionSummary}
+                      onChange={(e) => setVerificationReportData(prev => ({
+                        ...prev,
+                        testExecutionSummary: e.target.value
+                      }))}
+                      required
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <TextField
+                        label="총 테스트 케이스"
+                        type="number"
+                        value={verificationReportData.totalTestCases}
+                        onChange={(e) => setVerificationReportData(prev => ({
+                          ...prev,
+                          totalTestCases: parseInt(e.target.value) || 0
+                        }))}
+                      />
+                      <TextField
+                        label="통과한 테스트"
+                        type="number"
+                        value={verificationReportData.passedTestCases}
+                        onChange={(e) => setVerificationReportData(prev => ({
+                          ...prev,
+                          passedTestCases: parseInt(e.target.value) || 0
+                        }))}
+                      />
+                      <TextField
+                        label="실패한 테스트"
+                        type="number"
+                        value={verificationReportData.failedTestCases}
+                        onChange={(e) => setVerificationReportData(prev => ({
+                          ...prev,
+                          failedTestCases: parseInt(e.target.value) || 0
+                        }))}
+                      />
+                    </Box>
+                  </Grid>
+                </Grid>
+              </Grid>
+
+              {/* 품질 평가 점수 */}
+              <Grid item xs={12}>
+                <Typography variant="h6" gutterBottom>
+                  품질 평가 점수
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={6} md={2}>
+                    <TextField
+                      fullWidth
+                      label="전체 품질 점수"
+                      type="number"
+                      inputProps={{ min: 0, max: 100 }}
+                      value={verificationReportData.qualityScore}
+                      onChange={(e) => setVerificationReportData(prev => ({
+                        ...prev,
+                        qualityScore: parseInt(e.target.value) || 0
+                      }))}
+                    />
+                  </Grid>
+                  <Grid item xs={6} md={2}>
+                    <TextField
+                      fullWidth
+                      label="기능성"
+                      type="number"
+                      inputProps={{ min: 0, max: 100 }}
+                      value={verificationReportData.functionalityScore}
+                      onChange={(e) => setVerificationReportData(prev => ({
+                        ...prev,
+                        functionalityScore: parseInt(e.target.value) || 0
+                      }))}
+                    />
+                  </Grid>
+                  <Grid item xs={6} md={2}>
+                    <TextField
+                      fullWidth
+                      label="신뢰성"
+                      type="number"
+                      inputProps={{ min: 0, max: 100 }}
+                      value={verificationReportData.reliabilityScore}
+                      onChange={(e) => setVerificationReportData(prev => ({
+                        ...prev,
+                        reliabilityScore: parseInt(e.target.value) || 0
+                      }))}
+                    />
+                  </Grid>
+                  <Grid item xs={6} md={2}>
+                    <TextField
+                      fullWidth
+                      label="사용성"
+                      type="number"
+                      inputProps={{ min: 0, max: 100 }}
+                      value={verificationReportData.usabilityScore}
+                      onChange={(e) => setVerificationReportData(prev => ({
+                        ...prev,
+                        usabilityScore: parseInt(e.target.value) || 0
+                      }))}
+                    />
+                  </Grid>
+                  <Grid item xs={6} md={2}>
+                    <TextField
+                      fullWidth
+                      label="성능"
+                      type="number"
+                      inputProps={{ min: 0, max: 100 }}
+                      value={verificationReportData.performanceScore}
+                      onChange={(e) => setVerificationReportData(prev => ({
+                        ...prev,
+                        performanceScore: parseInt(e.target.value) || 0
+                      }))}
+                    />
+                  </Grid>
+                  <Grid item xs={6} md={2}>
+                    <TextField
+                      fullWidth
+                      label="보안"
+                      type="number"
+                      inputProps={{ min: 0, max: 100 }}
+                      value={verificationReportData.securityScore}
+                      onChange={(e) => setVerificationReportData(prev => ({
+                        ...prev,
+                        securityScore: parseInt(e.target.value) || 0
+                      }))}
+                    />
+                  </Grid>
+                </Grid>
+              </Grid>
+
+              {/* 권장사항 및 개선점 */}
+              <Grid item xs={12}>
+                <Typography variant="h6" gutterBottom>
+                  권장사항 및 개선점
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={4}
+                      label="권장사항"
+                      value={verificationReportData.recommendations}
+                      onChange={(e) => setVerificationReportData(prev => ({
+                        ...prev,
+                        recommendations: e.target.value
+                      }))}
+                      required
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={4}
+                      label="개선 제안사항"
+                      value={verificationReportData.improvementSuggestions}
+                      onChange={(e) => setVerificationReportData(prev => ({
+                        ...prev,
+                        improvementSuggestions: e.target.value
+                      }))}
+                    />
+                  </Grid>
+                </Grid>
+              </Grid>
+
+              {/* 배포 승인 여부 */}
+              <Grid item xs={12}>
+                <Typography variant="h6" gutterBottom>
+                  배포 승인 여부
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} md={6}>
+                    <FormControl fullWidth>
+                      <InputLabel>배포 권장사항</InputLabel>
+                      <Select
+                        value={verificationReportData.deploymentRecommendation}
+                        onChange={(e) => setVerificationReportData(prev => ({
+                          ...prev,
+                          deploymentRecommendation: e.target.value
+                        }))}
+                        label="배포 권장사항"
+                      >
+                        <MenuItem value="approved">승인</MenuItem>
+                        <MenuItem value="conditional">조건부 승인</MenuItem>
+                        <MenuItem value="rejected">보류</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={3}
+                      label="배포 조건 (조건부 승인 시)"
+                      value={verificationReportData.deploymentConditions}
+                      onChange={(e) => setVerificationReportData(prev => ({
+                        ...prev,
+                        deploymentConditions: e.target.value
+                      }))}
+                      disabled={verificationReportData.deploymentRecommendation !== 'conditional'}
+                    />
+                  </Grid>
+                </Grid>
+              </Grid>
+
+              {/* 추가 노트 */}
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={3}
+                  label="추가 노트"
+                  value={verificationReportData.additionalNotes}
+                  onChange={(e) => setVerificationReportData(prev => ({
+                    ...prev,
+                    additionalNotes: e.target.value
+                  }))}
+                />
+              </Grid>
+            </Grid>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setVerificationReportDialog(false)}>
+            취소
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleSubmitVerificationReport}
+            disabled={submittingApproval || !verificationReportData.testExecutionSummary.trim() || !verificationReportData.recommendations.trim()}
+            sx={{
+              backgroundColor: '#2e7d32',
+              '&:hover': {
+                backgroundColor: '#1b5e20'
+              },
+              px: 4,
+              py: 1.5,
+              fontSize: '1.1rem',
+              fontWeight: 'bold'
+            }}
+          >
+            {submittingApproval ? '제출 중...' : '검증 완료 보고서 제출'}
           </Button>
         </DialogActions>
       </Dialog>

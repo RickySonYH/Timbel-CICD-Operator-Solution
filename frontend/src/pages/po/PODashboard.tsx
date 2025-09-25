@@ -10,14 +10,6 @@ import {
   Tooltip, TextField, FormControl, InputLabel, Select, MenuItem
 } from '@mui/material';
 import {
-  Assignment as ProjectIcon,
-  Group as TeamIcon,
-  TrendingUp as ProgressIcon,
-  CheckCircle as CompletedIcon,
-  Schedule as ScheduleIcon,
-  Warning as WarningIcon,
-  Assessment as ReportIcon,
-  Speed as PerformanceIcon,
   Close as CloseIcon
 } from '@mui/icons-material';
 import { useJwtAuthStore } from '../../store/jwtAuthStore';
@@ -87,6 +79,31 @@ const PODashboard: React.FC = () => {
   
   // [advice from AI] PE 관리 관련 상태
   const [availablePEs, setAvailablePEs] = useState<any[]>([]);
+  
+  // QC/QA 승인 완료 알림 및 시스템 등록 결정 상태
+  const [qcApprovalNotifications, setQcApprovalNotifications] = useState<any[]>([]);
+  const [systemRegistrationDialog, setSystemRegistrationDialog] = useState(false);
+  const [selectedApprovalNotification, setSelectedApprovalNotification] = useState<any>(null);
+  const [systemRegistrationDecision, setSystemRegistrationDecision] = useState({
+    decision: 'approve', // approve, reject, defer
+    registration_notes: '',
+    deployment_priority: 'normal', // high, normal, low
+    target_environment: 'production' // production, staging, development
+  });
+  const [submittingDecision, setSubmittingDecision] = useState(false);
+  
+  // QC/QA 진행 현황 상태
+  const [qcProgressData, setQcProgressData] = useState<any[]>([]);
+  const [qcProgressDialog, setQcProgressDialog] = useState(false);
+  const [selectedQcRequest, setSelectedQcRequest] = useState<any>(null);
+  
+  // PE 성과 분석 상태
+  const [pePerformanceData, setPePerformanceData] = useState<any>(null);
+  const [performanceAnalyticsDialog, setPerformanceAnalyticsDialog] = useState(false);
+  
+  // 업무 부하 분산 상태
+  const [workloadDistributionData, setWorkloadDistributionData] = useState<any>(null);
+  const [workloadAnalyticsDialog, setWorkloadAnalyticsDialog] = useState(false);
   const [loadingPEs, setLoadingPEs] = useState(false);
   
   // [advice from AI] 통합 설정 다이얼로그 상태
@@ -107,6 +124,175 @@ const PODashboard: React.FC = () => {
     } else {
       console.log('🌍 외부 환경 - 포트 3001 사용');
       return `http://${currentHost.split(':')[0]}:3001`;
+    }
+  };
+
+  // QC/QA 승인 완료 알림 로드 (승인 완료된 것만)
+  const loadQcApprovalNotifications = async () => {
+    try {
+      const response = await fetch(`${getApiUrl()}/api/notifications?type=qc_approval_notification&limit=10`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // QC/QA 검증이 승인 완료된 것만 필터링
+        const approvedNotifications = (data.data || []).filter((notification: any) => {
+          const metadata = notification.metadata || {};
+          return metadata.requires_decision === true && metadata.decision_type === 'system_registration';
+        });
+        
+        setQcApprovalNotifications(approvedNotifications);
+        console.log('✅ QC/QA 승인 완료 알림 로드 완료:', approvedNotifications.length, '건');
+      } else {
+        console.error('❌ QC/QA 승인 알림 로드 실패:', response.status);
+      }
+    } catch (error) {
+      console.error('❌ QC/QA 승인 알림 로드 중 오류:', error);
+    }
+  };
+
+  // QC/QA 진행 현황 로드
+  const loadQcProgressData = async () => {
+    try {
+      const response = await fetch(`${getApiUrl()}/api/qc/requests`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setQcProgressData(data.data || []);
+        console.log('✅ QC/QA 진행 현황 로드 완료:', data.data?.length || 0, '건');
+      } else {
+        console.error('❌ QC/QA 진행 현황 로드 실패:', response.status);
+      }
+    } catch (error) {
+      console.error('❌ QC/QA 진행 현황 로드 중 오류:', error);
+    }
+  };
+
+  // QC/QA 상세 정보 다이얼로그 열기
+  const handleOpenQcProgressDialog = (qcRequest: any) => {
+    setSelectedQcRequest(qcRequest);
+    setQcProgressDialog(true);
+  };
+
+  // PE 성과 분석 데이터 로딩
+  const loadPePerformanceAnalytics = async () => {
+    try {
+      const response = await fetch(`${getApiUrl()}/api/po/pe-performance-analytics`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          setPePerformanceData(result.data);
+          console.log('✅ PE 성과 분석 데이터 로딩 완료:', result.data);
+        }
+      }
+    } catch (error) {
+      console.error('❌ PE 성과 분석 로딩 실패:', error);
+    }
+  };
+
+  // 업무 부하 분산 분석 데이터 로딩
+  const loadWorkloadDistributionAnalytics = async () => {
+    try {
+      const response = await fetch(`${getApiUrl()}/api/po/workload-distribution-analytics`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          setWorkloadDistributionData(result.data);
+          console.log('✅ 업무 부하 분산 분석 데이터 로딩 완료:', result.data);
+        }
+      }
+    } catch (error) {
+      console.error('❌ 업무 부하 분산 분석 로딩 실패:', error);
+    }
+  };
+
+  // 시스템 등록 결정 다이얼로그 열기
+  const handleOpenSystemRegistrationDialog = (notification: any) => {
+    setSelectedApprovalNotification(notification);
+    setSystemRegistrationDecision({
+      decision: 'approve',
+      registration_notes: `${notification.project_name || '프로젝트'}의 QC/QA 검증이 완료되어 시스템 등록을 승인합니다.`,
+      deployment_priority: 'normal',
+      target_environment: 'production'
+    });
+    setSystemRegistrationDialog(true);
+  };
+
+  // 시스템 등록 결정 처리
+  const handleSystemRegistrationDecision = async () => {
+    if (!selectedApprovalNotification) return;
+    
+    try {
+      setSubmittingDecision(true);
+      
+      const response = await fetch(`${getApiUrl()}/api/po/system-registration-decision`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          notification_id: selectedApprovalNotification.id,
+          project_id: selectedApprovalNotification.related_project_id,
+          qc_request_id: selectedApprovalNotification.metadata?.qc_request_id,
+          ...systemRegistrationDecision
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        alert(`시스템 등록 결정이 완료되었습니다!\n\n` +
+              `프로젝트: ${selectedApprovalNotification.project_name || '알 수 없음'}\n` +
+              `결정: ${systemRegistrationDecision.decision === 'approve' ? '승인' : 
+                      systemRegistrationDecision.decision === 'reject' ? '반려' : '보류'}\n\n` +
+              `${systemRegistrationDecision.decision === 'approve' ? 
+                '관리자에게 시스템 등록 승인 요청이 전송되었습니다.' : 
+                '결정 사유가 관련 담당자에게 전달되었습니다.'}`);
+        
+        setSystemRegistrationDialog(false);
+        setSelectedApprovalNotification(null);
+        setSystemRegistrationDecision({
+          decision: 'approve',
+          registration_notes: '',
+          deployment_priority: 'normal',
+          target_environment: 'production'
+        });
+        
+        // 알림 목록 새로고침
+        loadQcApprovalNotifications();
+        
+        console.log('✅ 시스템 등록 결정 완료:', result);
+      } else {
+        const error = await response.json();
+        alert(`시스템 등록 결정 실패: ${error.message || '알 수 없는 오류'}`);
+        console.error('❌ 시스템 등록 결정 실패:', error);
+      }
+    } catch (error) {
+      console.error('❌ 시스템 등록 결정 중 오류:', error);
+      alert('시스템 등록 결정 중 오류가 발생했습니다.');
+    } finally {
+      setSubmittingDecision(false);
     }
   };
 
@@ -395,10 +581,18 @@ const PODashboard: React.FC = () => {
     if (token && user && (user.roleType === 'po' || user.roleType === 'admin' || user.roleType === 'executive')) {
       console.log('✅ PO 대시보드 로딩 조건 만족 - API 호출 시작');
       fetchDashboardData();
+      loadQcApprovalNotifications();
+      loadQcProgressData();
+      loadPePerformanceAnalytics();
+      loadWorkloadDistributionAnalytics();
       
       // 주기적 데이터 새로고침 (30초마다)
       const interval = setInterval(() => {
         fetchDashboardData();
+        loadQcApprovalNotifications();
+        loadQcProgressData();
+        loadPePerformanceAnalytics();
+        loadWorkloadDistributionAnalytics();
       }, 30000);
       
       return () => clearInterval(interval);
@@ -481,7 +675,6 @@ const PODashboard: React.FC = () => {
                         클릭하여 관리
                   </Typography>
                 </Box>
-                    <ProjectIcon sx={{ fontSize: 40, color: 'primary.main', opacity: 0.7 }} />
               </Box>
             </CardContent>
           </Card>
@@ -512,7 +705,6 @@ const PODashboard: React.FC = () => {
                         클릭하여 PE 할당
                   </Typography>
                 </Box>
-                    <CompletedIcon sx={{ fontSize: 40, color: 'success.main', opacity: 0.7 }} />
               </Box>
             </CardContent>
           </Card>
@@ -543,7 +735,6 @@ const PODashboard: React.FC = () => {
                         클릭하여 관리
                   </Typography>
                 </Box>
-                    <ProgressIcon sx={{ fontSize: 40, color: 'info.main', opacity: 0.7 }} />
               </Box>
             </CardContent>
           </Card>
@@ -574,20 +765,459 @@ const PODashboard: React.FC = () => {
                         클릭하여 관리
                   </Typography>
                 </Box>
-                    <WarningIcon sx={{ fontSize: 40, color: 'error.main', opacity: 0.7 }} />
               </Box>
             </CardContent>
           </Card>
         </Grid>
       </Grid>
 
+          {/* QC/QA 승인 완료 알림 섹션 */}
+          {qcApprovalNotifications.length > 0 && (
+            <Grid container spacing={3} sx={{ mb: 4 }}>
+              <Grid item xs={12}>
+                <Card sx={{ backgroundColor: '#fff3e0', border: '2px solid #ff9800' }}>
+                  <CardContent>
+                    <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: '#e65100' }}>
+                      QC/QA 검증 승인 완료 - 프로젝트 최종 보고서 작성 필요
+                      <Chip 
+                        label={`${qcApprovalNotifications.length}건`} 
+                        size="small" 
+                        color="warning" 
+                      />
+                    </Typography>
+                    
+                    <Box sx={{ maxHeight: 300, overflowY: 'auto' }}>
+                      {qcApprovalNotifications.map((notification, index) => (
+                        <Card key={notification.id || index} sx={{ mb: 2, border: '1px solid #ffcc02' }}>
+                          <CardContent sx={{ py: 2 }}>
+                            <Grid container spacing={2} alignItems="center">
+                              <Grid item xs={12} md={8}>
+                                <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
+                                  {notification.title || 'QC/QA 검증 승인 완료'}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                  {notification.message || notification.content || '검증 완료 보고서와 함께 승인되었습니다.'}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  {notification.created_at ? new Date(notification.created_at).toLocaleString() : '방금 전'}
+                                </Typography>
+                                {notification.metadata?.quality_score && (
+                                  <Chip 
+                                    label={`품질 점수: ${notification.metadata.quality_score}점`} 
+                                    size="small" 
+                                    color="success" 
+                                    sx={{ ml: 1 }}
+                                  />
+                                )}
+                              </Grid>
+                              <Grid item xs={12} md={4} sx={{ textAlign: 'right' }}>
+                                <Button
+                                  variant="contained"
+                                  color="success"
+                                  onClick={() => handleOpenSystemRegistrationDialog(notification)}
+                                  sx={{
+                                    backgroundColor: '#2e7d32',
+                                    '&:hover': {
+                                      backgroundColor: '#1b5e20'
+                                    },
+                                    fontWeight: 'bold'
+                                  }}
+                                >
+                                  프로젝트 최종 보고서 생성
+                                </Button>
+                              </Grid>
+                            </Grid>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+            </Grid>
+          )}
+
+          {/* QC/QA 진행 현황 섹션 */}
+          {qcProgressData.length > 0 && (
+            <Grid container spacing={3} sx={{ mb: 4 }}>
+              <Grid item xs={12}>
+                <Card>
+                  <CardContent>
+                    <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>
+                      QC/QA 검증 진행 현황
+                      <Chip 
+                        label={`${qcProgressData.length}건`} 
+                        size="small" 
+                        color="info" 
+                      />
+                    </Typography>
+                    
+                    <TableContainer component={Paper} variant="outlined">
+                      <Table>
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>프로젝트명</TableCell>
+                            <TableCell>담당자</TableCell>
+                            <TableCell>상태</TableCell>
+                            <TableCell>테스트 진행률</TableCell>
+                            <TableCell>품질 점수</TableCell>
+                            <TableCell>우선순위</TableCell>
+                            <TableCell>생성일</TableCell>
+                            <TableCell>액션</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {qcProgressData.map((qcRequest) => (
+                            <TableRow key={qcRequest.id} hover>
+                              <TableCell>
+                                <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                                  {qcRequest.project_name}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                <Typography variant="body2">
+                                  {qcRequest.assigned_to_name || '미할당'}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                <Chip 
+                                  label={
+                                    qcRequest.request_status === 'pending' ? '대기 중' :
+                                    qcRequest.request_status === 'in_progress' ? '진행 중' :
+                                    qcRequest.request_status === 'completed' ? '완료' : qcRequest.request_status
+                                  }
+                                  size="small"
+                                  color={
+                                    qcRequest.request_status === 'pending' ? 'default' :
+                                    qcRequest.request_status === 'in_progress' ? 'primary' :
+                                    qcRequest.request_status === 'completed' ? 'success' : 'default'
+                                  }
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  <LinearProgress 
+                                    variant="determinate" 
+                                    value={qcRequest.test_progress_percentage || 0}
+                                    sx={{ width: 80, height: 8, borderRadius: 4 }}
+                                  />
+                                  <Typography variant="caption">
+                                    {qcRequest.test_progress_percentage || 0}%
+                                  </Typography>
+                                </Box>
+                              </TableCell>
+                              <TableCell>
+                                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                  {qcRequest.quality_score ? `${qcRequest.quality_score}점` : '-'}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                <Chip 
+                                  label={
+                                    qcRequest.priority_level === 'high' ? '높음' :
+                                    qcRequest.priority_level === 'normal' ? '보통' : '낮음'
+                                  }
+                                  size="small"
+                                  color={
+                                    qcRequest.priority_level === 'high' ? 'error' :
+                                    qcRequest.priority_level === 'normal' ? 'warning' : 'default'
+                                  }
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Typography variant="caption">
+                                  {new Date(qcRequest.created_at).toLocaleDateString()}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  onClick={() => handleOpenQcProgressDialog(qcRequest)}
+                                >
+                                  상세보기
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </CardContent>
+                </Card>
+              </Grid>
+            </Grid>
+          )}
+
+          {/* PE 성과 분석 및 업무 부하 분산 모니터링 */}
+          <Grid container spacing={3} sx={{ mb: 4 }}>
+            <Grid item xs={12} md={6}>
+              <Card>
+                <CardContent>
+                  <Typography variant="h6" sx={{ mb: 3, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    📊 PE 성과 분석
+                    <Chip 
+                      label={pePerformanceData?.pe_performance?.length || 0} 
+                      size="small" 
+                      color="primary" 
+                    />
+                  </Typography>
+                  
+                  {!pePerformanceData?.pe_performance || pePerformanceData.pe_performance.length === 0 ? (
+                    <Alert severity="info">
+                      PE 성과 데이터를 로딩 중입니다...
+                    </Alert>
+                  ) : (
+                    <Box>
+                      {/* 팀 벤치마크 요약 */}
+                      <Box sx={{ mb: 3, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+                          팀 평균 성과
+                        </Typography>
+                        <Grid container spacing={2}>
+                          <Grid item xs={6}>
+                            <Typography variant="caption" color="text.secondary">완료율</Typography>
+                            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                              {pePerformanceData.team_benchmark?.team_avg_completion_rate?.toFixed(1) || 0}%
+                            </Typography>
+                          </Grid>
+                          <Grid item xs={6}>
+                            <Typography variant="caption" color="text.secondary">품질점수</Typography>
+                            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                              {pePerformanceData.team_benchmark?.team_avg_quality_score?.toFixed(1) || 0}점
+                            </Typography>
+                          </Grid>
+                        </Grid>
+                      </Box>
+
+                      {/* 상위 성과자 목록 */}
+                      <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 300 }}>
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>PE</TableCell>
+                              <TableCell align="center">등급</TableCell>
+                              <TableCell align="center">완료율</TableCell>
+                              <TableCell align="center">품질점수</TableCell>
+                              <TableCell align="center">트렌드</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {pePerformanceData.pe_performance.slice(0, 5).map((pe: any) => (
+                              <TableRow key={pe.pe_id} hover>
+                                <TableCell>
+                                  <Button
+                                    variant="text"
+                                    color="primary"
+                                    onClick={() => navigate(`/pe-workspace?peId=${pe.pe_id}&peName=${encodeURIComponent(pe.pe_name)}`)}
+                                    sx={{ 
+                                      textTransform: 'none',
+                                      fontWeight: 600,
+                                      p: 0,
+                                      minWidth: 'auto'
+                                    }}
+                                  >
+                                    {pe.pe_name}
+                                  </Button>
+                                </TableCell>
+                                <TableCell align="center">
+                                  <Chip
+                                    label={pe.performance_grade}
+                                    size="small"
+                                    color={
+                                      pe.performance_grade === 'S' ? 'success' :
+                                      pe.performance_grade === 'A' ? 'info' :
+                                      pe.performance_grade === 'B' ? 'warning' : 'default'
+                                    }
+                                  />
+                                </TableCell>
+                                <TableCell align="center">
+                                  <Typography variant="body2">
+                                    {pe.completion_rate?.toFixed(1) || 0}%
+                                  </Typography>
+                                </TableCell>
+                                <TableCell align="center">
+                                  <Typography variant="body2">
+                                    {pe.avg_quality_score?.toFixed(1) || 0}점
+                                  </Typography>
+                                </TableCell>
+                                <TableCell align="center">
+                                  <Box sx={{ display: 'flex', gap: 0.5 }}>
+                                    <Chip
+                                      label={pe.productivity_trend === 'up' ? '↗' : pe.productivity_trend === 'down' ? '↘' : '→'}
+                                      size="small"
+                                      color={pe.productivity_trend === 'up' ? 'success' : pe.productivity_trend === 'down' ? 'error' : 'default'}
+                                      variant="outlined"
+                                    />
+                                  </Box>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+
+                      <Box sx={{ mt: 2, textAlign: 'center' }}>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          onClick={() => setPerformanceAnalyticsDialog(true)}
+                        >
+                          상세 분석 보기
+                        </Button>
+                      </Box>
+                    </Box>
+                  )}
+                </CardContent>
+              </Card>
+            </Grid>
+
+            <Grid item xs={12} md={6}>
+              <Card>
+                <CardContent>
+                  <Typography variant="h6" sx={{ mb: 3, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    ⚖️ 업무 부하 분산
+                    <Chip 
+                      label={workloadDistributionData?.workload_analysis?.length || 0} 
+                      size="small" 
+                      color="secondary" 
+                    />
+                  </Typography>
+                  
+                  {!workloadDistributionData?.workload_analysis || workloadDistributionData.workload_analysis.length === 0 ? (
+                    <Alert severity="info">
+                      업무 부하 데이터를 로딩 중입니다...
+                    </Alert>
+                  ) : (
+                    <Box>
+                      {/* 워크로드 상태별 요약 */}
+                      <Box sx={{ mb: 3 }}>
+                        <Grid container spacing={1}>
+                          {['overloaded', 'busy', 'balanced', 'light', 'available'].map((status) => {
+                            const count = workloadDistributionData.workload_analysis.filter((pe: any) => pe.workload_status === status).length;
+                            const statusLabels = {
+                              overloaded: '과부하',
+                              busy: '바쁨',
+                              balanced: '적정',
+                              light: '여유',
+                              available: '가능'
+                            };
+                            const statusColors = {
+                              overloaded: 'error',
+                              busy: 'warning',
+                              balanced: 'success',
+                              light: 'info',
+                              available: 'default'
+                            };
+                            return (
+                              <Grid item key={status}>
+                                <Chip
+                                  label={`${statusLabels[status as keyof typeof statusLabels]} ${count}`}
+                                  size="small"
+                                  color={statusColors[status as keyof typeof statusColors] as any}
+                                  variant="outlined"
+                                />
+                              </Grid>
+                            );
+                          })}
+                        </Grid>
+                      </Box>
+
+                      {/* 워크로드 상위 PE 목록 */}
+                      <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 300 }}>
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>PE</TableCell>
+                              <TableCell align="center">상태</TableCell>
+                              <TableCell align="center">진행중</TableCell>
+                              <TableCell align="center">점수</TableCell>
+                              <TableCell align="center">권장사항</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {workloadDistributionData.workload_analysis.slice(0, 5).map((pe: any) => (
+                              <TableRow key={pe.pe_id} hover>
+                                <TableCell>
+                                  <Button
+                                    variant="text"
+                                    color="primary"
+                                    onClick={() => navigate(`/pe-workspace?peId=${pe.pe_id}&peName=${encodeURIComponent(pe.pe_name)}`)}
+                                    sx={{ 
+                                      textTransform: 'none',
+                                      fontWeight: 600,
+                                      p: 0,
+                                      minWidth: 'auto'
+                                    }}
+                                  >
+                                    {pe.pe_name}
+                                  </Button>
+                                </TableCell>
+                                <TableCell align="center">
+                                  <Chip
+                                    label={
+                                      pe.workload_status === 'overloaded' ? '과부하' :
+                                      pe.workload_status === 'busy' ? '바쁨' :
+                                      pe.workload_status === 'balanced' ? '적정' :
+                                      pe.workload_status === 'light' ? '여유' : '가능'
+                                    }
+                                    size="small"
+                                    color={
+                                      pe.workload_status === 'overloaded' ? 'error' :
+                                      pe.workload_status === 'busy' ? 'warning' :
+                                      pe.workload_status === 'balanced' ? 'success' :
+                                      pe.workload_status === 'light' ? 'info' : 'default'
+                                    }
+                                  />
+                                </TableCell>
+                                <TableCell align="center">
+                                  <Typography variant="body2">
+                                    {pe.active_projects}개
+                                  </Typography>
+                                </TableCell>
+                                <TableCell align="center">
+                                  <Typography variant="body2">
+                                    {pe.workload_score || 0}점
+                                  </Typography>
+                                </TableCell>
+                                <TableCell align="center">
+                                  <Typography variant="caption" color="text.secondary">
+                                    {
+                                      pe.recommendation === 'redistribute_urgent' ? '재분배 필요' :
+                                      pe.recommendation === 'monitor_closely' ? '모니터링' :
+                                      pe.recommendation === 'optimal_load' ? '최적' :
+                                      pe.recommendation === 'can_take_more' ? '추가 가능' : '할당 필요'
+                                    }
+                                  </Typography>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+
+                      <Box sx={{ mt: 2, textAlign: 'center' }}>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          onClick={() => setWorkloadAnalyticsDialog(true)}
+                        >
+                          상세 분석 보기
+                        </Button>
+                      </Box>
+                    </Box>
+                  )}
+                </CardContent>
+              </Card>
+            </Grid>
+          </Grid>
+
           {/* PE 작업 현황 및 긴급 사항 */}
           <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} md={8}>
           <Card>
             <CardContent>
-                  <Typography variant="h6" sx={{ mb: 3, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <TeamIcon />
+                  <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>
                     PE 작업 현황
                     <Chip 
                       label={`${dashboardData.pe_workload.length}명`} 
@@ -648,33 +1278,32 @@ const PODashboard: React.FC = () => {
                                 </Box>
                               </TableCell>
                               <TableCell>
-                                {pe.git_activity ? (
-                                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                      <Chip 
-                                        label={`7일: ${pe.git_activity.commits_last_7_days}회`} 
-                                size="small"
-                                        color={pe.git_activity.commits_last_7_days > 5 ? "success" : pe.git_activity.commits_last_7_days > 2 ? "warning" : "error"}
+                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    <Chip 
+                                      label={pe.active_assignments > 0 ? `작업중` : `대기중`} 
+                                      size="small"
+                                      color={pe.active_assignments > 0 ? "success" : "default"}
+                                      variant="outlined"
+                                    />
+                                    {pe.avg_progress > 0 && (
+                                      <Chip
+                                        label={`평균 ${pe.avg_progress?.toFixed(0) || 0}%`} 
+                                        size="small"
+                                        color={pe.avg_progress > 70 ? "success" : pe.avg_progress > 40 ? "warning" : "error"}
                                         variant="outlined"
-                              />
-                              <Chip
-                                        label={`활동점수: ${pe.git_activity.activity_score}`} 
-                                size="small"
-                                        color={pe.git_activity.activity_score > 70 ? "success" : pe.git_activity.activity_score > 40 ? "warning" : "error"}
-                                        variant="outlined"
-                              />
-                            </Box>
-                                    <Typography variant="caption" color="text.secondary">
-                                      최근 커밋: {pe.git_activity.last_commit_date ? 
-                                        new Date(pe.git_activity.last_commit_date).toLocaleDateString('ko-KR') : 
-                                        '없음'}
-                                    </Typography>
-                          </Box>
-                                ) : (
+                                      />
+                                    )}
+                                  </Box>
                                   <Typography variant="caption" color="text.secondary">
-                                    Git 데이터 없음
+                                    {pe.active_assignments > 0 
+                                      ? `${pe.active_assignments}개 프로젝트 진행중`
+                                      : pe.completed_assignments > 0 
+                                        ? `최근 ${pe.completed_assignments}개 완료`
+                                        : '할당 대기중'
+                                    }
                                   </Typography>
-                                )}
+                                </Box>
                               </TableCell>
                               <TableCell sx={{ width: '200px' }}>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -707,8 +1336,7 @@ const PODashboard: React.FC = () => {
         <Grid item xs={12} md={4}>
           <Card>
             <CardContent>
-                  <Typography variant="h6" sx={{ mb: 3, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <WarningIcon />
+                  <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>
                     긴급 처리 사항
                     <Chip 
                       label={dashboardData.urgent_items?.length || 0} 
@@ -775,8 +1403,7 @@ const PODashboard: React.FC = () => {
           <Grid item xs={12}>
             <Card>
               <CardContent>
-              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <ProgressIcon />
+              <Typography variant="h6" gutterBottom>
                 최근 PE 활동
                 <Chip 
                   label={dashboardData.recent_activities?.length || 0} 
@@ -801,7 +1428,7 @@ const PODashboard: React.FC = () => {
                                 variant="text"
                                 color="primary"
                                 onClick={() => {
-                                  navigate(`/pe-workspace?peId=${activity.pe_id}&peName=${encodeURIComponent(activity.pe_name)}`);
+                                  navigate(`/pe-workspace?peId=${(activity as any).pe_id}&peName=${encodeURIComponent((activity as any).pe_name || activity.pe_name || '')}`);
                                 }}
                                 sx={{ 
                                   textTransform: 'none',
@@ -818,18 +1445,18 @@ const PODashboard: React.FC = () => {
                               </Button>
                               <Chip 
                                 label={
-                                  activity.activity_type === 'project_assignment' ? '할당' :
-                                  activity.activity_type === 'work_start' ? '작업 시작' :
-                                  activity.activity_type === 'progress_update' ? '진행률 업데이트' :
-                                  activity.activity_type === 'code_commit' ? 'Git 커밋' :
-                                  activity.activity_type === 'issue_reported' ? '이슈 보고' : '활동'
+                                  (activity as any).activity_type === 'project_assignment' ? '할당' :
+                                  (activity as any).activity_type === 'work_start' ? '작업 시작' :
+                                  (activity as any).activity_type === 'progress_update' ? '진행률 업데이트' :
+                                  (activity as any).activity_type === 'code_commit' ? 'Git 커밋' :
+                                  (activity as any).activity_type === 'issue_reported' ? '이슈 보고' : '활동'
                                 }
                                 size="small" 
                                 color={
-                                  activity.status === 'success' ? 'success' :
-                                  activity.status === 'active' ? 'info' :
-                                  activity.status === 'warning' ? 'warning' :
-                                  activity.status === 'completed' ? 'primary' : 'default'
+                                  (activity as any).status === 'success' ? 'success' :
+                                  (activity as any).status === 'active' ? 'info' :
+                                  (activity as any).status === 'warning' ? 'warning' :
+                                  (activity as any).status === 'completed' ? 'primary' : 'default'
                                 } 
                               />
                             </Box>
@@ -846,7 +1473,7 @@ const PODashboard: React.FC = () => {
                                 📋 프로젝트: {activity.project_name}
                             </Typography>
                               <Typography variant="caption" color="text.secondary">
-                                🕐 {new Date(activity.timestamp).toLocaleString('ko-KR')}
+                                🕐 {new Date((activity as any).timestamp || activity.created_at).toLocaleString('ko-KR')}
                             </Typography>
                           </Box>
                         }
@@ -1109,8 +1736,861 @@ const PODashboard: React.FC = () => {
         </DialogActions>
       </Dialog>
 
-    </Container>
-  );
-};
+      {/* 시스템 등록 결정 다이얼로그 */}
+      <Dialog 
+        open={systemRegistrationDialog} 
+        onClose={() => setSystemRegistrationDialog(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          프로젝트 최종 보고서 생성
+          {selectedApprovalNotification && (
+            <Typography variant="subtitle2" color="text.secondary">
+              프로젝트: {selectedApprovalNotification.project_name || '알 수 없음'}
+            </Typography>
+          )}
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ mt: 2 }}>
+            <Grid container spacing={3}>
+              {/* 알림 정보 요약 */}
+              {selectedApprovalNotification && (
+                <Grid item xs={12}>
+                  <Paper variant="outlined" sx={{ p: 2, backgroundColor: '#f5f5f5' }}>
+                    <Typography variant="h6" gutterBottom>
+                      QC/QA 검증 결과 요약
+                    </Typography>
+                    <Typography variant="body2" sx={{ mb: 1 }}>
+                      <strong>프로젝트:</strong> {selectedApprovalNotification.project_name || '알 수 없음'}
+                    </Typography>
+                    <Typography variant="body2" sx={{ mb: 1 }}>
+                      <strong>검증 완료일:</strong> {selectedApprovalNotification.created_at ? new Date(selectedApprovalNotification.created_at).toLocaleString() : '알 수 없음'}
+                    </Typography>
+                    {selectedApprovalNotification.metadata?.quality_score && (
+                      <Typography variant="body2" sx={{ mb: 1 }}>
+                        <strong>품질 점수:</strong> {selectedApprovalNotification.metadata.quality_score}점
+                      </Typography>
+                    )}
+                    <Typography variant="body2" sx={{ whiteSpace: 'pre-line' }}>
+                      <strong>검증 내용:</strong><br />
+                      {selectedApprovalNotification.message || selectedApprovalNotification.content || '검증 완료 보고서와 함께 승인되었습니다.'}
+                    </Typography>
+                  </Paper>
+                </Grid>
+              )}
 
-export default PODashboard;
+              {/* 프로젝트 최종 결정 */}
+              <Grid item xs={12}>
+                <Typography variant="h6" gutterBottom>
+                  프로젝트 최종 결정
+                </Typography>
+                <FormControl fullWidth sx={{ mb: 2 }}>
+                  <InputLabel>최종 결정</InputLabel>
+                  <Select
+                    value={systemRegistrationDecision.decision}
+                    onChange={(e) => setSystemRegistrationDecision(prev => ({
+                      ...prev,
+                      decision: e.target.value
+                    }))}
+                    label="최종 결정"
+                  >
+                    <MenuItem value="approve">승인 - 시스템 등록 및 배포 진행</MenuItem>
+                    <MenuItem value="reject">반려 - 추가 개선 후 재검토</MenuItem>
+                    <MenuItem value="defer">보류 - 추가 검토 필요</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              {/* 배포 우선순위 (승인 시에만) */}
+              {systemRegistrationDecision.decision === 'approve' && (
+                <>
+                  <Grid item xs={12} md={6}>
+                    <FormControl fullWidth>
+                      <InputLabel>배포 우선순위</InputLabel>
+                      <Select
+                        value={systemRegistrationDecision.deployment_priority}
+                        onChange={(e) => setSystemRegistrationDecision(prev => ({
+                          ...prev,
+                          deployment_priority: e.target.value
+                        }))}
+                        label="배포 우선순위"
+                      >
+                        <MenuItem value="high">높음 - 긴급 배포</MenuItem>
+                        <MenuItem value="normal">보통 - 일반 배포</MenuItem>
+                        <MenuItem value="low">낮음 - 차후 배포</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+
+                  <Grid item xs={12} md={6}>
+                    <FormControl fullWidth>
+                      <InputLabel>대상 환경</InputLabel>
+                      <Select
+                        value={systemRegistrationDecision.target_environment}
+                        onChange={(e) => setSystemRegistrationDecision(prev => ({
+                          ...prev,
+                          target_environment: e.target.value
+                        }))}
+                        label="대상 환경"
+                      >
+                        <MenuItem value="production">프로덕션</MenuItem>
+                        <MenuItem value="staging">스테이징</MenuItem>
+                        <MenuItem value="development">개발</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                </>
+              )}
+
+              {/* 최종 보고서 및 결정 사유 */}
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={6}
+                  label={systemRegistrationDecision.decision === 'approve' ? '프로젝트 최종 보고서 및 승인 사유' : 
+                       systemRegistrationDecision.decision === 'reject' ? '프로젝트 최종 보고서 및 반려 사유' : '프로젝트 최종 보고서 및 보류 사유'}
+                  value={systemRegistrationDecision.registration_notes}
+                  onChange={(e) => setSystemRegistrationDecision(prev => ({
+                    ...prev,
+                    registration_notes: e.target.value
+                  }))}
+                  placeholder={systemRegistrationDecision.decision === 'approve' ? 
+                    '프로젝트 완료 현황, 품질 검증 결과, 시스템 등록 승인 사유, 배포 계획 등을 포함한 최종 보고서를 작성해주세요.' :
+                    systemRegistrationDecision.decision === 'reject' ?
+                    '프로젝트 완료 현황, 품질 검증 결과, 반려 사유, 개선 요청사항 등을 포함한 최종 보고서를 작성해주세요.' :
+                    '프로젝트 완료 현황, 품질 검증 결과, 보류 사유, 추가 검토 사항 등을 포함한 최종 보고서를 작성해주세요.'
+                  }
+                  required
+                />
+              </Grid>
+            </Grid>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSystemRegistrationDialog(false)}>
+            취소
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleSystemRegistrationDecision}
+            disabled={submittingDecision || !systemRegistrationDecision.registration_notes.trim()}
+            color={systemRegistrationDecision.decision === 'approve' ? 'success' : 
+                   systemRegistrationDecision.decision === 'reject' ? 'error' : 'warning'}
+            sx={{
+              px: 4,
+              py: 1.5,
+              fontSize: '1.1rem',
+              fontWeight: 'bold'
+            }}
+          >
+            {submittingDecision ? '보고서 생성 중...' : 
+             systemRegistrationDecision.decision === 'approve' ? '최종 보고서 생성 및 승인' :
+             systemRegistrationDecision.decision === 'reject' ? '최종 보고서 생성 및 반려' : '최종 보고서 생성 및 보류'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* QC/QA 진행 상세 정보 다이얼로그 */}
+      <Dialog 
+        open={qcProgressDialog} 
+        onClose={() => setQcProgressDialog(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          QC/QA 검증 상세 정보
+          {selectedQcRequest && (
+            <Typography variant="subtitle2" color="text.secondary">
+              프로젝트: {selectedQcRequest.project_name}
+            </Typography>
+          )}
+        </DialogTitle>
+        <DialogContent>
+          {selectedQcRequest && (
+            <Box sx={{ mt: 2 }}>
+              <Grid container spacing={3}>
+                {/* 기본 정보 */}
+                <Grid item xs={12}>
+                  <Typography variant="h6" gutterBottom>
+                    기본 정보
+                  </Typography>
+                  <Paper variant="outlined" sx={{ p: 2 }}>
+                    <Grid container spacing={2}>
+                      <Grid item xs={6}>
+                        <Typography variant="body2" color="text.secondary">프로젝트명</Typography>
+                        <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                          {selectedQcRequest.project_name}
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Typography variant="body2" color="text.secondary">담당자</Typography>
+                        <Typography variant="body1">
+                          {selectedQcRequest.assigned_to_name || '미할당'}
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Typography variant="body2" color="text.secondary">상태</Typography>
+                        <Chip 
+                          label={
+                            selectedQcRequest.request_status === 'pending' ? '대기 중' :
+                            selectedQcRequest.request_status === 'in_progress' ? '진행 중' :
+                            selectedQcRequest.request_status === 'completed' ? '완료' : selectedQcRequest.request_status
+                          }
+                          size="small"
+                          color={
+                            selectedQcRequest.request_status === 'pending' ? 'default' :
+                            selectedQcRequest.request_status === 'in_progress' ? 'primary' :
+                            selectedQcRequest.request_status === 'completed' ? 'success' : 'default'
+                          }
+                        />
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Typography variant="body2" color="text.secondary">우선순위</Typography>
+                        <Chip 
+                          label={
+                            selectedQcRequest.priority_level === 'high' ? '높음' :
+                            selectedQcRequest.priority_level === 'normal' ? '보통' : '낮음'
+                          }
+                          size="small"
+                          color={
+                            selectedQcRequest.priority_level === 'high' ? 'error' :
+                            selectedQcRequest.priority_level === 'normal' ? 'warning' : 'default'
+                          }
+                        />
+                      </Grid>
+                    </Grid>
+                  </Paper>
+                </Grid>
+
+                {/* 테스트 진행 현황 */}
+                <Grid item xs={12}>
+                  <Typography variant="h6" gutterBottom>
+                    테스트 진행 현황
+                  </Typography>
+                  <Paper variant="outlined" sx={{ p: 2 }}>
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="body2" color="text.secondary" gutterBottom>
+                        전체 진행률
+                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <LinearProgress 
+                          variant="determinate" 
+                          value={selectedQcRequest.test_progress_percentage || 0}
+                          sx={{ flex: 1, height: 12, borderRadius: 6 }}
+                        />
+                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                          {selectedQcRequest.test_progress_percentage || 0}%
+                        </Typography>
+                      </Box>
+                    </Box>
+                    
+                    {selectedQcRequest.test_statistics && (
+                      <Grid container spacing={2}>
+                        <Grid item xs={3}>
+                          <Box sx={{ textAlign: 'center' }}>
+                            <Typography variant="h6" color="primary">
+                              {selectedQcRequest.test_statistics.total_tests || 0}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              전체 테스트
+                            </Typography>
+                          </Box>
+                        </Grid>
+                        <Grid item xs={3}>
+                          <Box sx={{ textAlign: 'center' }}>
+                            <Typography variant="h6" color="success.main">
+                              {selectedQcRequest.test_statistics.passed_tests || 0}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              통과
+                            </Typography>
+                          </Box>
+                        </Grid>
+                        <Grid item xs={3}>
+                          <Box sx={{ textAlign: 'center' }}>
+                            <Typography variant="h6" color="error.main">
+                              {selectedQcRequest.test_statistics.failed_tests || 0}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              실패
+                            </Typography>
+                          </Box>
+                        </Grid>
+                        <Grid item xs={3}>
+                          <Box sx={{ textAlign: 'center' }}>
+                            <Typography variant="h6" color="warning.main">
+                              {selectedQcRequest.test_statistics.pending_tests || 0}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              대기 중
+                            </Typography>
+                          </Box>
+                        </Grid>
+                      </Grid>
+                    )}
+                  </Paper>
+                </Grid>
+
+                {/* 품질 점수 */}
+                {selectedQcRequest.quality_score && (
+                  <Grid item xs={12}>
+                    <Typography variant="h6" gutterBottom>
+                      품질 평가
+                    </Typography>
+                    <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
+                      <Typography variant="h3" sx={{ fontWeight: 700, color: 'success.main', mb: 1 }}>
+                        {selectedQcRequest.quality_score}점
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        최종 품질 점수
+                      </Typography>
+                    </Paper>
+                  </Grid>
+                )}
+
+                {/* 승인 상태 */}
+                {selectedQcRequest.approval_status && (
+                  <Grid item xs={12}>
+                    <Typography variant="h6" gutterBottom>
+                      승인 상태
+                    </Typography>
+                    <Paper variant="outlined" sx={{ p: 2 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Chip 
+                          label={
+                            selectedQcRequest.approval_status === 'approved' ? '승인 완료' :
+                            selectedQcRequest.approval_status === 'pending' ? '승인 대기' : '미승인'
+                          }
+                          color={selectedQcRequest.approval_status === 'approved' ? 'success' : 'default'}
+                        />
+                        {selectedQcRequest.approved_at && (
+                          <Typography variant="body2" color="text.secondary">
+                            승인일: {new Date(selectedQcRequest.approved_at).toLocaleString()}
+                          </Typography>
+                        )}
+                      </Box>
+                    </Paper>
+                  </Grid>
+                )}
+              </Grid>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setQcProgressDialog(false)}>
+            닫기
+          </Button>
+        </DialogActions>
+        </Dialog>
+
+        {/* PE 성과 분석 상세 다이얼로그 */}
+        <Dialog 
+          open={performanceAnalyticsDialog} 
+          onClose={() => setPerformanceAnalyticsDialog(false)}
+          maxWidth="lg"
+          fullWidth
+        >
+          <DialogTitle>
+            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+              📊 PE 성과 분석 상세 보고서
+            </Typography>
+          </DialogTitle>
+          <DialogContent>
+            {pePerformanceData && (
+              <Box sx={{ mt: 2 }}>
+                {/* 팀 전체 요약 */}
+                <Card sx={{ mb: 3 }}>
+                  <CardContent>
+                    <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                      팀 전체 성과 요약
+                    </Typography>
+                    <Grid container spacing={3}>
+                      <Grid item xs={12} md={3}>
+                        <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'primary.50', borderRadius: 1 }}>
+                          <Typography variant="h4" sx={{ fontWeight: 700, color: 'primary.main' }}>
+                            {pePerformanceData.team_benchmark?.total_pe_count || 0}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">총 PE 수</Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={12} md={3}>
+                        <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'success.50', borderRadius: 1 }}>
+                          <Typography variant="h4" sx={{ fontWeight: 700, color: 'success.main' }}>
+                            {pePerformanceData.team_benchmark?.high_performers_count || 0}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">고성과자 (80%+)</Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={12} md={3}>
+                        <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'info.50', borderRadius: 1 }}>
+                          <Typography variant="h4" sx={{ fontWeight: 700, color: 'info.main' }}>
+                            {pePerformanceData.team_benchmark?.team_avg_completion_rate?.toFixed(1) || 0}%
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">평균 완료율</Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={12} md={3}>
+                        <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'warning.50', borderRadius: 1 }}>
+                          <Typography variant="h4" sx={{ fontWeight: 700, color: 'warning.main' }}>
+                            {pePerformanceData.team_benchmark?.team_avg_quality_score?.toFixed(1) || 0}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">평균 품질점수</Typography>
+                        </Box>
+                      </Grid>
+                    </Grid>
+                  </CardContent>
+                </Card>
+
+                {/* 전체 PE 성과 테이블 */}
+                <Card>
+                  <CardContent>
+                    <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                      전체 PE 성과 상세 분석
+                    </Typography>
+                    <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 500 }}>
+                      <Table stickyHeader size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell sx={{ fontWeight: 600 }}>PE</TableCell>
+                            <TableCell align="center" sx={{ fontWeight: 600 }}>등급</TableCell>
+                            <TableCell align="center" sx={{ fontWeight: 600 }}>총 프로젝트</TableCell>
+                            <TableCell align="center" sx={{ fontWeight: 600 }}>완료율</TableCell>
+                            <TableCell align="center" sx={{ fontWeight: 600 }}>품질점수</TableCell>
+                            <TableCell align="center" sx={{ fontWeight: 600 }}>평균 개발시간</TableCell>
+                            <TableCell align="center" sx={{ fontWeight: 600 }}>재작업률</TableCell>
+                            <TableCell align="center" sx={{ fontWeight: 600 }}>최근 30일 활동</TableCell>
+                            <TableCell align="center" sx={{ fontWeight: 600 }}>지연 프로젝트</TableCell>
+                            <TableCell align="center" sx={{ fontWeight: 600 }}>생산성 트렌드</TableCell>
+                            <TableCell align="center" sx={{ fontWeight: 600 }}>품질 트렌드</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {pePerformanceData.pe_performance.map((pe: any) => (
+                            <TableRow key={pe.pe_id} hover>
+                              <TableCell>
+                                <Button
+                                  variant="text"
+                                  color="primary"
+                                  onClick={() => {
+                                    setPerformanceAnalyticsDialog(false);
+                                    navigate(`/pe-workspace?peId=${pe.pe_id}&peName=${encodeURIComponent(pe.pe_name)}`);
+                                  }}
+                                  sx={{ 
+                                    textTransform: 'none',
+                                    fontWeight: 600,
+                                    p: 0,
+                                    minWidth: 'auto'
+                                  }}
+                                >
+                                  {pe.pe_name}
+                                </Button>
+                                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                  {pe.email}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="center">
+                                <Chip
+                                  label={pe.performance_grade}
+                                  size="small"
+                                  color={
+                                    pe.performance_grade === 'S' ? 'success' :
+                                    pe.performance_grade === 'A' ? 'info' :
+                                    pe.performance_grade === 'B' ? 'warning' : 'default'
+                                  }
+                                />
+                              </TableCell>
+                              <TableCell align="center">
+                                <Typography variant="body2">
+                                  {pe.total_projects || 0}개
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  (완료: {pe.completed_projects || 0}, 진행: {pe.active_projects || 0})
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="center">
+                                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                  <LinearProgress 
+                                    variant="determinate" 
+                                    value={pe.completion_rate || 0}
+                                    sx={{ width: '60px', mb: 0.5 }}
+                                    color={
+                                      (pe.completion_rate || 0) >= 80 ? 'success' :
+                                      (pe.completion_rate || 0) >= 60 ? 'info' :
+                                      (pe.completion_rate || 0) >= 40 ? 'warning' : 'error'
+                                    }
+                                  />
+                                  <Typography variant="caption">
+                                    {pe.completion_rate?.toFixed(1) || 0}%
+                                  </Typography>
+                                </Box>
+                              </TableCell>
+                              <TableCell align="center">
+                                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                  {pe.avg_quality_score?.toFixed(1) || 0}점
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="center">
+                                <Typography variant="body2">
+                                  {pe.avg_development_hours ? `${(parseFloat(pe.avg_development_hours) || 0).toFixed(1)}시간` : 'N/A'}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="center">
+                                <Typography 
+                                  variant="body2"
+                                  color={
+                                    (pe.rework_rate || 0) > 20 ? 'error.main' :
+                                    (pe.rework_rate || 0) > 10 ? 'warning.main' : 'success.main'
+                                  }
+                                >
+                                  {pe.rework_rate?.toFixed(1) || 0}%
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="center">
+                                <Typography variant="body2">
+                                  {pe.recent_activity_count || 0}건
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="center">
+                                <Typography 
+                                  variant="body2"
+                                  color={(pe.delayed_projects || 0) > 0 ? 'error.main' : 'text.primary'}
+                                >
+                                  {pe.delayed_projects || 0}개
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="center">
+                                <Chip
+                                  label={pe.productivity_trend === 'up' ? '↗ 상승' : pe.productivity_trend === 'down' ? '↘ 하락' : '→ 안정'}
+                                  size="small"
+                                  color={pe.productivity_trend === 'up' ? 'success' : pe.productivity_trend === 'down' ? 'error' : 'default'}
+                                  variant="outlined"
+                                />
+                              </TableCell>
+                              <TableCell align="center">
+                                <Chip
+                                  label={pe.quality_trend === 'up' ? '↗ 개선' : pe.quality_trend === 'down' ? '↘ 저하' : '→ 유지'}
+                                  size="small"
+                                  color={pe.quality_trend === 'up' ? 'success' : pe.quality_trend === 'down' ? 'error' : 'default'}
+                                  variant="outlined"
+                                />
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </CardContent>
+                </Card>
+              </Box>
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setPerformanceAnalyticsDialog(false)}>
+              닫기
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* 업무 부하 분산 상세 다이얼로그 */}
+        <Dialog 
+          open={workloadAnalyticsDialog} 
+          onClose={() => setWorkloadAnalyticsDialog(false)}
+          maxWidth="lg"
+          fullWidth
+        >
+          <DialogTitle>
+            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+              ⚖️ 업무 부하 분산 상세 분석
+            </Typography>
+          </DialogTitle>
+          <DialogContent>
+            {workloadDistributionData && (
+              <Box sx={{ mt: 2 }}>
+                {/* 워크로드 상태 요약 */}
+                <Card sx={{ mb: 3 }}>
+                  <CardContent>
+                    <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                      워크로드 상태 분포
+                    </Typography>
+                    <Grid container spacing={2}>
+                      {['overloaded', 'busy', 'balanced', 'light', 'available'].map((status) => {
+                        const count = workloadDistributionData.workload_analysis.filter((pe: any) => pe.workload_status === status).length;
+                        const percentage = ((count / workloadDistributionData.workload_analysis.length) * 100).toFixed(1);
+                        const statusLabels = {
+                          overloaded: '과부하',
+                          busy: '바쁨',
+                          balanced: '적정',
+                          light: '여유',
+                          available: '가능'
+                        };
+                        const statusColors = {
+                          overloaded: 'error',
+                          busy: 'warning',
+                          balanced: 'success',
+                          light: 'info',
+                          available: 'default'
+                        };
+                        return (
+                          <Grid item xs={12} md={2.4} key={status}>
+                            <Box sx={{ 
+                              textAlign: 'center', 
+                              p: 2, 
+                              bgcolor: `${statusColors[status as keyof typeof statusColors]}.50`, 
+                              borderRadius: 1,
+                              border: 1,
+                              borderColor: `${statusColors[status as keyof typeof statusColors]}.200`
+                            }}>
+                              <Typography variant="h4" sx={{ 
+                                fontWeight: 700, 
+                                color: `${statusColors[status as keyof typeof statusColors]}.main` 
+                              }}>
+                                {count}
+                              </Typography>
+                              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                {statusLabels[status as keyof typeof statusLabels]}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                ({percentage}%)
+                              </Typography>
+                            </Box>
+                          </Grid>
+                        );
+                      })}
+                    </Grid>
+                  </CardContent>
+                </Card>
+
+                {/* 전체 PE 워크로드 테이블 */}
+                <Card sx={{ mb: 3 }}>
+                  <CardContent>
+                    <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                      전체 PE 워크로드 상세 분석
+                    </Typography>
+                    <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 400 }}>
+                      <Table stickyHeader size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell sx={{ fontWeight: 600 }}>PE</TableCell>
+                            <TableCell align="center" sx={{ fontWeight: 600 }}>상태</TableCell>
+                            <TableCell align="center" sx={{ fontWeight: 600 }}>워크로드 점수</TableCell>
+                            <TableCell align="center" sx={{ fontWeight: 600 }}>진행중 프로젝트</TableCell>
+                            <TableCell align="center" sx={{ fontWeight: 600 }}>우선순위별</TableCell>
+                            <TableCell align="center" sx={{ fontWeight: 600 }}>지연/마감임박</TableCell>
+                            <TableCell align="center" sx={{ fontWeight: 600 }}>예상 작업시간</TableCell>
+                            <TableCell align="center" sx={{ fontWeight: 600 }}>최근 완료</TableCell>
+                            <TableCell align="center" sx={{ fontWeight: 600 }}>권장사항</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {workloadDistributionData.workload_analysis.map((pe: any) => (
+                            <TableRow key={pe.pe_id} hover>
+                              <TableCell>
+                                <Button
+                                  variant="text"
+                                  color="primary"
+                                  onClick={() => {
+                                    setWorkloadAnalyticsDialog(false);
+                                    navigate(`/pe-workspace?peId=${pe.pe_id}&peName=${encodeURIComponent(pe.pe_name)}`);
+                                  }}
+                                  sx={{ 
+                                    textTransform: 'none',
+                                    fontWeight: 600,
+                                    p: 0,
+                                    minWidth: 'auto'
+                                  }}
+                                >
+                                  {pe.pe_name}
+                                </Button>
+                              </TableCell>
+                              <TableCell align="center">
+                                <Chip
+                                  label={
+                                    pe.workload_status === 'overloaded' ? '과부하' :
+                                    pe.workload_status === 'busy' ? '바쁨' :
+                                    pe.workload_status === 'balanced' ? '적정' :
+                                    pe.workload_status === 'light' ? '여유' : '가능'
+                                  }
+                                  size="small"
+                                  color={
+                                    pe.workload_status === 'overloaded' ? 'error' :
+                                    pe.workload_status === 'busy' ? 'warning' :
+                                    pe.workload_status === 'balanced' ? 'success' :
+                                    pe.workload_status === 'light' ? 'info' : 'default'
+                                  }
+                                />
+                              </TableCell>
+                              <TableCell align="center">
+                                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                  <LinearProgress 
+                                    variant="determinate" 
+                                    value={pe.workload_score || 0}
+                                    sx={{ width: '60px', mb: 0.5 }}
+                                    color={
+                                      (pe.workload_score || 0) >= 80 ? 'error' :
+                                      (pe.workload_score || 0) >= 60 ? 'warning' :
+                                      (pe.workload_score || 0) >= 30 ? 'success' : 'info'
+                                    }
+                                  />
+                                  <Typography variant="caption">
+                                    {pe.workload_score || 0}점
+                                  </Typography>
+                                </Box>
+                              </TableCell>
+                              <TableCell align="center">
+                                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                  {pe.active_projects || 0}개
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="center">
+                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                                  {pe.high_priority_projects > 0 && (
+                                    <Chip label={`긴급 ${pe.high_priority_projects}`} size="small" color="error" variant="outlined" />
+                                  )}
+                                  {pe.normal_priority_projects > 0 && (
+                                    <Chip label={`보통 ${pe.normal_priority_projects}`} size="small" color="info" variant="outlined" />
+                                  )}
+                                  {pe.low_priority_projects > 0 && (
+                                    <Chip label={`낮음 ${pe.low_priority_projects}`} size="small" color="default" variant="outlined" />
+                                  )}
+                                </Box>
+                              </TableCell>
+                              <TableCell align="center">
+                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                                  {pe.overdue_projects > 0 && (
+                                    <Chip label={`지연 ${pe.overdue_projects}`} size="small" color="error" />
+                                  )}
+                                  {pe.due_this_week > 0 && (
+                                    <Chip label={`마감임박 ${pe.due_this_week}`} size="small" color="warning" />
+                                  )}
+                                  {pe.overdue_projects === 0 && pe.due_this_week === 0 && (
+                                    <Typography variant="caption" color="success.main">양호</Typography>
+                                  )}
+                                </Box>
+                              </TableCell>
+                              <TableCell align="center">
+                                <Typography variant="body2">
+                                  {pe.total_estimated_hours ? `${(parseFloat(pe.total_estimated_hours) || 0).toFixed(1)}시간` : 'N/A'}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="center">
+                                <Typography variant="body2">
+                                  {pe.recent_completions || 0}건
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="center">
+                                <Typography 
+                                  variant="caption" 
+                                  color={
+                                    pe.recommendation === 'redistribute_urgent' ? 'error.main' :
+                                    pe.recommendation === 'monitor_closely' ? 'warning.main' :
+                                    pe.recommendation === 'optimal_load' ? 'success.main' : 'info.main'
+                                  }
+                                  sx={{ fontWeight: 600 }}
+                                >
+                                  {
+                                    pe.recommendation === 'redistribute_urgent' ? '재분배 필요' :
+                                    pe.recommendation === 'monitor_closely' ? '모니터링' :
+                                    pe.recommendation === 'optimal_load' ? '최적 상태' :
+                                    pe.recommendation === 'can_take_more' ? '추가 할당 가능' : '할당 필요'
+                                  }
+                                </Typography>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </CardContent>
+                </Card>
+
+                {/* 프로젝트 할당 최적화 제안 */}
+                {workloadDistributionData.optimization_suggestions && workloadDistributionData.optimization_suggestions.length > 0 && (
+                  <Card>
+                    <CardContent>
+                      <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                        🎯 프로젝트 할당 최적화 제안
+                      </Typography>
+                      <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 300 }}>
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell sx={{ fontWeight: 600 }}>프로젝트</TableCell>
+                              <TableCell align="center" sx={{ fontWeight: 600 }}>우선순위</TableCell>
+                              <TableCell align="center" sx={{ fontWeight: 600 }}>기술스택</TableCell>
+                              <TableCell sx={{ fontWeight: 600 }}>추천 PE</TableCell>
+                              <TableCell align="center" sx={{ fontWeight: 600 }}>현재 부하</TableCell>
+                              <TableCell align="center" sx={{ fontWeight: 600 }}>매칭점수</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {workloadDistributionData.optimization_suggestions.slice(0, 10).map((suggestion: any, index: number) => (
+                              <TableRow key={index} hover>
+                                <TableCell>
+                                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                    {suggestion.project_name}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell align="center">
+                                  <Chip
+                                    label={suggestion.urgency_level === 'high' ? '긴급' : suggestion.urgency_level === 'normal' ? '보통' : '낮음'}
+                                    size="small"
+                                    color={suggestion.urgency_level === 'high' ? 'error' : suggestion.urgency_level === 'normal' ? 'info' : 'default'}
+                                  />
+                                </TableCell>
+                                <TableCell align="center">
+                                  <Typography variant="caption">
+                                    {suggestion.tech_stack || 'N/A'}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell>
+                                  <Button
+                                    variant="text"
+                                    color="primary"
+                                    onClick={() => navigate(`/pe-workspace?peId=${suggestion.pe_id}&peName=${encodeURIComponent(suggestion.pe_name)}`)}
+                                    sx={{ 
+                                      textTransform: 'none',
+                                      fontWeight: 600,
+                                      p: 0,
+                                      minWidth: 'auto'
+                                    }}
+                                  >
+                                    {suggestion.pe_name}
+                                  </Button>
+                                </TableCell>
+                                <TableCell align="center">
+                                  <Typography variant="body2">
+                                    {suggestion.current_load}개
+                                  </Typography>
+                                </TableCell>
+                                <TableCell align="center">
+                                  <Chip
+                                    label={`${suggestion.match_score}점`}
+                                    size="small"
+                                    color={suggestion.match_score >= 50 ? 'success' : suggestion.match_score >= 30 ? 'info' : 'default'}
+                                  />
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    </CardContent>
+                  </Card>
+                )}
+              </Box>
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setWorkloadAnalyticsDialog(false)}>
+              닫기
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+      </Container>
+    );
+  };
+
+  export default PODashboard;

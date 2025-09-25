@@ -1274,4 +1274,965 @@ router.put('/projects/:id/status',
   }
 );
 
+// 시스템 등록 승인 요청 목록 조회
+router.get('/system-registration-requests', async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    console.log('🔍 시스템 등록 승인 요청 목록 조회 시작');
+    
+    // PO가 승인한 시스템 등록 요청들 조회
+    const requestsResult = await client.query(`
+      SELECT 
+        sr.id,
+        sr.project_id,
+        sr.po_decision,
+        sr.registration_notes,
+        sr.deployment_priority,
+        sr.target_environment,
+        sr.created_at,
+        sr.updated_at,
+        p.name as project_name,
+        p.target_system_name,
+        p.project_overview,
+        pcr.quality_score,
+        pcr.repository_url,
+        po.full_name as po_name,
+        qr.quality_score as qc_quality_score,
+        qr.approval_status as qc_approval_status,
+        qr.approved_at as qc_approved_at
+      FROM system_registrations sr
+      JOIN projects p ON sr.project_id = p.id
+      LEFT JOIN project_completion_reports pcr ON p.id = pcr.project_id
+      LEFT JOIN timbel_users po ON sr.decided_by = po.id
+      LEFT JOIN qc_qa_requests qr ON p.id = qr.project_id
+      WHERE sr.po_decision = 'approve' 
+        AND sr.admin_decision IS NULL
+      ORDER BY 
+        CASE sr.deployment_priority 
+          WHEN 'high' THEN 1 
+          WHEN 'normal' THEN 2 
+          WHEN 'low' THEN 3 
+        END,
+        sr.created_at ASC
+    `);
+
+    console.log(`✅ 시스템 등록 승인 요청 ${requestsResult.rows.length}건 조회 완료`);
+
+    res.json({
+      success: true,
+      data: requestsResult.rows,
+      message: `시스템 등록 승인 요청 ${requestsResult.rows.length}건 조회 완료`
+    });
+
+  } catch (error) {
+    console.error('❌ 시스템 등록 승인 요청 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch system registration requests',
+      message: '시스템 등록 승인 요청 조회에 실패했습니다.'
+    });
+  } finally {
+    client.release();
+  }
+});
+
+// 관리자 시스템 등록 승인/반려 처리
+router.post('/system-registration-decision/:requestId', async (req, res) => {
+  const { requestId } = req.params;
+  const { decision, admin_notes, deployment_schedule } = req.body;
+  const userId = req.user?.id;
+
+  if (!userId) {
+    return res.status(401).json({
+      success: false,
+      error: 'Unauthorized',
+      message: '인증이 필요합니다.'
+    });
+  }
+
+  if (!['approve', 'reject'].includes(decision)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid decision',
+      message: '올바른 결정을 선택해주세요. (approve/reject)'
+    });
+  }
+
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+    
+    console.log('🔍 관리자 시스템 등록 결정 처리 시작:', { requestId, decision, userId });
+
+    // 시스템 등록 요청 정보 조회
+    const requestResult = await client.query(`
+      SELECT sr.*, p.name as project_name, p.target_system_name
+      FROM system_registrations sr
+      JOIN projects p ON sr.project_id = p.id
+      WHERE sr.id = $1 AND sr.po_decision = 'approve' AND sr.admin_decision IS NULL
+    `, [requestId]);
+
+    if (requestResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({
+        success: false,
+        error: 'Request not found',
+        message: '승인 요청을 찾을 수 없거나 이미 처리되었습니다.'
+      });
+    }
+
+    const request = requestResult.rows[0];
+
+    // 관리자 결정 업데이트
+    await client.query(`
+      UPDATE system_registrations 
+      SET 
+        admin_decision = $1,
+        admin_decided_by = $2,
+        admin_notes = $3,
+        deployment_schedule = $4,
+        admin_decided_at = NOW(),
+        updated_at = NOW()
+      WHERE id = $5
+    `, [decision, userId, admin_notes, deployment_schedule, requestId]);
+
+    // 프로젝트 상태 업데이트
+    let newProjectStatus;
+    if (decision === 'approve') {
+      newProjectStatus = 'approved_for_deployment';
+    } else {
+      newProjectStatus = 'registration_rejected';
+    }
+
+    await client.query(`
+      UPDATE projects 
+      SET project_status = $1, updated_at = NOW()
+      WHERE id = $2
+    `, [newProjectStatus, request.project_id]);
+
+    // 시스템 이벤트 로그 기록
+    await client.query(`
+      INSERT INTO system_event_stream (
+        id, event_type, user_id, project_id, event_data, created_at
+      ) VALUES (
+        gen_random_uuid(), 'admin_system_registration_decision', $1, $2, $3, NOW()
+      )
+    `, [
+      userId,
+      request.project_id,
+      JSON.stringify({
+        request_id: requestId,
+        decision: decision,
+        admin_notes: admin_notes,
+        deployment_schedule: deployment_schedule,
+        project_name: request.project_name,
+        target_system_name: request.target_system_name
+      })
+    ]);
+
+    // PO에게 알림 전송
+    if (decision === 'approve') {
+      await client.query(`
+        INSERT INTO unified_messages (
+          id, message_type, title, message, priority_level, sender_id, 
+          related_project_id, metadata, created_at
+        ) VALUES (
+          gen_random_uuid(), 'system_registration_approved', 
+          '시스템 등록 승인 완료',
+          $1, 'high', $2, $3, $4, NOW()
+        )
+      `, [
+        `${request.project_name} 프로젝트의 시스템 등록이 최종 승인되었습니다.\n\n` +
+        `배포 우선순위: ${request.deployment_priority}\n` +
+        `대상 환경: ${request.target_environment}\n` +
+        `배포 일정: ${deployment_schedule || '미정'}\n\n` +
+        `관리자 메모: ${admin_notes || '없음'}`,
+        userId,
+        request.project_id,
+        JSON.stringify({
+          system_registration_id: requestId,
+          decision: 'approve',
+          deployment_schedule: deployment_schedule
+        })
+      ]);
+
+      // PO에게 메시지 수신자 등록
+      const poResult = await client.query(`
+        SELECT id FROM timbel_users WHERE id = $1
+      `, [request.decided_by]);
+
+      if (poResult.rows.length > 0) {
+        const messageResult = await client.query(`
+          SELECT id FROM unified_messages 
+          WHERE related_project_id = $1 AND message_type = 'system_registration_approved'
+          ORDER BY created_at DESC LIMIT 1
+        `, [request.project_id]);
+
+        if (messageResult.rows.length > 0) {
+          await client.query(`
+            INSERT INTO unified_message_recipients (
+              id, message_id, recipient_id, is_read, created_at
+            ) VALUES (
+              gen_random_uuid(), $1, $2, false, NOW()
+            )
+          `, [messageResult.rows[0].id, request.decided_by]);
+        }
+      }
+    } else {
+      // 반려 시 PO에게 알림
+      await client.query(`
+        INSERT INTO unified_messages (
+          id, message_type, title, message, priority_level, sender_id, 
+          related_project_id, metadata, created_at
+        ) VALUES (
+          gen_random_uuid(), 'system_registration_rejected', 
+          '시스템 등록 반려',
+          $1, 'high', $2, $3, $4, NOW()
+        )
+      `, [
+        `${request.project_name} 프로젝트의 시스템 등록이 반려되었습니다.\n\n` +
+        `반려 사유: ${admin_notes || '사유 없음'}\n\n` +
+        `추가 검토 후 재신청해 주세요.`,
+        userId,
+        request.project_id,
+        JSON.stringify({
+          system_registration_id: requestId,
+          decision: 'reject',
+          rejection_reason: admin_notes
+        })
+      ]);
+
+      // PO에게 메시지 수신자 등록 (반려)
+      const poResult = await client.query(`
+        SELECT id FROM timbel_users WHERE id = $1
+      `, [request.decided_by]);
+
+      if (poResult.rows.length > 0) {
+        const messageResult = await client.query(`
+          SELECT id FROM unified_messages 
+          WHERE related_project_id = $1 AND message_type = 'system_registration_rejected'
+          ORDER BY created_at DESC LIMIT 1
+        `, [request.project_id]);
+
+        if (messageResult.rows.length > 0) {
+          await client.query(`
+            INSERT INTO unified_message_recipients (
+              id, message_id, recipient_id, is_read, created_at
+            ) VALUES (
+              gen_random_uuid(), $1, $2, false, NOW()
+            )
+          `, [messageResult.rows[0].id, request.decided_by]);
+        }
+      }
+    }
+
+    await client.query('COMMIT');
+
+    console.log('✅ 관리자 시스템 등록 결정 처리 완료:', { requestId, decision });
+
+    res.json({
+      success: true,
+      data: {
+        request_id: requestId,
+        decision: decision,
+        project_name: request.project_name
+      },
+      message: decision === 'approve' ? 
+        '시스템 등록이 승인되었습니다.' : 
+        '시스템 등록이 반려되었습니다.'
+    });
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ 관리자 시스템 등록 결정 처리 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to process system registration decision',
+      message: '시스템 등록 결정 처리에 실패했습니다.'
+    });
+  } finally {
+    client.release();
+  }
+});
+
+// 전체 프로젝트 생명주기 현황 조회
+router.get('/project-lifecycle-overview', async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    console.log('🔍 전체 프로젝트 생명주기 현황 조회 시작');
+    
+    // 단계별 프로젝트 분포 조회
+    const lifecycleResult = await client.query(`
+      WITH project_stages AS (
+        SELECT 
+          p.id,
+          p.name as project_name,
+          p.project_status,
+          p.approval_status,
+          p.created_at,
+          p.deadline,
+          p.urgency_level,
+          pwa.assignment_status,
+          pwa.progress_percentage,
+          pwa.assigned_at,
+          pwa.actual_start_date,
+          pe.full_name as pe_name,
+          qr.request_status as qc_status,
+          qr.quality_score,
+          sr.po_decision,
+          sr.admin_decision,
+          -- 현재 단계 결정
+          CASE 
+            WHEN p.approval_status = 'pending' THEN 'approval_pending'
+            WHEN p.approval_status = 'approved' AND (pwa.assignment_status IS NULL OR pwa.assignment_status = 'pending') THEN 'assignment_pending'
+            WHEN pwa.assignment_status IN ('assigned', 'in_progress') THEN 'development'
+            WHEN p.project_status = 'completed' AND qr.request_status = 'pending' THEN 'qc_pending'
+            WHEN qr.request_status = 'in_progress' THEN 'qc_in_progress'
+            WHEN qr.request_status = 'completed' AND qr.approval_status = 'approved' AND sr.po_decision = 'approve' AND sr.admin_decision IS NULL THEN 'admin_approval_pending'
+            WHEN sr.admin_decision = 'approve' THEN 'approved_for_deployment'
+            WHEN sr.admin_decision = 'reject' THEN 'registration_rejected'
+            ELSE 'unknown'
+          END as current_stage,
+          -- 지연 여부 계산
+          CASE 
+            WHEN p.deadline IS NOT NULL AND p.deadline < NOW() AND p.project_status != 'completed' THEN true
+            ELSE false
+          END as is_delayed,
+          -- 각 단계별 소요 시간 계산
+          EXTRACT(EPOCH FROM (COALESCE(pwa.assigned_at, NOW()) - p.created_at)) / 86400 as approval_to_assignment_days,
+          EXTRACT(EPOCH FROM (COALESCE(pwa.actual_start_date, NOW()) - COALESCE(pwa.assigned_at, p.created_at))) / 86400 as assignment_to_start_days,
+          CASE 
+            WHEN p.project_status = 'completed' AND pwa.actual_start_date IS NOT NULL THEN
+              EXTRACT(EPOCH FROM (p.updated_at - pwa.actual_start_date)) / 86400
+            ELSE NULL
+          END as development_days
+        FROM projects p
+        LEFT JOIN project_work_assignments pwa ON p.id = pwa.project_id
+        LEFT JOIN timbel_users pe ON pwa.assigned_to = pe.id
+        LEFT JOIN qc_qa_requests qr ON p.id = qr.project_id
+        LEFT JOIN system_registrations sr ON p.id = sr.project_id
+        WHERE p.created_at >= NOW() - INTERVAL '6 months'
+      )
+      SELECT 
+        -- 단계별 분포
+        COUNT(*) FILTER (WHERE current_stage = 'approval_pending') as approval_pending_count,
+        COUNT(*) FILTER (WHERE current_stage = 'assignment_pending') as assignment_pending_count,
+        COUNT(*) FILTER (WHERE current_stage = 'development') as development_count,
+        COUNT(*) FILTER (WHERE current_stage = 'qc_pending') as qc_pending_count,
+        COUNT(*) FILTER (WHERE current_stage = 'qc_in_progress') as qc_in_progress_count,
+        COUNT(*) FILTER (WHERE current_stage = 'admin_approval_pending') as admin_approval_pending_count,
+        COUNT(*) FILTER (WHERE current_stage = 'approved_for_deployment') as approved_for_deployment_count,
+        COUNT(*) FILTER (WHERE current_stage = 'registration_rejected') as registration_rejected_count,
+        
+        -- 지연 프로젝트
+        COUNT(*) FILTER (WHERE is_delayed = true) as delayed_projects_count,
+        
+        -- 평균 처리 시간
+        ROUND(AVG(approval_to_assignment_days) FILTER (WHERE approval_to_assignment_days IS NOT NULL), 1) as avg_approval_to_assignment_days,
+        ROUND(AVG(assignment_to_start_days) FILTER (WHERE assignment_to_start_days IS NOT NULL), 1) as avg_assignment_to_start_days,
+        ROUND(AVG(development_days) FILTER (WHERE development_days IS NOT NULL), 1) as avg_development_days,
+        
+        -- 우선순위별 분포
+        COUNT(*) FILTER (WHERE urgency_level = 'high') as high_priority_count,
+        COUNT(*) FILTER (WHERE urgency_level = 'normal') as normal_priority_count,
+        COUNT(*) FILTER (WHERE urgency_level = 'low') as low_priority_count,
+        
+        -- 전체 통계
+        COUNT(*) as total_projects,
+        ROUND(AVG(progress_percentage) FILTER (WHERE progress_percentage IS NOT NULL), 1) as avg_progress_percentage,
+        ROUND(AVG(quality_score) FILTER (WHERE quality_score IS NOT NULL), 1) as avg_quality_score
+      FROM project_stages
+    `);
+
+    // 병목 지점 분석
+    const bottleneckResult = await client.query(`
+      WITH stage_durations AS (
+        SELECT 
+          p.id,
+          p.name as project_name,
+          -- 승인 대기 시간
+          CASE 
+            WHEN p.approval_status = 'approved' THEN 
+              EXTRACT(EPOCH FROM (p.updated_at - p.created_at)) / 86400
+            ELSE NULL
+          END as approval_duration_days,
+          -- 할당 대기 시간
+          CASE 
+            WHEN pwa.assigned_at IS NOT NULL THEN 
+              EXTRACT(EPOCH FROM (pwa.assigned_at - p.created_at)) / 86400
+            ELSE NULL
+          END as assignment_duration_days,
+          -- 개발 시간
+          CASE 
+            WHEN p.project_status = 'completed' AND pwa.actual_start_date IS NOT NULL THEN
+              EXTRACT(EPOCH FROM (p.updated_at - pwa.actual_start_date)) / 86400
+            ELSE NULL
+          END as development_duration_days,
+          -- QC 시간
+          CASE 
+            WHEN qr.request_status = 'completed' THEN
+              EXTRACT(EPOCH FROM (qr.updated_at - qr.created_at)) / 86400
+            ELSE NULL
+          END as qc_duration_days
+        FROM projects p
+        LEFT JOIN project_work_assignments pwa ON p.id = pwa.project_id
+        LEFT JOIN qc_qa_requests qr ON p.id = qr.project_id
+        WHERE p.created_at >= NOW() - INTERVAL '3 months'
+      )
+      SELECT 
+        'approval' as stage_name,
+        '승인 대기' as stage_display_name,
+        ROUND(AVG(approval_duration_days), 1) as avg_duration_days,
+        COUNT(*) FILTER (WHERE approval_duration_days > 3) as delayed_count,
+        COUNT(*) FILTER (WHERE approval_duration_days IS NOT NULL) as total_count
+      FROM stage_durations
+      WHERE approval_duration_days IS NOT NULL
+      
+      UNION ALL
+      
+      SELECT 
+        'assignment' as stage_name,
+        '할당 대기' as stage_display_name,
+        ROUND(AVG(assignment_duration_days), 1) as avg_duration_days,
+        COUNT(*) FILTER (WHERE assignment_duration_days > 1) as delayed_count,
+        COUNT(*) FILTER (WHERE assignment_duration_days IS NOT NULL) as total_count
+      FROM stage_durations
+      WHERE assignment_duration_days IS NOT NULL
+      
+      UNION ALL
+      
+      SELECT 
+        'development' as stage_name,
+        '개발 진행' as stage_display_name,
+        ROUND(AVG(development_duration_days), 1) as avg_duration_days,
+        COUNT(*) FILTER (WHERE development_duration_days > 14) as delayed_count,
+        COUNT(*) FILTER (WHERE development_duration_days IS NOT NULL) as total_count
+      FROM stage_durations
+      WHERE development_duration_days IS NOT NULL
+      
+      UNION ALL
+      
+      SELECT 
+        'qc' as stage_name,
+        'QC/QA 검증' as stage_display_name,
+        ROUND(AVG(qc_duration_days), 1) as avg_duration_days,
+        COUNT(*) FILTER (WHERE qc_duration_days > 7) as delayed_count,
+        COUNT(*) FILTER (WHERE qc_duration_days IS NOT NULL) as total_count
+      FROM stage_durations
+      WHERE qc_duration_days IS NOT NULL
+      
+      ORDER BY avg_duration_days DESC NULLS LAST
+    `);
+
+    console.log('✅ 프로젝트 생명주기 현황 조회 완료');
+
+    res.json({
+      success: true,
+      data: {
+        lifecycle_overview: lifecycleResult.rows[0] || {},
+        bottleneck_analysis: bottleneckResult.rows || []
+      },
+      message: '프로젝트 생명주기 현황 조회 완료'
+    });
+
+  } catch (error) {
+    console.error('❌ 프로젝트 생명주기 현황 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch project lifecycle overview',
+      message: '프로젝트 생명주기 현황 조회에 실패했습니다.'
+    });
+  } finally {
+    client.release();
+  }
+});
+
+// 지연 프로젝트 식별 및 알림 생성 - 간단 버전
+router.get('/delayed-projects', async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    console.log('🔍 지연 프로젝트 식별 시작 (간단 버전)');
+    
+    // 지연 프로젝트 조회 (각 단계별 기준 시간 초과)
+    const delayedProjectsResult = await client.query(`
+      WITH project_delays AS (
+        SELECT 
+          p.id,
+          p.name as project_name,
+          p.project_status,
+          p.approval_status,
+          p.created_at,
+          p.deadline,
+          p.urgency_level,
+          pwa.assignment_status,
+          pwa.assigned_at,
+          pwa.actual_start_date,
+          pe.full_name as pe_name,
+          pe.id as pe_id,
+          qr.request_status as qc_status,
+          qr.assigned_to as qc_assigned_to,
+          qa.full_name as qa_name,
+          sr.po_decision,
+          sr.admin_decision,
+          -- 현재 단계 및 지연 여부 판단
+          CASE 
+            WHEN p.approval_status = 'pending' THEN 'approval_pending'
+            WHEN p.approval_status = 'approved' AND (pwa.assignment_status IS NULL OR pwa.assignment_status = 'pending') THEN 'assignment_pending'
+            WHEN pwa.assignment_status IN ('assigned', 'in_progress') THEN 'development'
+            WHEN p.project_status = 'completed' AND qr.request_status = 'pending' THEN 'qc_pending'
+            WHEN qr.request_status = 'in_progress' THEN 'qc_in_progress'
+            WHEN qr.request_status = 'completed' AND qr.approval_status = 'approved' AND sr.po_decision = 'approve' AND sr.admin_decision IS NULL THEN 'admin_approval_pending'
+            ELSE 'unknown'
+          END as current_stage,
+          -- 각 단계별 지연 시간 계산 (시간 단위)
+          CASE 
+            WHEN p.approval_status = 'pending' AND EXTRACT(EPOCH FROM (NOW() - p.created_at)) / 3600 > 72 THEN 
+              EXTRACT(EPOCH FROM (NOW() - p.created_at)) / 3600
+            ELSE NULL
+          END as approval_delay_hours,
+          CASE 
+            WHEN p.approval_status = 'approved' AND (pwa.assignment_status IS NULL OR pwa.assignment_status = 'pending') 
+                 AND EXTRACT(EPOCH FROM (NOW() - p.updated_at)) / 3600 > 24 THEN 
+              EXTRACT(EPOCH FROM (NOW() - p.updated_at)) / 3600
+            ELSE NULL
+          END as assignment_delay_hours,
+          CASE 
+            WHEN pwa.assignment_status IN ('assigned', 'in_progress') AND pwa.actual_start_date IS NOT NULL
+                 AND EXTRACT(EPOCH FROM (NOW() - pwa.actual_start_date)) / 3600 > 336 THEN -- 14일
+              EXTRACT(EPOCH FROM (NOW() - pwa.actual_start_date)) / 3600
+            ELSE NULL
+          END as development_delay_hours,
+          CASE 
+            WHEN qr.request_status = 'pending' AND EXTRACT(EPOCH FROM (NOW() - qr.created_at)) / 3600 > 48 THEN 
+              EXTRACT(EPOCH FROM (NOW() - qr.created_at)) / 3600
+            WHEN qr.request_status = 'in_progress' AND EXTRACT(EPOCH FROM (NOW() - qr.updated_at)) / 3600 > 168 THEN -- 7일
+              EXTRACT(EPOCH FROM (NOW() - qr.updated_at)) / 3600
+            ELSE NULL
+          END as qc_delay_hours,
+          CASE 
+            WHEN qr.request_status = 'completed' AND qr.approval_status = 'approved' 
+                 AND sr.po_decision = 'approve' AND sr.admin_decision IS NULL
+                 AND EXTRACT(EPOCH FROM (NOW() - sr.created_at)) / 3600 > 48 THEN 
+              EXTRACT(EPOCH FROM (NOW() - sr.created_at)) / 3600
+            ELSE NULL
+          END as admin_approval_delay_hours,
+          -- 전체 프로젝트 지연 (데드라인 기준)
+          CASE 
+            WHEN p.deadline IS NOT NULL AND p.deadline < NOW() AND p.project_status NOT IN ('completed', 'deployed') THEN 
+              EXTRACT(EPOCH FROM (NOW() - p.deadline)) / 3600
+            ELSE NULL
+          END as deadline_delay_hours
+        FROM projects p
+        LEFT JOIN project_work_assignments pwa ON p.id = pwa.project_id
+        LEFT JOIN timbel_users pe ON pwa.assigned_to = pe.id
+        LEFT JOIN qc_qa_requests qr ON p.id = qr.project_id
+        LEFT JOIN timbel_users qa ON qr.assigned_to = qa.id
+        LEFT JOIN system_registrations sr ON p.id = sr.project_id
+        WHERE p.project_status NOT IN ('cancelled', 'completed', 'deployed')
+      )
+      SELECT 
+        id,
+        project_name,
+        current_stage,
+        urgency_level,
+        pe_name,
+        pe_id,
+        qa_name,
+        qc_assigned_to,
+        created_at,
+        deadline,
+        -- 지연 유형 및 시간
+        CASE 
+          WHEN approval_delay_hours IS NOT NULL THEN 'approval_delay'
+          WHEN assignment_delay_hours IS NOT NULL THEN 'assignment_delay'
+          WHEN development_delay_hours IS NOT NULL THEN 'development_delay'
+          WHEN qc_delay_hours IS NOT NULL THEN 'qc_delay'
+          WHEN admin_approval_delay_hours IS NOT NULL THEN 'admin_approval_delay'
+          WHEN deadline_delay_hours IS NOT NULL THEN 'deadline_delay'
+          ELSE NULL
+        END as delay_type,
+        COALESCE(
+          approval_delay_hours,
+          assignment_delay_hours,
+          development_delay_hours,
+          qc_delay_hours,
+          admin_approval_delay_hours,
+          deadline_delay_hours
+        ) as delay_hours,
+        -- 지연 심각도
+        CASE 
+          WHEN urgency_level = 'high' AND COALESCE(approval_delay_hours, assignment_delay_hours, development_delay_hours, qc_delay_hours, admin_approval_delay_hours, deadline_delay_hours) > 48 THEN 'critical'
+          WHEN urgency_level = 'high' AND COALESCE(approval_delay_hours, assignment_delay_hours, development_delay_hours, qc_delay_hours, admin_approval_delay_hours, deadline_delay_hours) > 24 THEN 'high'
+          WHEN COALESCE(approval_delay_hours, assignment_delay_hours, development_delay_hours, qc_delay_hours, admin_approval_delay_hours, deadline_delay_hours) > 168 THEN 'high'
+          WHEN COALESCE(approval_delay_hours, assignment_delay_hours, development_delay_hours, qc_delay_hours, admin_approval_delay_hours, deadline_delay_hours) > 72 THEN 'medium'
+          ELSE 'low'
+        END as severity
+      FROM project_delays
+      WHERE COALESCE(approval_delay_hours, assignment_delay_hours, development_delay_hours, qc_delay_hours, admin_approval_delay_hours, deadline_delay_hours) IS NOT NULL
+      ORDER BY 
+        CASE 
+          WHEN urgency_level = 'high' THEN 1
+          WHEN urgency_level = 'normal' THEN 2
+          ELSE 3
+        END,
+        delay_hours DESC
+    `);
+
+    console.log(`✅ 지연 프로젝트 ${delayedProjectsResult.rows.length}건 식별 완료`);
+
+    res.json({
+      success: true,
+      data: delayedProjectsResult.rows,
+      message: `지연 프로젝트 ${delayedProjectsResult.rows.length}건 식별 완료`
+    });
+
+  } catch (error) {
+    console.error('❌ 지연 프로젝트 식별 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to identify delayed projects',
+      message: '지연 프로젝트 식별에 실패했습니다.'
+    });
+  } finally {
+    client.release();
+  }
+});
+
+// 간단한 지연 프로젝트 조회 (테스트용)
+router.get('/delayed-projects-simple', async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    console.log('🔍 간단한 지연 프로젝트 조회 시작');
+    
+    // 매우 간단한 지연 프로젝트 조회
+    const result = await client.query(`
+      SELECT 
+        p.id,
+        p.name as project_name,
+        'development' as current_stage,
+        'deadline_overdue' as delay_type,
+        24 as delay_hours,
+        'medium' as severity,
+        'medium' as urgency
+      FROM projects p
+      WHERE p.deadline IS NOT NULL 
+        AND p.deadline < NOW()
+        AND p.project_status NOT IN ('cancelled', 'completed')
+      LIMIT 5
+    `);
+
+    console.log(`✅ 간단한 지연 프로젝트 조회 완료: ${result.rows.length}건`);
+
+    res.json({
+      success: true,
+      data: result.rows,
+      message: `${result.rows.length}건의 지연 프로젝트를 식별했습니다.`
+    });
+
+  } catch (error) {
+    console.error('❌ 간단한 지연 프로젝트 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get delayed projects',
+      message: '지연 프로젝트 조회에 실패했습니다.'
+    });
+  } finally {
+    client.release();
+  }
+});
+
+// 지연 프로젝트 알림 생성 및 전송
+router.post('/generate-delay-alerts', async (req, res) => {
+  const userId = req.user?.id;
+  
+  if (!userId) {
+    return res.status(401).json({
+      success: false,
+      error: 'Unauthorized',
+      message: '인증이 필요합니다.'
+    });
+  }
+
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+    
+    console.log('🔔 지연 프로젝트 알림 생성 시작');
+
+    // 지연 프로젝트 조회 (위와 동일한 쿼리 재사용)
+    const delayedProjectsResult = await client.query(`
+      WITH project_delays AS (
+        SELECT 
+          p.id,
+          p.name as project_name,
+          p.project_status,
+          p.approval_status,
+          p.created_at,
+          p.deadline,
+          p.urgency_level,
+          pwa.assignment_status,
+          pwa.assigned_at,
+          pwa.actual_start_date,
+          pe.full_name as pe_name,
+          pe.id as pe_id,
+          qr.request_status as qc_status,
+          qr.assigned_to as qc_assigned_to,
+          qa.full_name as qa_name,
+          sr.po_decision,
+          sr.admin_decision,
+          CASE 
+            WHEN p.approval_status = 'pending' THEN 'approval_pending'
+            WHEN p.approval_status = 'approved' AND (pwa.assignment_status IS NULL OR pwa.assignment_status = 'pending') THEN 'assignment_pending'
+            WHEN pwa.assignment_status IN ('assigned', 'in_progress') THEN 'development'
+            WHEN p.project_status = 'completed' AND qr.request_status = 'pending' THEN 'qc_pending'
+            WHEN qr.request_status = 'in_progress' THEN 'qc_in_progress'
+            WHEN qr.request_status = 'completed' AND qr.approval_status = 'approved' AND sr.po_decision = 'approve' AND sr.admin_decision IS NULL THEN 'admin_approval_pending'
+            ELSE 'unknown'
+          END as current_stage,
+          CASE 
+            WHEN p.approval_status = 'pending' AND EXTRACT(EPOCH FROM (NOW() - p.created_at)) / 3600 > 72 THEN 
+              EXTRACT(EPOCH FROM (NOW() - p.created_at)) / 3600
+            ELSE NULL
+          END as approval_delay_hours,
+          CASE 
+            WHEN p.approval_status = 'approved' AND (pwa.assignment_status IS NULL OR pwa.assignment_status = 'pending') 
+                 AND EXTRACT(EPOCH FROM (NOW() - p.updated_at)) / 3600 > 24 THEN 
+              EXTRACT(EPOCH FROM (NOW() - p.updated_at)) / 3600
+            ELSE NULL
+          END as assignment_delay_hours,
+          CASE 
+            WHEN pwa.assignment_status IN ('assigned', 'in_progress') AND pwa.actual_start_date IS NOT NULL
+                 AND EXTRACT(EPOCH FROM (NOW() - pwa.actual_start_date)) / 3600 > 336 THEN
+              EXTRACT(EPOCH FROM (NOW() - pwa.actual_start_date)) / 3600
+            ELSE NULL
+          END as development_delay_hours,
+          CASE 
+            WHEN qr.request_status = 'pending' AND EXTRACT(EPOCH FROM (NOW() - qr.created_at)) / 3600 > 48 THEN 
+              EXTRACT(EPOCH FROM (NOW() - qr.created_at)) / 3600
+            WHEN qr.request_status = 'in_progress' AND EXTRACT(EPOCH FROM (NOW() - qr.updated_at)) / 3600 > 168 THEN
+              EXTRACT(EPOCH FROM (NOW() - qr.updated_at)) / 3600
+            ELSE NULL
+          END as qc_delay_hours,
+          CASE 
+            WHEN qr.request_status = 'completed' AND qr.approval_status = 'approved' 
+                 AND sr.po_decision = 'approve' AND sr.admin_decision IS NULL
+                 AND EXTRACT(EPOCH FROM (NOW() - sr.created_at)) / 3600 > 48 THEN 
+              EXTRACT(EPOCH FROM (NOW() - sr.created_at)) / 3600
+            ELSE NULL
+          END as admin_approval_delay_hours,
+          CASE 
+            WHEN p.deadline IS NOT NULL AND p.deadline < NOW() AND p.project_status NOT IN ('completed', 'deployed') THEN 
+              EXTRACT(EPOCH FROM (NOW() - p.deadline)) / 3600
+            ELSE NULL
+          END as deadline_delay_hours
+        FROM projects p
+        LEFT JOIN project_work_assignments pwa ON p.id = pwa.project_id
+        LEFT JOIN timbel_users pe ON pwa.assigned_to = pe.id
+        LEFT JOIN qc_qa_requests qr ON p.id = qr.project_id
+        LEFT JOIN timbel_users qa ON qr.assigned_to = qa.id
+        LEFT JOIN system_registrations sr ON p.id = sr.project_id
+        WHERE p.project_status NOT IN ('cancelled', 'completed', 'deployed')
+      )
+      SELECT 
+        id,
+        project_name,
+        current_stage,
+        urgency_level,
+        pe_name,
+        pe_id,
+        qa_name,
+        qc_assigned_to,
+        created_at,
+        deadline,
+        CASE 
+          WHEN approval_delay_hours IS NOT NULL THEN 'approval_delay'
+          WHEN assignment_delay_hours IS NOT NULL THEN 'assignment_delay'
+          WHEN development_delay_hours IS NOT NULL THEN 'development_delay'
+          WHEN qc_delay_hours IS NOT NULL THEN 'qc_delay'
+          WHEN admin_approval_delay_hours IS NOT NULL THEN 'admin_approval_delay'
+          WHEN deadline_delay_hours IS NOT NULL THEN 'deadline_delay'
+          ELSE NULL
+        END as delay_type,
+        COALESCE(
+          approval_delay_hours,
+          assignment_delay_hours,
+          development_delay_hours,
+          qc_delay_hours,
+          admin_approval_delay_hours,
+          deadline_delay_hours
+        ) as delay_hours
+      FROM project_delays
+      WHERE COALESCE(approval_delay_hours, assignment_delay_hours, development_delay_hours, qc_delay_hours, admin_approval_delay_hours, deadline_delay_hours) IS NOT NULL
+    `);
+
+    let alertsGenerated = 0;
+
+    // 각 지연 프로젝트에 대해 알림 생성
+    for (const project of delayedProjectsResult.rows) {
+      const delayDays = Math.floor(project.delay_hours / 24);
+      const delayHours = Math.floor(project.delay_hours % 24);
+      
+      let alertTitle = '';
+      let alertMessage = '';
+      let recipientIds = [];
+      
+      // 지연 유형별 알림 내용 및 수신자 설정
+      switch (project.delay_type) {
+        case 'approval_delay':
+          alertTitle = '프로젝트 승인 지연 알림';
+          alertMessage = `${project.project_name} 프로젝트가 승인 대기 상태로 ${delayDays}일 ${delayHours}시간 지연되고 있습니다.\n\n` +
+                        `우선순위: ${project.urgency_level}\n` +
+                        `생성일: ${new Date(project.created_at).toLocaleString()}\n\n` +
+                        `빠른 승인 검토가 필요합니다.`;
+          // 관리자 및 PO에게 알림
+          const adminUsersResult = await client.query(`
+            SELECT id FROM timbel_users WHERE role_type IN ('admin', 'executive', 'po') AND status = 'active'
+          `);
+          recipientIds = adminUsersResult.rows.map(u => u.id);
+          break;
+          
+        case 'assignment_delay':
+          alertTitle = 'PE 할당 지연 알림';
+          alertMessage = `${project.project_name} 프로젝트가 PE 할당 대기 상태로 ${delayDays}일 ${delayHours}시간 지연되고 있습니다.\n\n` +
+                        `우선순위: ${project.urgency_level}\n\n` +
+                        `PE 할당이 필요합니다.`;
+          // PO 및 관리자에게 알림
+          const poUsersResult = await client.query(`
+            SELECT id FROM timbel_users WHERE role_type IN ('po', 'admin', 'executive') AND status = 'active'
+          `);
+          recipientIds = poUsersResult.rows.map(u => u.id);
+          break;
+          
+        case 'development_delay':
+          alertTitle = '개발 진행 지연 알림';
+          alertMessage = `${project.project_name} 프로젝트 개발이 ${delayDays}일 ${delayHours}시간 지연되고 있습니다.\n\n` +
+                        `담당 PE: ${project.pe_name}\n` +
+                        `우선순위: ${project.urgency_level}\n\n` +
+                        `개발 진행 상황 점검이 필요합니다.`;
+          // PE, PO, 관리자에게 알림
+          recipientIds = [project.pe_id].filter(Boolean);
+          const devPoUsersResult = await client.query(`
+            SELECT id FROM timbel_users WHERE role_type IN ('po', 'admin', 'executive') AND status = 'active'
+          `);
+          recipientIds.push(...devPoUsersResult.rows.map(u => u.id));
+          break;
+          
+        case 'qc_delay':
+          alertTitle = 'QC/QA 검증 지연 알림';
+          alertMessage = `${project.project_name} 프로젝트 QC/QA 검증이 ${delayDays}일 ${delayHours}시간 지연되고 있습니다.\n\n` +
+                        `담당 QA: ${project.qa_name || '미할당'}\n` +
+                        `우선순위: ${project.urgency_level}\n\n` +
+                        `QC/QA 검증 진행이 필요합니다.`;
+          // QA, PO, 관리자에게 알림
+          if (project.qc_assigned_to) {
+            recipientIds = [project.qc_assigned_to];
+          }
+          const qcPoUsersResult = await client.query(`
+            SELECT id FROM timbel_users WHERE role_type IN ('qa', 'po', 'admin', 'executive') AND status = 'active'
+          `);
+          recipientIds.push(...qcPoUsersResult.rows.map(u => u.id));
+          break;
+          
+        case 'admin_approval_delay':
+          alertTitle = '관리자 최종 승인 지연 알림';
+          alertMessage = `${project.project_name} 프로젝트 최종 승인이 ${delayDays}일 ${delayHours}시간 지연되고 있습니다.\n\n` +
+                        `우선순위: ${project.urgency_level}\n\n` +
+                        `관리자 최종 승인이 필요합니다.`;
+          // 관리자에게 알림
+          const finalAdminUsersResult = await client.query(`
+            SELECT id FROM timbel_users WHERE role_type IN ('admin', 'executive') AND status = 'active'
+          `);
+          recipientIds = finalAdminUsersResult.rows.map(u => u.id);
+          break;
+          
+        case 'deadline_delay':
+          alertTitle = '프로젝트 데드라인 초과 알림';
+          alertMessage = `${project.project_name} 프로젝트가 데드라인을 ${delayDays}일 ${delayHours}시간 초과했습니다.\n\n` +
+                        `데드라인: ${new Date(project.deadline).toLocaleString()}\n` +
+                        `담당 PE: ${project.pe_name || '미할당'}\n` +
+                        `우선순위: ${project.urgency_level}\n\n` +
+                        `긴급 조치가 필요합니다.`;
+          // 모든 관련자에게 알림
+          recipientIds = [project.pe_id, project.qc_assigned_to].filter(Boolean);
+          const deadlineUsersResult = await client.query(`
+            SELECT id FROM timbel_users WHERE role_type IN ('po', 'admin', 'executive') AND status = 'active'
+          `);
+          recipientIds.push(...deadlineUsersResult.rows.map(u => u.id));
+          break;
+      }
+
+      // 중복 제거
+      recipientIds = [...new Set(recipientIds)];
+
+      if (recipientIds.length > 0) {
+        // 통합 메시지 생성
+        const messageResult = await client.query(`
+          INSERT INTO unified_messages (
+            id, message_type, title, message, priority_level, sender_id, 
+            related_project_id, metadata, created_at
+          ) VALUES (
+            gen_random_uuid(), 'project_delay_alert', $1, $2, $3, $4, $5, $6, NOW()
+          ) RETURNING id
+        `, [
+          alertTitle,
+          alertMessage,
+          project.urgency_level === 'high' ? 'high' : 'normal',
+          userId, // 시스템에서 생성
+          project.id,
+          JSON.stringify({
+            delay_type: project.delay_type,
+            delay_hours: project.delay_hours,
+            current_stage: project.current_stage
+          })
+        ]);
+
+        const messageId = messageResult.rows[0].id;
+
+        // 수신자 등록
+        for (const recipientId of recipientIds) {
+          await client.query(`
+            INSERT INTO unified_message_recipients (
+              id, message_id, recipient_id, is_read, created_at
+            ) VALUES (
+              gen_random_uuid(), $1, $2, false, NOW()
+            )
+          `, [messageId, recipientId]);
+        }
+
+        alertsGenerated++;
+      }
+    }
+
+    await client.query('COMMIT');
+
+    console.log(`✅ 지연 프로젝트 알림 ${alertsGenerated}건 생성 완료`);
+
+    res.json({
+      success: true,
+      data: {
+        delayed_projects_count: delayedProjectsResult.rows.length,
+        alerts_generated: alertsGenerated
+      },
+      message: `지연 프로젝트 ${delayedProjectsResult.rows.length}건에 대해 ${alertsGenerated}건의 알림을 생성했습니다.`
+    });
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('❌ 지연 프로젝트 알림 생성 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to generate delay alerts',
+      message: '지연 프로젝트 알림 생성에 실패했습니다.'
+    });
+  } finally {
+    client.release();
+  }
+});
+
 module.exports = router;

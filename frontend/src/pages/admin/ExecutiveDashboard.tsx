@@ -80,6 +80,31 @@ const ExecutiveDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   
+  // QC/QA 현황 상태
+  const [qcOverviewData, setQcOverviewData] = useState<any>(null);
+  const [qcDetailDialog, setQcDetailDialog] = useState(false);
+  const [selectedQcData, setSelectedQcData] = useState<any>(null);
+  
+  // 프로젝트 생명주기 현황 상태
+  const [lifecycleData, setLifecycleData] = useState<any>(null);
+  
+  // 지연 프로젝트 알림 상태
+  const [delayedProjects, setDelayedProjects] = useState<any[]>([]);
+  const [delayAlertsDialog, setDelayAlertsDialog] = useState(false);
+  const [generatingAlerts, setGeneratingAlerts] = useState(false);
+  const [loadingDelayedProjects, setLoadingDelayedProjects] = useState(false);
+  
+  // 시스템 등록 승인 관리 상태
+  const [systemRegistrationRequests, setSystemRegistrationRequests] = useState<any[]>([]);
+  const [registrationApprovalDialog, setRegistrationApprovalDialog] = useState(false);
+  const [selectedRegistrationRequest, setSelectedRegistrationRequest] = useState<any>(null);
+  const [registrationDecision, setRegistrationDecision] = useState({
+    decision: 'approve', // approve, reject
+    admin_notes: '',
+    deployment_schedule: ''
+  });
+  const [submittingRegistrationDecision, setSubmittingRegistrationDecision] = useState(false);
+  
   // [advice from AI] 프로젝트 리스트 다이얼로그 상태
   const [projectListDialog, setProjectListDialog] = useState(false);
   const [projectListTitle, setProjectListTitle] = useState('');
@@ -123,6 +148,184 @@ const ExecutiveDashboard: React.FC = () => {
       return 'http://localhost:3001';
     }
     return `http://${currentHost.split(':')[0]}:3001`;
+  };
+
+  // QC/QA 현황 데이터 로드
+  const loadQcOverviewData = async () => {
+    try {
+      const response = await fetch(`${getApiUrl()}/api/qc/stats`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setQcOverviewData(data.data);
+        console.log('✅ QC/QA 현황 로드 완료:', data.data);
+      } else {
+        console.error('❌ QC/QA 현황 로드 실패:', response.status);
+      }
+    } catch (error) {
+      console.error('❌ QC/QA 현황 로드 중 오류:', error);
+    }
+  };
+
+  // QC/QA 상세 정보 다이얼로그 열기
+  const handleOpenQcDetailDialog = () => {
+    setQcDetailDialog(true);
+  };
+
+  // 시스템 등록 승인 요청 로드
+  const loadSystemRegistrationRequests = async () => {
+    try {
+      const response = await fetch(`${getApiUrl()}/api/admin/approvals/system-registration-requests`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setSystemRegistrationRequests(data.data || []);
+        console.log('✅ 시스템 등록 승인 요청 로드 완료:', data.data?.length || 0, '건');
+      } else {
+        console.error('❌ 시스템 등록 승인 요청 로드 실패:', response.status);
+      }
+    } catch (error) {
+      console.error('❌ 시스템 등록 승인 요청 로드 중 오류:', error);
+    }
+  };
+
+  // 시스템 등록 승인 다이얼로그 열기
+  const handleOpenRegistrationApprovalDialog = (request: any) => {
+    setSelectedRegistrationRequest(request);
+    setRegistrationDecision({
+      decision: 'approve',
+      admin_notes: `${request.project_name} 프로젝트의 시스템 등록을 승인합니다.\n\nQC/QA 품질 점수: ${request.qc_quality_score || 'N/A'}점\nPO 승인 사유: ${request.registration_notes || '없음'}`,
+      deployment_schedule: ''
+    });
+    setRegistrationApprovalDialog(true);
+  };
+
+  // 시스템 등록 승인/반려 처리
+  const handleRegistrationDecision = async () => {
+    if (!selectedRegistrationRequest || !registrationDecision.admin_notes.trim()) {
+      alert('결정 사유를 입력해주세요.');
+      return;
+    }
+
+    setSubmittingRegistrationDecision(true);
+
+    try {
+      const response = await fetch(`${getApiUrl()}/api/admin/approvals/system-registration-decision/${selectedRegistrationRequest.id}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(registrationDecision)
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        alert(data.message || '시스템 등록 결정이 처리되었습니다.');
+        
+        // 요청 목록 새로고침
+        await loadSystemRegistrationRequests();
+        
+        // 다이얼로그 닫기
+        setRegistrationApprovalDialog(false);
+        setSelectedRegistrationRequest(null);
+        
+        console.log('✅ 시스템 등록 결정 처리 완료:', data);
+      } else {
+        const errorData = await response.json();
+        alert(errorData.message || '시스템 등록 결정 처리에 실패했습니다.');
+        console.error('❌ 시스템 등록 결정 처리 실패:', response.status, errorData);
+      }
+    } catch (error) {
+      alert('시스템 등록 결정 처리 중 오류가 발생했습니다.');
+      console.error('❌ 시스템 등록 결정 처리 중 오류:', error);
+    } finally {
+      setSubmittingRegistrationDecision(false);
+    }
+  };
+
+  // 프로젝트 생명주기 현황 로드
+  const loadProjectLifecycleData = async () => {
+    try {
+      const response = await fetch(`${getApiUrl()}/api/admin/approvals/project-lifecycle-overview`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setLifecycleData(data.data);
+        console.log('✅ 프로젝트 생명주기 현황 로드 완료:', data.data);
+      } else {
+        console.error('❌ 프로젝트 생명주기 현황 로드 실패:', response.status);
+      }
+    } catch (error) {
+      console.error('❌ 프로젝트 생명주기 현황 로드 중 오류:', error);
+    }
+  };
+
+  // 지연 프로젝트 로드
+  const loadDelayedProjects = async () => {
+    setLoadingDelayedProjects(true);
+    try {
+      const response = await fetch(`${getApiUrl()}/api/admin/approvals/delayed-projects-simple`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setDelayedProjects(data.data || []);
+        console.log(`✅ 지연 프로젝트 로드 완료: ${data.data?.length || 0}건`);
+      } else {
+        console.error('❌ 지연 프로젝트 로드 실패:', response.status);
+      }
+    } catch (error) {
+      console.error('❌ 지연 프로젝트 로드 중 오류:', error);
+    } finally {
+      setLoadingDelayedProjects(false);
+    }
+  };
+
+  // 지연 알림 생성
+  const handleGenerateDelayAlerts = async () => {
+    setGeneratingAlerts(true);
+    try {
+      const response = await fetch(`${getApiUrl()}/api/admin/approvals/generate-delay-alerts`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        alert(`지연 프로젝트 알림이 성공적으로 생성되었습니다. (${data.alertsGenerated}건)`);
+        setDelayAlertsDialog(false);
+      } else {
+        alert('지연 프로젝트 알림 생성에 실패했습니다.');
+      }
+    } catch (error) {
+      alert('지연 프로젝트 알림 생성 중 오류가 발생했습니다.');
+      console.error('❌ 지연 알림 생성 중 오류:', error);
+    } finally {
+      setGeneratingAlerts(false);
+    }
   };
   
   // [advice from AI] 카드 클릭 핸들러 - 프로젝트 리스트 다이얼로그 열기
@@ -549,10 +752,18 @@ const ExecutiveDashboard: React.FC = () => {
   useEffect(() => {
     if (token && (user?.roleType === 'admin' || user?.roleType === 'executive')) {
       fetchDashboardData();
+      loadQcOverviewData();
+      loadSystemRegistrationRequests();
+      loadProjectLifecycleData();
+      loadDelayedProjects();
       
       // 주기적 데이터 새로고침 (30초마다)
       const interval = setInterval(() => {
         fetchDashboardData();
+        loadQcOverviewData();
+        loadSystemRegistrationRequests();
+        loadProjectLifecycleData();
+        loadDelayedProjects();
       }, 30000);
       
       return () => clearInterval(interval);
@@ -882,8 +1093,466 @@ const ExecutiveDashboard: React.FC = () => {
         </Grid>
       </Grid>
 
-      {/* PE 작업 현황 */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
+          {/* QC/QA 검증 현황 */}
+          {qcOverviewData && (
+            <Grid container spacing={3} sx={{ mb: 4 }}>
+              <Grid item xs={12}>
+                <Card>
+                  <CardContent>
+                    <Typography variant="h6" sx={{ mb: 3, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1 }}>
+                      QC/QA 검증 현황
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={handleOpenQcDetailDialog}
+                        sx={{ ml: 'auto' }}
+                      >
+                        상세보기
+                      </Button>
+                    </Typography>
+                    
+                    <Grid container spacing={3}>
+                      <Grid item xs={12} md={3}>
+                        <Card variant="outlined" sx={{ textAlign: 'center', p: 2 }}>
+                          <Typography variant="h4" sx={{ fontWeight: 700, color: 'primary.main', mb: 1 }}>
+                            {qcOverviewData.total_requests || 0}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            전체 검증 요청
+                          </Typography>
+                        </Card>
+                      </Grid>
+                      
+                      <Grid item xs={12} md={3}>
+                        <Card variant="outlined" sx={{ textAlign: 'center', p: 2 }}>
+                          <Typography variant="h4" sx={{ fontWeight: 700, color: 'warning.main', mb: 1 }}>
+                            {qcOverviewData.pending_requests || 0}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            대기 중
+                          </Typography>
+                        </Card>
+                      </Grid>
+                      
+                      <Grid item xs={12} md={3}>
+                        <Card variant="outlined" sx={{ textAlign: 'center', p: 2 }}>
+                          <Typography variant="h4" sx={{ fontWeight: 700, color: 'info.main', mb: 1 }}>
+                            {qcOverviewData.in_progress_requests || 0}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            진행 중
+                          </Typography>
+                        </Card>
+                      </Grid>
+                      
+                      <Grid item xs={12} md={3}>
+                        <Card variant="outlined" sx={{ textAlign: 'center', p: 2 }}>
+                          <Typography variant="h4" sx={{ fontWeight: 700, color: 'success.main', mb: 1 }}>
+                            {qcOverviewData.completed_requests || 0}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            완료
+                          </Typography>
+                        </Card>
+                      </Grid>
+                    </Grid>
+
+                    {/* 평균 품질 점수 */}
+                    {qcOverviewData.average_quality_score && (
+                      <Box sx={{ mt: 3, textAlign: 'center' }}>
+                        <Typography variant="h5" sx={{ fontWeight: 600, color: 'success.main' }}>
+                          평균 품질 점수: {qcOverviewData.average_quality_score}점
+                        </Typography>
+                        <LinearProgress 
+                          variant="determinate" 
+                          value={qcOverviewData.average_quality_score} 
+                          sx={{ mt: 1, height: 8, borderRadius: 4 }}
+                        />
+                      </Box>
+                    )}
+                  </CardContent>
+                </Card>
+              </Grid>
+            </Grid>
+          )}
+
+          {/* 시스템 등록 승인 관리 */}
+          {systemRegistrationRequests.length > 0 && (
+            <Grid container spacing={3} sx={{ mb: 4 }}>
+              <Grid item xs={12}>
+                <Card sx={{ backgroundColor: '#fff3e0', border: '2px solid #ff9800' }}>
+                  <CardContent>
+                    <Typography variant="h6" sx={{ mb: 3, fontWeight: 600, color: '#e65100', display: 'flex', alignItems: 'center', gap: 1 }}>
+                      시스템 등록 최종 승인 필요
+                      <Chip 
+                        label={`${systemRegistrationRequests.length}건`} 
+                        size="small" 
+                        color="warning" 
+                      />
+                    </Typography>
+                    
+                    <TableContainer component={Paper} variant="outlined">
+                      <Table>
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>프로젝트명</TableCell>
+                            <TableCell>대상 시스템</TableCell>
+                            <TableCell>PO 승인자</TableCell>
+                            <TableCell>배포 우선순위</TableCell>
+                            <TableCell>대상 환경</TableCell>
+                            <TableCell>QC 품질점수</TableCell>
+                            <TableCell>요청일</TableCell>
+                            <TableCell>액션</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {systemRegistrationRequests.map((request) => (
+                            <TableRow key={request.id} hover>
+                              <TableCell>
+                                <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                                  {request.project_name}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  {request.project_overview}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                <Typography variant="body2">
+                                  {request.target_system_name}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                <Typography variant="body2">
+                                  {request.po_name}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                <Chip 
+                                  label={
+                                    request.deployment_priority === 'high' ? '높음' :
+                                    request.deployment_priority === 'normal' ? '보통' : '낮음'
+                                  }
+                                  size="small"
+                                  color={
+                                    request.deployment_priority === 'high' ? 'error' :
+                                    request.deployment_priority === 'normal' ? 'warning' : 'default'
+                                  }
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Typography variant="body2">
+                                  {request.target_environment === 'production' ? '운영' :
+                                   request.target_environment === 'staging' ? '스테이징' : '개발'}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                <Typography variant="body2" sx={{ fontWeight: 600, color: 'success.main' }}>
+                                  {request.qc_quality_score ? `${request.qc_quality_score}점` : 'N/A'}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                <Typography variant="caption">
+                                  {new Date(request.created_at).toLocaleDateString()}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                <Button
+                                  variant="contained"
+                                  color="success"
+                                  size="small"
+                                  onClick={() => handleOpenRegistrationApprovalDialog(request)}
+                                  sx={{
+                                    backgroundColor: '#2e7d32',
+                                    '&:hover': {
+                                      backgroundColor: '#1b5e20'
+                                    }
+                                  }}
+                                >
+                                  최종 승인 처리
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </CardContent>
+                </Card>
+              </Grid>
+            </Grid>
+          )}
+
+          {/* 프로젝트 생명주기 현황 */}
+          {lifecycleData && (
+            <Grid container spacing={3} sx={{ mb: 4 }}>
+              <Grid item xs={12}>
+                <Card>
+                  <CardContent>
+                    <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>
+                      프로젝트 생명주기 현황
+                    </Typography>
+                    
+                    {/* 단계별 분포 */}
+                    <Grid container spacing={2} sx={{ mb: 3 }}>
+                      <Grid item xs={12} md={3}>
+                        <Card variant="outlined" sx={{ textAlign: 'center', p: 2 }}>
+                          <Typography variant="h4" sx={{ fontWeight: 700, color: 'warning.main', mb: 1 }}>
+                            {lifecycleData.lifecycle_overview?.approval_pending_count || 0}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            승인 대기
+                          </Typography>
+                        </Card>
+                      </Grid>
+                      
+                      <Grid item xs={12} md={3}>
+                        <Card variant="outlined" sx={{ textAlign: 'center', p: 2 }}>
+                          <Typography variant="h4" sx={{ fontWeight: 700, color: 'info.main', mb: 1 }}>
+                            {lifecycleData.lifecycle_overview?.development_count || 0}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            개발 진행
+                          </Typography>
+                        </Card>
+                      </Grid>
+                      
+                      <Grid item xs={12} md={3}>
+                        <Card variant="outlined" sx={{ textAlign: 'center', p: 2 }}>
+                          <Typography variant="h4" sx={{ fontWeight: 700, color: 'primary.main', mb: 1 }}>
+                            {(lifecycleData.lifecycle_overview?.qc_pending_count || 0) + 
+                             (lifecycleData.lifecycle_overview?.qc_in_progress_count || 0)}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            QC/QA 검증
+                          </Typography>
+                        </Card>
+                      </Grid>
+                      
+                      <Grid item xs={12} md={3}>
+                        <Card variant="outlined" sx={{ textAlign: 'center', p: 2 }}>
+                          <Typography variant="h4" sx={{ fontWeight: 700, color: 'success.main', mb: 1 }}>
+                            {lifecycleData.lifecycle_overview?.approved_for_deployment_count || 0}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            배포 승인
+                          </Typography>
+                        </Card>
+                      </Grid>
+                    </Grid>
+
+                    {/* 병목 지점 분석 */}
+                    {lifecycleData.bottleneck_analysis && lifecycleData.bottleneck_analysis.length > 0 && (
+                      <Box sx={{ mt: 3 }}>
+                        <Typography variant="h6" gutterBottom>
+                          병목 지점 분석
+                        </Typography>
+                        <TableContainer component={Paper} variant="outlined">
+                          <Table size="small">
+                            <TableHead>
+                              <TableRow>
+                                <TableCell>단계</TableCell>
+                                <TableCell align="right">평균 소요일</TableCell>
+                                <TableCell align="right">지연 건수</TableCell>
+                                <TableCell align="right">전체 건수</TableCell>
+                                <TableCell align="right">지연율</TableCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {lifecycleData.bottleneck_analysis.map((stage: any) => (
+                                <TableRow key={stage.stage_name}>
+                                  <TableCell>{stage.stage_display_name}</TableCell>
+                                  <TableCell align="right">
+                                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                      {stage.avg_duration_days || 0}일
+                                    </Typography>
+                                  </TableCell>
+                                  <TableCell align="right">
+                                    <Typography 
+                                      variant="body2" 
+                                      sx={{ 
+                                        color: stage.delayed_count > 0 ? 'error.main' : 'text.secondary',
+                                        fontWeight: stage.delayed_count > 0 ? 600 : 400
+                                      }}
+                                    >
+                                      {stage.delayed_count || 0}건
+                                    </Typography>
+                                  </TableCell>
+                                  <TableCell align="right">{stage.total_count || 0}건</TableCell>
+                                  <TableCell align="right">
+                                    <Chip 
+                                      label={`${Math.round(((stage.delayed_count || 0) / Math.max(stage.total_count || 1, 1)) * 100)}%`}
+                                      size="small"
+                                      color={
+                                        ((stage.delayed_count || 0) / Math.max(stage.total_count || 1, 1)) > 0.3 ? 'error' :
+                                        ((stage.delayed_count || 0) / Math.max(stage.total_count || 1, 1)) > 0.1 ? 'warning' : 'success'
+                                      }
+                                    />
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </TableContainer>
+                      </Box>
+                    )}
+
+                    {/* 전체 통계 */}
+                    <Grid container spacing={2} sx={{ mt: 3 }}>
+                      <Grid item xs={12} md={4}>
+                        <Box sx={{ textAlign: 'center' }}>
+                          <Typography variant="h5" sx={{ fontWeight: 600, color: 'error.main' }}>
+                            {lifecycleData.lifecycle_overview?.delayed_projects_count || 0}건
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            지연 프로젝트
+                          </Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={12} md={4}>
+                        <Box sx={{ textAlign: 'center' }}>
+                          <Typography variant="h5" sx={{ fontWeight: 600, color: 'primary.main' }}>
+                            {lifecycleData.lifecycle_overview?.avg_progress_percentage || 0}%
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            평균 진행률
+                          </Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={12} md={4}>
+                        <Box sx={{ textAlign: 'center' }}>
+                          <Typography variant="h5" sx={{ fontWeight: 600, color: 'success.main' }}>
+                            {lifecycleData.lifecycle_overview?.avg_quality_score || 0}점
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            평균 품질 점수
+                          </Typography>
+                        </Box>
+                      </Grid>
+                    </Grid>
+                  </CardContent>
+                </Card>
+              </Grid>
+            </Grid>
+          )}
+
+          {/* 지연 프로젝트 알림 */}
+          <Grid container spacing={3} sx={{ mb: 4 }}>
+            <Grid item xs={12}>
+              <Card sx={{ backgroundColor: '#ffebee', border: '2px solid #f44336' }}>
+                <CardContent>
+                  <Typography variant="h6" sx={{ mb: 3, fontWeight: 600, color: '#c62828' }}>
+                    지연 프로젝트 알림 관리
+                    <Chip 
+                      label={`${delayedProjects.length}건`} 
+                      size="small" 
+                      color="error" 
+                      sx={{ ml: 1 }}
+                    />
+                  </Typography>
+
+                  {loadingDelayedProjects ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+                      <CircularProgress />
+                    </Box>
+                  ) : delayedProjects.length === 0 ? (
+                    <Alert severity="success" sx={{ mb: 2 }}>
+                      현재 지연된 프로젝트가 없습니다.
+                    </Alert>
+                  ) : (
+                    <>
+                      <Alert severity="warning" sx={{ mb: 3 }}>
+                        {delayedProjects.length}개의 프로젝트가 지연되고 있습니다. 관련 담당자들에게 알림을 전송할 수 있습니다.
+                      </Alert>
+
+                      <TableContainer component={Paper} sx={{ mb: 3 }}>
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell>프로젝트명</TableCell>
+                              <TableCell>현재 단계</TableCell>
+                              <TableCell>지연 유형</TableCell>
+                              <TableCell>지연 시간</TableCell>
+                              <TableCell>심각도</TableCell>
+                              <TableCell>긴급도</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {delayedProjects.map((project, index) => (
+                              <TableRow key={index}>
+                                <TableCell>
+                                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                    {project.project_name}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell>
+                                  <Chip 
+                                    label={project.current_stage} 
+                                    size="small" 
+                                    color="info"
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Typography variant="caption">
+                                    {project.delay_type}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell>
+                                  <Typography variant="caption" color="error">
+                                    {project.delay_hours}시간
+                                  </Typography>
+                                </TableCell>
+                                <TableCell>
+                                  <Chip 
+                                    label={project.severity} 
+                                    size="small" 
+                                    color={
+                                      project.severity === 'critical' ? 'error' :
+                                      project.severity === 'high' ? 'warning' :
+                                      project.severity === 'medium' ? 'info' : 'default'
+                                    }
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <Chip 
+                                    label={project.urgency} 
+                                    size="small" 
+                                    variant="outlined"
+                                    color={
+                                      project.urgency === 'high' ? 'error' :
+                                      project.urgency === 'medium' ? 'warning' : 'default'
+                                    }
+                                  />
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+
+                      <Box sx={{ textAlign: 'center' }}>
+                        <Button
+                          variant="contained"
+                          color="error"
+                          onClick={() => setDelayAlertsDialog(true)}
+                          sx={{
+                            backgroundColor: '#d32f2f',
+                            '&:hover': {
+                              backgroundColor: '#b71c1c'
+                            }
+                          }}
+                        >
+                          지연 프로젝트 알림 생성
+                        </Button>
+                      </Box>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            </Grid>
+          </Grid>
+
+          {/* PE 작업 현황 */}
+          <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12}>
           <Card>
             <CardContent>
@@ -1716,6 +2385,273 @@ const ExecutiveDashboard: React.FC = () => {
              statusChangeAction === 'hold' ? '일시 중단' :
              statusChangeAction === 'cancel' ? '프로젝트 취소' : '상태 변경'
             }
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* 시스템 등록 승인 다이얼로그 */}
+      <Dialog 
+        open={registrationApprovalDialog} 
+        onClose={() => setRegistrationApprovalDialog(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          시스템 등록 최종 승인
+          {selectedRegistrationRequest && (
+            <Typography variant="subtitle2" color="text.secondary">
+              프로젝트: {selectedRegistrationRequest.project_name}
+            </Typography>
+          )}
+        </DialogTitle>
+        <DialogContent>
+          {selectedRegistrationRequest && (
+            <Box sx={{ mt: 2 }}>
+              <Grid container spacing={3}>
+                {/* 프로젝트 정보 요약 */}
+                <Grid item xs={12}>
+                  <Typography variant="h6" gutterBottom>
+                    프로젝트 정보
+                  </Typography>
+                  <Paper variant="outlined" sx={{ p: 2 }}>
+                    <Grid container spacing={2}>
+                      <Grid item xs={6}>
+                        <Typography variant="body2" color="text.secondary">프로젝트명</Typography>
+                        <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                          {selectedRegistrationRequest.project_name}
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Typography variant="body2" color="text.secondary">대상 시스템</Typography>
+                        <Typography variant="body1">
+                          {selectedRegistrationRequest.target_system_name}
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={12}>
+                        <Typography variant="body2" color="text.secondary">프로젝트 개요</Typography>
+                        <Typography variant="body1">
+                          {selectedRegistrationRequest.project_overview}
+                        </Typography>
+                      </Grid>
+                    </Grid>
+                  </Paper>
+                </Grid>
+
+                {/* QC/QA 검증 결과 */}
+                <Grid item xs={12}>
+                  <Typography variant="h6" gutterBottom>
+                    QC/QA 검증 결과
+                  </Typography>
+                  <Paper variant="outlined" sx={{ p: 2 }}>
+                    <Grid container spacing={2}>
+                      <Grid item xs={6}>
+                        <Typography variant="body2" color="text.secondary">품질 점수</Typography>
+                        <Typography variant="h5" sx={{ fontWeight: 700, color: 'success.main' }}>
+                          {selectedRegistrationRequest.qc_quality_score || 'N/A'}점
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Typography variant="body2" color="text.secondary">승인 상태</Typography>
+                        <Chip 
+                          label="승인 완료"
+                          color="success"
+                          size="small"
+                        />
+                      </Grid>
+                      <Grid item xs={12}>
+                        <Typography variant="body2" color="text.secondary">승인일</Typography>
+                        <Typography variant="body1">
+                          {selectedRegistrationRequest.qc_approved_at ? 
+                            new Date(selectedRegistrationRequest.qc_approved_at).toLocaleString() : 'N/A'}
+                        </Typography>
+                      </Grid>
+                    </Grid>
+                  </Paper>
+                </Grid>
+
+                {/* PO 승인 정보 */}
+                <Grid item xs={12}>
+                  <Typography variant="h6" gutterBottom>
+                    PO 승인 정보
+                  </Typography>
+                  <Paper variant="outlined" sx={{ p: 2 }}>
+                    <Grid container spacing={2}>
+                      <Grid item xs={6}>
+                        <Typography variant="body2" color="text.secondary">승인자</Typography>
+                        <Typography variant="body1">
+                          {selectedRegistrationRequest.po_name}
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Typography variant="body2" color="text.secondary">배포 우선순위</Typography>
+                        <Chip 
+                          label={
+                            selectedRegistrationRequest.deployment_priority === 'high' ? '높음' :
+                            selectedRegistrationRequest.deployment_priority === 'normal' ? '보통' : '낮음'
+                          }
+                          size="small"
+                          color={
+                            selectedRegistrationRequest.deployment_priority === 'high' ? 'error' :
+                            selectedRegistrationRequest.deployment_priority === 'normal' ? 'warning' : 'default'
+                          }
+                        />
+                      </Grid>
+                      <Grid item xs={12}>
+                        <Typography variant="body2" color="text.secondary">PO 승인 사유</Typography>
+                        <Typography variant="body1">
+                          {selectedRegistrationRequest.registration_notes || '사유 없음'}
+                        </Typography>
+                      </Grid>
+                    </Grid>
+                  </Paper>
+                </Grid>
+
+                {/* 관리자 결정 */}
+                <Grid item xs={12}>
+                  <Typography variant="h6" gutterBottom>
+                    최종 승인 결정
+                  </Typography>
+                  <FormControl fullWidth sx={{ mb: 2 }}>
+                    <InputLabel>결정</InputLabel>
+                    <Select
+                      value={registrationDecision.decision}
+                      onChange={(e) => setRegistrationDecision(prev => ({
+                        ...prev,
+                        decision: e.target.value
+                      }))}
+                      label="결정"
+                    >
+                      <MenuItem value="approve">승인 - 시스템 등록 및 배포 진행</MenuItem>
+                      <MenuItem value="reject">반려 - 추가 검토 필요</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+
+                {/* 배포 일정 (승인 시에만) */}
+                {registrationDecision.decision === 'approve' && (
+                  <Grid item xs={12}>
+                    <TextField
+                      fullWidth
+                      label="배포 예정 일정"
+                      value={registrationDecision.deployment_schedule}
+                      onChange={(e) => setRegistrationDecision(prev => ({
+                        ...prev,
+                        deployment_schedule: e.target.value
+                      }))}
+                      placeholder="예: 2024-01-15 14:00 또는 즉시 배포"
+                      helperText="배포 예정 일정을 입력해주세요 (선택사항)"
+                    />
+                  </Grid>
+                )}
+
+                {/* 관리자 메모 */}
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    multiline
+                    rows={4}
+                    label={registrationDecision.decision === 'approve' ? '승인 사유 및 배포 지시사항' : '반려 사유 및 추가 검토 사항'}
+                    value={registrationDecision.admin_notes}
+                    onChange={(e) => setRegistrationDecision(prev => ({
+                      ...prev,
+                      admin_notes: e.target.value
+                    }))}
+                    required
+                  />
+                </Grid>
+              </Grid>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRegistrationApprovalDialog(false)}>
+            취소
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleRegistrationDecision}
+            disabled={submittingRegistrationDecision || !registrationDecision.admin_notes.trim()}
+            color={registrationDecision.decision === 'approve' ? 'success' : 'error'}
+            sx={{
+              px: 3,
+              py: 1.5,
+              fontSize: '1.1rem',
+              fontWeight: 'bold'
+            }}
+          >
+            {submittingRegistrationDecision ? '처리 중...' : 
+             registrationDecision.decision === 'approve' ? '최종 승인' : '반려 처리'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* 지연 프로젝트 알림 생성 다이얼로그 */}
+      <Dialog 
+        open={delayAlertsDialog} 
+        onClose={() => setDelayAlertsDialog(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          지연 프로젝트 알림 생성
+        </DialogTitle>
+        <DialogContent>
+          <Alert severity="info" sx={{ mb: 3 }}>
+            선택된 지연 프로젝트들에 대해 관련 담당자들에게 자동으로 알림이 전송됩니다.
+          </Alert>
+
+          <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+            알림 대상 프로젝트: {delayedProjects.length}건
+          </Typography>
+
+          <Box sx={{ mb: 3 }}>
+            {delayedProjects.map((project, index) => (
+              <Box key={index} sx={{ 
+                p: 2, 
+                mb: 1, 
+                border: '1px solid #e0e0e0', 
+                borderRadius: 1,
+                backgroundColor: '#fafafa'
+              }}>
+                <Typography variant="body1" sx={{ fontWeight: 600, mb: 1 }}>
+                  {project.project_name}
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                  <Chip label={`단계: ${project.current_stage}`} size="small" color="info" />
+                  <Chip label={`지연: ${project.delay_hours}시간`} size="small" color="error" />
+                  <Chip label={`심각도: ${project.severity}`} size="small" color="warning" />
+                </Box>
+              </Box>
+            ))}
+          </Box>
+
+          <Typography variant="body2" color="text.secondary">
+            알림은 다음 담당자들에게 전송됩니다:
+          </Typography>
+          <ul>
+            <li>프로젝트 담당 PE</li>
+            <li>해당 PO</li>
+            <li>QC/QA 담당자 (해당하는 경우)</li>
+            <li>최고 관리자</li>
+          </ul>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDelayAlertsDialog(false)}>
+            취소
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleGenerateDelayAlerts}
+            disabled={generatingAlerts || delayedProjects.length === 0}
+            sx={{
+              backgroundColor: '#d32f2f',
+              '&:hover': {
+                backgroundColor: '#b71c1c'
+              }
+            }}
+          >
+            {generatingAlerts ? '알림 생성 중...' : '알림 생성'}
           </Button>
         </DialogActions>
       </Dialog>
