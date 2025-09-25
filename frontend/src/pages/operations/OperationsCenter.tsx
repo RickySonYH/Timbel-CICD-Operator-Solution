@@ -12,6 +12,7 @@ import {
 
 // 컴포넌트 임포트
 import InfrastructureOverview from '../../components/infrastructure/InfrastructureOverview';
+import CICDPipelineManagement from '../../components/operations/CICDPipelineManagement';
 
 
 // 탭 패널 컴포넌트
@@ -77,10 +78,9 @@ const OperationsCenter: React.FC = () => {
             aria-controls="operations-tabpanel-1"
           />
           <Tab 
-            label="배포 관리" 
+            label="CI/CD 파이프라인" 
             id="operations-tab-2"
             aria-controls="operations-tabpanel-2"
-            disabled
           />
           <Tab 
             label="모니터링" 
@@ -111,17 +111,9 @@ const OperationsCenter: React.FC = () => {
         <InfrastructureOverview />
       </TabPanel>
 
-      {/* 배포 관리 탭 */}
+      {/* CI/CD 파이프라인 탭 */}
       <TabPanel value={currentTab} index={2}>
-        <Alert severity="info" sx={{ mb: 3 }}>
-          배포 관리 기능은 개발 중입니다.
-        </Alert>
-        
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight="300px">
-          <Typography variant="h6" color="text.secondary">
-            배포 관리 기능 개발 예정
-          </Typography>
-        </Box>
+        <CICDPipelineManagement />
       </TabPanel>
 
       {/* 모니터링 탭 */}

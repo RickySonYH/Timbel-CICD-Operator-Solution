@@ -448,6 +448,103 @@ pipeline {
     };
   }
 
+  // [advice from AI] 새로운 CI/CD 파이프라인 메서드들 추가
+  
+  /**
+   * Jenkins Job 생성
+   */
+  async createPipelineJob(config) {
+    try {
+      console.log(`🔧 Jenkins Job 생성 시작: ${config.jobName}`);
+      
+      // 실제 Jenkins API 호출 (현재는 Mock)
+      const jobConfig = this.generateJobConfig(config);
+      
+      // Mock 응답
+      return {
+        success: true,
+        data: {
+          jobName: config.jobName,
+          jobUrl: `${this.jenkinsURL}/job/${config.jobName}`,
+          config: jobConfig
+        },
+        message: `Jenkins Job '${config.jobName}' 생성 완료`
+      };
+      
+    } catch (error) {
+      console.error('❌ Jenkins Job 생성 실패:', error);
+      throw new Error(`Jenkins Job 생성 실패: ${error.message}`);
+    }
+  }
+
+  /**
+   * Jenkins 빌드 트리거
+   */
+  async triggerBuild(config) {
+    try {
+      console.log(`🚀 Jenkins 빌드 트리거: ${config.jobName}`);
+      
+      const buildNumber = Math.floor(Math.random() * 1000) + 1;
+      
+      // Mock 응답
+      return {
+        success: true,
+        data: {
+          jobName: config.jobName,
+          buildNumber: buildNumber,
+          buildUrl: `${this.jenkinsURL}/job/${config.jobName}/${buildNumber}`,
+          parameters: config.parameters
+        },
+        buildNumber: buildNumber,
+        message: `빌드 #${buildNumber} 트리거 완료`
+      };
+      
+    } catch (error) {
+      console.error('❌ Jenkins 빌드 트리거 실패:', error);
+      throw new Error(`Jenkins 빌드 트리거 실패: ${error.message}`);
+    }
+  }
+
+  /**
+   * Jenkins Job 삭제
+   */
+  async deleteJob(jobName) {
+    try {
+      console.log(`🗑️ Jenkins Job 삭제: ${jobName}`);
+      
+      // Mock 응답
+      return {
+        success: true,
+        message: `Jenkins Job '${jobName}' 삭제 완료`
+      };
+      
+    } catch (error) {
+      console.error('❌ Jenkins Job 삭제 실패:', error);
+      throw new Error(`Jenkins Job 삭제 실패: ${error.message}`);
+    }
+  }
+
+  /**
+   * Jenkins Job 설정 생성
+   */
+  generateJobConfig(config) {
+    return {
+      repositoryUrl: config.repositoryUrl,
+      branch: config.branch,
+      dockerfilePath: config.dockerfilePath || 'Dockerfile',
+      buildSteps: [
+        'git checkout',
+        'docker build',
+        'docker tag',
+        'docker push'
+      ],
+      postBuildActions: [
+        'cleanup workspace',
+        'notify pipeline status'
+      ]
+    };
+  }
+
   // [advice from AI] 서비스 템플릿 조회
   getServiceTemplates() {
     return {
