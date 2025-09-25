@@ -47,7 +47,7 @@ import {
   PlayArrow as PlayArrowIcon,
   Stop as StopIcon
 } from '@mui/icons-material';
-import { useAuthStore } from '../../stores/authStore';
+import { useJwtAuthStore } from '../../store/jwtAuthStore';
 
 interface DeploymentRequestDialogProps {
   open: boolean;
@@ -132,7 +132,7 @@ const DeploymentRequestDialog: React.FC<DeploymentRequestDialogProps> = ({
   const [deploymentLogs, setDeploymentLogs] = useState<string[]>([]);
   const [deploymentStatus, setDeploymentStatus] = useState<'pending' | 'running' | 'success' | 'failed'>('pending');
   
-  const { token } = useAuthStore();
+  const { token } = useJwtAuthStore();
 
   const steps = [
     '프로젝트 선택',

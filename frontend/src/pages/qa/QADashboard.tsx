@@ -21,15 +21,7 @@ import {
   IconButton,
   Tooltip
 } from '@mui/material';
-import {
-  BugReport as BugReportIcon,
-  Assignment as AssignmentIcon,
-  CheckCircle as CheckIcon,
-  Error as ErrorIcon,
-  Warning as WarningIcon,
-  Refresh as RefreshIcon,
-  Add as AddIcon
-} from '@mui/icons-material';
+// [advice from AI] 사용자 요청에 따라 아이콘 제거
 import BackstageCard from '../../components/layout/BackstageCard';
 
 interface QAMetrics {

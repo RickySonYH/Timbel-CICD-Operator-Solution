@@ -21,7 +21,7 @@ import {
 } from '@mui/material';
 import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon, Refresh as RefreshIcon } from '@mui/icons-material';
 import InfrastructureDialog from './InfrastructureDialog';
-import { useAuthStore } from '../../stores/authStore';
+import { useJwtAuthStore } from '../../store/jwtAuthStore';
 
 interface Infrastructure {
   id: string;
@@ -56,7 +56,7 @@ const InfrastructureOverview: React.FC = () => {
   const [editingInfrastructure, setEditingInfrastructure] = useState<Infrastructure | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   
-  const { token } = useAuthStore();
+  const { token } = useJwtAuthStore();
 
   const fetchInfrastructures = async () => {
     try {

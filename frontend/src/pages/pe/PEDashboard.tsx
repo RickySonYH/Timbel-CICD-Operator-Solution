@@ -42,10 +42,7 @@ import {
   Radio,
   FormControlLabel
 } from '@mui/material';
-import {
-  Close as CloseIcon
-} from '@mui/icons-material';
-// [advice from AI] 아이콘 사용 자제 - 모든 아이콘 import 제거
+// [advice from AI] 사용자 요청에 따라 아이콘 제거 - 모든 아이콘 import 제거
 
 interface DashboardStats {
   total_tasks: number;

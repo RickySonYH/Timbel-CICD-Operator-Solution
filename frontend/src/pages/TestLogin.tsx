@@ -13,11 +13,11 @@ import {
   Chip,
   Paper,
 } from '@mui/material';
-import { useAuthStore } from '../store/authStore';
+import { useJwtAuthStore } from '../store/jwtAuthStore';
 import BackstageCard from '../components/layout/BackstageCard';
 
 const TestLogin: React.FC = () => {
-  const { login, user, logout } = useAuthStore();
+  const { login, user, logout } = useJwtAuthStore();
   const [testResult, setTestResult] = useState<string>('');
 
   // [advice from AI] 역할별 계정 테스트 데이터

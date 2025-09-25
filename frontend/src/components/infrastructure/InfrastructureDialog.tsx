@@ -17,7 +17,7 @@ import {
   Grid,
   Chip
 } from '@mui/material';
-import { useAuthStore } from '../../stores/authStore';
+import { useJwtAuthStore } from '../../store/jwtAuthStore';
 
 interface Infrastructure {
   id?: string;
@@ -69,7 +69,7 @@ const InfrastructureDialog: React.FC<InfrastructureDialogProps> = ({
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionResult, setConnectionResult] = useState<string | null>(null);
   
-  const { token } = useAuthStore();
+  const { token } = useJwtAuthStore();
   const isEditing = !!infrastructure;
 
   useEffect(() => {

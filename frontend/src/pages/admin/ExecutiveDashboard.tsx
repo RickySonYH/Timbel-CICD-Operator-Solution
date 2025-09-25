@@ -8,10 +8,7 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions, IconButton,
   Tooltip, TextField, FormControl, InputLabel, Select, MenuItem
 } from '@mui/material';
-import {
-  Close as CloseIcon
-} from '@mui/icons-material';
-// [advice from AI] 아이콘 사용 자제 - 모든 아이콘 import 제거
+// [advice from AI] 사용자 요청에 따라 아이콘 제거 - 모든 아이콘 import 제거
 import { useJwtAuthStore } from '../../store/jwtAuthStore';
 import { useNavigate } from 'react-router-dom';
 
@@ -110,6 +107,23 @@ const ExecutiveDashboard: React.FC = () => {
   const [projectListTitle, setProjectListTitle] = useState('');
   const [projectList, setProjectList] = useState<ProjectAssignment[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(false);
+
+  // [advice from AI] PO 대시보드와 동일한 분석 기능 추가
+  // PE 성과 분석 상태
+  const [pePerformanceData, setPePerformanceData] = useState<any>(null);
+  const [pePerformanceDialog, setPePerformanceDialog] = useState(false);
+  
+  // 업무 부하 분산 분석 상태
+  const [workloadDistributionData, setWorkloadDistributionData] = useState<any>(null);
+  const [workloadAnalysisDialog, setWorkloadAnalysisDialog] = useState(false);
+  
+  // 프로젝트 리스크 분석 상태
+  const [riskAnalysisData, setRiskAnalysisData] = useState<any>(null);
+  const [riskAnalysisDialog, setRiskAnalysisDialog] = useState(false);
+  
+  // QC/QA 진행 현황 상태
+  const [qcProgressData, setQcProgressData] = useState<any[]>([]);
+  const [qcApprovalNotifications, setQcApprovalNotifications] = useState<any[]>([]);
   
   // 액션 메뉴 상태
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -148,6 +162,121 @@ const ExecutiveDashboard: React.FC = () => {
       return 'http://localhost:3001';
     }
     return `http://${currentHost.split(':')[0]}:3001`;
+  };
+
+  // [advice from AI] PO 대시보드와 동일한 분석 함수들 추가
+  // PE 성과 분석 데이터 로딩
+  const loadPePerformanceAnalytics = async () => {
+    try {
+      const response = await fetch(`${getApiUrl()}/api/po/pe-performance-analytics`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          setPePerformanceData(result.data);
+          console.log('✅ PE 성과 분석 데이터 로딩 완료:', result.data);
+        }
+      }
+    } catch (error) {
+      console.error('❌ PE 성과 분석 로딩 실패:', error);
+    }
+  };
+
+  // 업무 부하 분산 분석 데이터 로딩
+  const loadWorkloadDistributionAnalytics = async () => {
+    try {
+      const response = await fetch(`${getApiUrl()}/api/po/workload-distribution-analytics`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          setWorkloadDistributionData(result.data);
+          console.log('✅ 업무 부하 분산 분석 데이터 로딩 완료:', result.data);
+        }
+      }
+    } catch (error) {
+      console.error('❌ 업무 부하 분산 분석 로딩 실패:', error);
+    }
+  };
+
+  // 프로젝트 리스크 분석 데이터 로딩
+  const loadProjectRiskAnalysis = async () => {
+    try {
+      console.log('🔍 프로젝트 리스크 분석 로드 시작...');
+      
+      const response = await fetch(`${getApiUrl()}/api/po/project-risk-analysis`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          setRiskAnalysisData(result.data);
+          console.log('✅ 프로젝트 리스크 분석 로드 완료:', result.data);
+        } else {
+          console.error('❌ 프로젝트 리스크 분석 로드 실패:', response.status);
+        }
+      }
+    } catch (error) {
+      console.error('❌ 프로젝트 리스크 분석 로드 오류:', error);
+    }
+  };
+
+  // QC/QA 진행 현황 로딩
+  const loadQcProgressData = async () => {
+    try {
+      const response = await fetch(`${getApiUrl()}/api/qc/progress-status`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          setQcProgressData(result.data || []);
+          console.log('✅ QC/QA 진행 현황 로드 완료:', result.data?.length || 0, '건');
+        }
+      }
+    } catch (error) {
+      console.error('❌ QC/QA 진행 현황 로딩 실패:', error);
+    }
+  };
+
+  // QC/QA 승인 완료 알림 로딩
+  const loadQcApprovalNotifications = async () => {
+    try {
+      const response = await fetch(`${getApiUrl()}/api/qc/approval-notifications`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          setQcApprovalNotifications(result.data || []);
+          console.log('✅ QC/QA 승인 완료 알림 로드 완료:', result.data?.length || 0, '건');
+        }
+      }
+    } catch (error) {
+      console.error('❌ QC/QA 승인 완료 알림 로딩 실패:', error);
+    }
   };
 
   // QC/QA 현황 데이터 로드
@@ -757,6 +886,13 @@ const ExecutiveDashboard: React.FC = () => {
       loadProjectLifecycleData();
       loadDelayedProjects();
       
+      // [advice from AI] PO 대시보드와 동일한 분석 기능 로드
+      loadPePerformanceAnalytics();
+      loadWorkloadDistributionAnalytics();
+      loadProjectRiskAnalysis();
+      loadQcProgressData();
+      loadQcApprovalNotifications();
+      
       // 주기적 데이터 새로고침 (30초마다)
       const interval = setInterval(() => {
         fetchDashboardData();
@@ -764,6 +900,11 @@ const ExecutiveDashboard: React.FC = () => {
         loadSystemRegistrationRequests();
         loadProjectLifecycleData();
         loadDelayedProjects();
+        loadPePerformanceAnalytics();
+        loadWorkloadDistributionAnalytics();
+        loadProjectRiskAnalysis();
+        loadQcProgressData();
+        loadQcApprovalNotifications();
       }, 30000);
       
       return () => clearInterval(interval);

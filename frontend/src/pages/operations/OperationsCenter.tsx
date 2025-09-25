@@ -8,12 +8,7 @@ import {
   Paper,
   Alert
 } from '@mui/material';
-import {
-  Dashboard as DashboardIcon,
-  Storage as InfrastructureIcon,
-  Deployment as DeploymentIcon,
-  Monitoring as MonitoringIcon
-} from '@mui/icons-material';
+// [advice from AI] 사용자 요청에 따라 아이콘 제거
 
 // 컴포넌트 임포트
 import InfrastructureOverview from '../../components/infrastructure/InfrastructureOverview';
@@ -72,26 +67,22 @@ const OperationsCenter: React.FC = () => {
           sx={{ borderBottom: 1, borderColor: 'divider' }}
         >
           <Tab 
-            icon={<DashboardIcon />} 
             label="대시보드" 
             id="operations-tab-0"
             aria-controls="operations-tabpanel-0"
           />
           <Tab 
-            icon={<InfrastructureIcon />} 
             label="인프라 관리" 
             id="operations-tab-1"
             aria-controls="operations-tabpanel-1"
           />
           <Tab 
-            icon={<DeploymentIcon />} 
             label="배포 관리" 
             id="operations-tab-2"
             aria-controls="operations-tabpanel-2"
             disabled
           />
           <Tab 
-            icon={<MonitoringIcon />} 
             label="모니터링" 
             id="operations-tab-3"
             aria-controls="operations-tabpanel-3"
