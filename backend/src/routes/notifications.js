@@ -12,7 +12,7 @@ const router = express.Router();
 const pool = new Pool({
   user: process.env.DB_USER || 'timbel_user',
   host: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_NAME || 'timbel_db',
+  database: process.env.DB_NAME || 'timbel_knowledge',
   password: process.env.DB_PASSWORD || 'timbel_password',
   port: process.env.DB_PORT || 5432,
 });
@@ -40,28 +40,28 @@ router.get('/dashboard-stats', jwtAuth.verifyToken, async (req, res) => {
         ]);
         
         stats = {
-          pending_approvals: parseInt(pendingProjects.rows[0].count),
-          approved_projects: parseInt(approvedProjects.rows[0].count),
-          rejected_projects: parseInt(rejectedProjects.rows[0].count),
-          total_projects: parseInt(totalProjects.rows[0].count)
+          pending_approvals: parseInt(pendingProjects.rows[0].count) || 0,
+          approved_projects: parseInt(approvedProjects.rows[0].count) || 0,
+          rejected_projects: parseInt(rejectedProjects.rows[0].count) || 0,
+          total_projects: parseInt(totalProjects.rows[0].count) || 0
         };
       } else if (userRole === 'po') {
         // PO용 통계
         const [claimedProjects, availableProjects, assignedProjects] = await Promise.all([
-          client.query('SELECT COUNT(*) as count FROM projects WHERE claimed_by_po = $1', [userId]),
-          client.query('SELECT COUNT(*) as count FROM projects WHERE approval_status = \'approved\' AND claimed_by_po IS NULL'),
+          client.query('SELECT COUNT(*) as count FROM projects WHERE assigned_po = $1', [userId]),
+          client.query('SELECT COUNT(*) as count FROM projects WHERE approval_status = \'approved\' AND assigned_po IS NULL'),
           client.query(`
             SELECT COUNT(*) as count 
             FROM project_work_assignments pwa 
             JOIN projects p ON pwa.project_id = p.id 
-            WHERE p.claimed_by_po = $1
+            WHERE p.assigned_po = $1
           `, [userId])
         ]);
         
         stats = {
-          claimed_projects: parseInt(claimedProjects.rows[0].count),
-          available_projects: parseInt(availableProjects.rows[0].count),
-          assigned_projects: parseInt(assignedProjects.rows[0].count)
+          claimed_projects: parseInt(claimedProjects.rows[0].count) || 0,
+          available_projects: parseInt(availableProjects.rows[0].count) || 0,
+          assigned_projects: parseInt(assignedProjects.rows[0].count) || 0
         };
       } else if (userRole === 'pe') {
         // PE용 통계
@@ -82,9 +82,9 @@ router.get('/dashboard-stats', jwtAuth.verifyToken, async (req, res) => {
         ]);
         
         stats = {
-          assigned_projects: parseInt(assignedProjects.rows[0].count),
-          in_progress_projects: parseInt(inProgressProjects.rows[0].count),
-          completed_projects: parseInt(completedProjects.rows[0].count)
+          assigned_projects: parseInt(assignedProjects.rows[0].count) || 0,
+          in_progress_projects: parseInt(inProgressProjects.rows[0].count) || 0,
+          completed_projects: parseInt(completedProjects.rows[0].count) || 0
         };
       }
       
@@ -168,7 +168,7 @@ router.get('/', jwtAuth.verifyToken, async (req, res) => {
       
       if (priority) {
         query += ` AND um.priority = $${paramIndex}`;
-        params.push(parseInt(priority));
+        params.push(parseInt(priority) || 1); // [advice from AI] priority를 숫자로 처리
         paramIndex++;
       }
       
@@ -343,8 +343,8 @@ router.get('/stats', jwtAuth.verifyToken, async (req, res) => {
         SELECT 
           COUNT(*) as total_messages,
           COUNT(CASE WHEN is_read = FALSE THEN 1 END) as unread_messages,
-          COUNT(CASE WHEN priority = 'urgent' THEN 1 END) as urgent_messages,
-          COUNT(CASE WHEN priority = 'high' THEN 1 END) as high_messages,
+          COUNT(CASE WHEN priority = 4 THEN 1 END) as urgent_messages,
+          COUNT(CASE WHEN priority = 3 THEN 1 END) as high_messages,
           COUNT(CASE WHEN sent_at >= NOW() - INTERVAL '24 hours' THEN 1 END) as today_messages
         FROM approval_messages
         WHERE recipient_id = $1
@@ -381,9 +381,9 @@ router.get('/stats', jwtAuth.verifyToken, async (req, res) => {
         `, [userId]);
         
         roleSpecificStats = {
-          pending_approvals: parseInt(adminStatsResult.rows[0].pending_approvals),
-          urgent_approvals: parseInt(adminStatsResult.rows[0].urgent_approvals),
-          urgent_development_projects: parseInt(adminStatsResult.rows[0].urgent_development_projects)
+          pending_approvals: parseInt(adminStatsResult.rows[0].pending_approvals) || 0,
+          urgent_approvals: parseInt(adminStatsResult.rows[0].urgent_approvals) || 0,
+          urgent_development_projects: parseInt(adminStatsResult.rows[0].urgent_development_projects) || 0
         };
       } else if (userRole === 'po') {
         // PO: 내 프로젝트 관련 통계
@@ -397,9 +397,9 @@ router.get('/stats', jwtAuth.verifyToken, async (req, res) => {
         `, [userId]);
         
         roleSpecificStats = {
-          my_projects: parseInt(poStatsResult.rows[0].my_projects),
-          active_projects: parseInt(poStatsResult.rows[0].active_projects),
-          overdue_projects: parseInt(poStatsResult.rows[0].overdue_projects)
+          my_projects: parseInt(poStatsResult.rows[0].my_projects) || 0,
+          active_projects: parseInt(poStatsResult.rows[0].active_projects) || 0,
+          overdue_projects: parseInt(poStatsResult.rows[0].overdue_projects) || 0
         };
       } else if (userRole === 'pe') {
         // PE: 할당된 작업 통계
@@ -413,9 +413,9 @@ router.get('/stats', jwtAuth.verifyToken, async (req, res) => {
         `, [userId]);
         
         roleSpecificStats = {
-          assigned_tasks: parseInt(peStatsResult.rows[0].assigned_tasks),
-          pending_tasks: parseInt(peStatsResult.rows[0].pending_tasks),
-          active_tasks: parseInt(peStatsResult.rows[0].active_tasks)
+          assigned_tasks: parseInt(peStatsResult.rows[0].assigned_tasks) || 0,
+          pending_tasks: parseInt(peStatsResult.rows[0].pending_tasks) || 0,
+          active_tasks: parseInt(peStatsResult.rows[0].active_tasks) || 0
         };
       }
       
@@ -825,7 +825,7 @@ router.post('/messages/create', jwtAuth.verifyToken, async (req, res) => {
         title, 
         message, 
         messageType || 'info', 
-        priority || 1, 
+        priority || 1, // [advice from AI] priority를 숫자로 처리 (1=low, 2=normal, 3=high, 4=urgent) 
         userId,
         JSON.stringify({
           event_category: eventCategory || 'manual_message',

@@ -11,7 +11,7 @@ const router = express.Router();
 const pool = new Pool({
   user: process.env.DB_USER || 'timbel_user',
   host: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_NAME || 'timbel_db',
+  database: process.env.DB_NAME || 'timbel_knowledge',
   password: process.env.DB_PASSWORD || 'timbel_password',
   port: process.env.DB_PORT || 5432,
 });
@@ -32,11 +32,11 @@ router.get('/overview', jwtAuth.verifyToken, async (req, res) => {
         SELECT 
           COUNT(*) as total_projects,
           COUNT(CASE WHEN approval_status = 'pending' THEN 1 END) as pending_approval,
-          COUNT(CASE WHEN approval_status = 'approved' AND claimed_by_po IS NULL THEN 1 END) as available_for_claim,
-          COUNT(CASE WHEN claimed_by_po IS NOT NULL AND project_status = 'planning' THEN 1 END) as po_claimed,
+          COUNT(CASE WHEN approval_status = 'approved' AND assigned_po IS NULL THEN 1 END) as available_for_claim,
+          COUNT(CASE WHEN assigned_po IS NOT NULL AND project_status = 'planning' THEN 1 END) as po_claimed,
           COUNT(CASE WHEN project_status IN ('in_progress', 'development') THEN 1 END) as pe_working,
           COUNT(CASE WHEN project_status = 'completed' THEN 1 END) as completed,
-          COUNT(CASE WHEN is_urgent_development = TRUE AND project_status NOT IN ('completed', 'cancelled') THEN 1 END) as urgent_active,
+          COUNT(CASE WHEN urgency_level IN ('high', 'critical') AND project_status NOT IN ('completed', 'cancelled') THEN 1 END) as urgent_active,
           COUNT(CASE WHEN deadline < CURRENT_DATE AND project_status NOT IN ('completed', 'cancelled') THEN 1 END) as overdue,
           COUNT(CASE WHEN created_at >= DATE_TRUNC('week', CURRENT_DATE) THEN 1 END) as this_week_created,
           COUNT(CASE WHEN project_status = 'completed' AND updated_at >= DATE_TRUNC('week', CURRENT_DATE) THEN 1 END) as this_week_completed
@@ -50,17 +50,17 @@ router.get('/overview', jwtAuth.verifyToken, async (req, res) => {
           u.full_name as user_name,
           u.role_type,
           COUNT(CASE 
-            WHEN u.role_type = 'po' AND p.claimed_by_po = u.id AND p.project_status NOT IN ('completed', 'cancelled') THEN 1
+            WHEN u.role_type = 'po' AND p.assigned_po = u.id AND p.project_status NOT IN ('completed', 'cancelled') THEN 1
             WHEN u.role_type = 'pe' AND pwa.assigned_to = u.id AND pwa.assignment_status IN ('assigned', 'in_progress') THEN 1
           END) as active_workload,
           COUNT(CASE 
-            WHEN u.role_type = 'po' AND p.claimed_by_po = u.id AND p.project_status = 'completed' 
+            WHEN u.role_type = 'po' AND p.assigned_po = u.id AND p.project_status = 'completed' 
                  AND p.updated_at >= DATE_TRUNC('month', CURRENT_DATE) THEN 1
             WHEN u.role_type = 'pe' AND pwa.assigned_to = u.id AND pwa.assignment_status = 'completed' 
                  AND pwa.updated_at >= DATE_TRUNC('month', CURRENT_DATE) THEN 1
           END) as monthly_completed,
           COUNT(CASE 
-            WHEN u.role_type = 'po' AND p.claimed_by_po = u.id AND p.project_status = 'completed' THEN 1
+            WHEN u.role_type = 'po' AND p.assigned_po = u.id AND p.project_status = 'completed' THEN 1
             WHEN u.role_type = 'pe' AND pwa.assigned_to = u.id AND pwa.assignment_status = 'completed' THEN 1
           END) as total_completed,
           CASE 
@@ -74,7 +74,7 @@ router.get('/overview', jwtAuth.verifyToken, async (req, res) => {
             ELSE 0
           END as progress_rate_percent
         FROM timbel_users u
-        LEFT JOIN projects p ON u.id = p.claimed_by_po
+        LEFT JOIN projects p ON u.id = p.assigned_po
         LEFT JOIN project_work_assignments pwa ON u.id = pwa.assigned_to
         WHERE u.role_type IN ('po', 'pe')
         GROUP BY u.id, u.full_name, u.role_type
@@ -83,18 +83,8 @@ router.get('/overview', jwtAuth.verifyToken, async (req, res) => {
         LIMIT 10
       `);
       
-      // 3. 최근 이벤트 (최신 20개)
-      const eventsResult = await client.query(`
-        SELECT 
-          ses.*,
-          u.full_name as user_name,
-          p.name as project_name
-        FROM system_event_stream ses
-        LEFT JOIN timbel_users u ON ses.user_id = u.id
-        LEFT JOIN projects p ON ses.project_id = p.id
-        ORDER BY ses.event_timestamp DESC
-        LIMIT 20
-      `);
+      // 3. 최근 이벤트 (최신 20개) - [advice from AI] 테이블 없음으로 임시 비활성화
+      const eventsResult = { rows: [] };
       
       // 4. CI/CD 현황 (실제 데이터만)
       let cicdStats = null;
@@ -159,7 +149,7 @@ router.get('/overview', jwtAuth.verifyToken, async (req, res) => {
           SELECT 
             COUNT(CASE WHEN u.role_type = 'po' THEN 1 END) as total_pos,
             COUNT(CASE WHEN u.role_type = 'pe' THEN 1 END) as total_pes,
-            COUNT(CASE WHEN u.last_login_at >= NOW() - INTERVAL '24 hours' THEN 1 END) as active_users_24h,
+            COUNT(CASE WHEN u.updated_at >= NOW() - INTERVAL '24 hours' THEN 1 END) as active_users_24h,
             COUNT(CASE WHEN p.approval_status = 'pending' THEN 1 END) as pending_approvals
           FROM timbel_users u
           CROSS JOIN projects p
@@ -176,10 +166,10 @@ router.get('/overview', jwtAuth.verifyToken, async (req, res) => {
         const poStatsResult = await client.query(`
           SELECT 
             COUNT(CASE WHEN ppc.claim_status = 'active' THEN 1 END) as my_active_claims,
-            COUNT(CASE WHEN p.approval_status = 'approved' AND p.claimed_by_po IS NULL THEN 1 END) as available_to_claim,
-            COUNT(CASE WHEN p.claimed_by_po = $1 AND p.project_status = 'completed' THEN 1 END) as my_completed_projects
+            COUNT(CASE WHEN p.approval_status = 'approved' AND p.assigned_po IS NULL THEN 1 END) as available_to_claim,
+            COUNT(CASE WHEN p.assigned_po = $1 AND p.project_status = 'completed' THEN 1 END) as my_completed_projects
           FROM projects p
-          LEFT JOIN project_po_claims ppc ON p.id = ppc.project_id AND ppc.claimed_by_po = $1
+          LEFT JOIN project_po_claims ppc ON p.id = ppc.project_id AND ppc.assigned_po = $1
         `, [userId]);
         
         roleSpecificData = {
@@ -258,7 +248,7 @@ router.post('/events', jwtAuth.verifyToken, async (req, res) => {
     
     try {
       const result = await client.query(`
-        INSERT INTO system_event_stream (
+        -- INSERT INTO system_event_stream ( -- [advice from AI] 테이블 없음으로 비활성화
           event_type, event_category, event_severity, title, description,
           project_id, user_id, pipeline_id, server_name, service_name, event_data
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
@@ -330,7 +320,7 @@ router.post('/cicd/pipeline-update', async (req, res) => {
       
       // 이벤트 스트림에도 추가
       await client.query(`
-        INSERT INTO system_event_stream (
+        -- INSERT INTO system_event_stream ( -- [advice from AI] 테이블 없음으로 비활성화
           event_type, event_category, event_severity, title, description,
           project_id, pipeline_id, event_data
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -415,7 +405,7 @@ router.post('/infrastructure/update', async (req, res) => {
       // 상태 변경 시 이벤트 스트림에 추가
       if (status === 'critical' || status === 'down') {
         await client.query(`
-          INSERT INTO system_event_stream (
+          -- INSERT INTO system_event_stream ( -- [advice from AI] 테이블 없음으로 비활성화
             event_type, event_category, event_severity, title, description,
             server_name, service_name, event_data
           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -510,7 +500,7 @@ router.get('/performance/:userId', jwtAuth.verifyToken, async (req, res) => {
           JOIN projects p ON ppc.project_id = p.id
           LEFT JOIN project_work_assignments pwa ON p.id = pwa.project_id
           LEFT JOIN timbel_users pe ON pwa.assigned_to = pe.id
-          WHERE ppc.claimed_by_po = $1
+          WHERE ppc.assigned_po = $1
           ORDER BY ppc.claimed_at DESC
           LIMIT 10
         `, [targetUserId]);
@@ -532,7 +522,7 @@ router.get('/performance/:userId', jwtAuth.verifyToken, async (req, res) => {
             pr.last_commit_at
           FROM project_work_assignments pwa
           JOIN projects p ON pwa.project_id = p.id
-          LEFT JOIN timbel_users po ON p.claimed_by_po = po.id
+          LEFT JOIN timbel_users po ON p.assigned_po = po.id
           LEFT JOIN project_repositories pr ON p.id = pr.project_id
           WHERE pwa.assigned_to = $1
           ORDER BY pwa.assigned_at DESC

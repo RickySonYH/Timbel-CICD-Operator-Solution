@@ -174,7 +174,7 @@ const LoginForm: React.FC = () => {
               Timeless Label
             </Typography>
             <Typography variant="h6" align="center" color="primary" gutterBottom sx={{ mb: 3 }}>
-              지식자원 관리 플랫폼
+              Project Management Solution
             </Typography>
 
             {error && (

@@ -1,0 +1,171 @@
+# [advice from AI] Jenkins Configuration as Code
+# 자동 설정을 위한 YAML 구성 파일
+
+jenkins:
+  systemMessage: "Timbel Knowledge CI/CD Server - 자동 구성됨"
+  numExecutors: 4
+  mode: NORMAL
+  
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: "admin"
+          password: "admin123!"
+          properties:
+            - "hudson.model.MyViewsProperty"
+            - "hudson.security.HudsonPrivateSecurityRealm$Details"
+        - id: "timbel"
+          password: "timbel123"
+          properties:
+            - "hudson.model.MyViewsProperty"
+            - "hudson.security.HudsonPrivateSecurityRealm$Details"
+
+  authorizationStrategy:
+    roleBased:
+      roles:
+        global:
+          - name: "admin"
+            description: "Jenkins administrators"
+            permissions:
+              - "Overall/Administer"
+            assignments:
+              - "admin"
+          - name: "developer"
+            description: "Jenkins developers"
+            permissions:
+              - "Overall/Read"
+              - "Job/Build"
+              - "Job/Cancel"
+              - "Job/Read"
+              - "Job/Workspace"
+              - "View/Read"
+            assignments:
+              - "timbel"
+
+  globalNodeProperties:
+    - envVars:
+        env:
+          - key: "NEXUS_URL"
+            value: "http://172.20.0.20:8081"
+          - key: "DOCKER_REGISTRY"
+            value: "172.20.0.20:8082"
+          - key: "ARGOCD_SERVER"
+            value: "http://172.20.0.30:8080"
+          - key: "GITEA_URL"
+            value: "http://172.20.0.40:3000"
+
+  clouds:
+    - docker:
+        name: "docker-cloud"
+        dockerApi:
+          dockerHost:
+            uri: "unix:///var/run/docker.sock"
+        templates:
+          - labelString: "docker-agent"
+            dockerTemplateBase:
+              image: "jenkins/agent:alpine-jdk11"
+            remoteFs: "/home/jenkins/agent"
+            connector:
+              attach:
+                user: "jenkins"
+            instanceCapStr: "10"
+            retentionStrategy:
+              idleMinutes: 1
+
+jobs:
+  - script: |
+      folder('ECP-AI-Services') {
+        displayName('ECP-AI 서비스 빌드')
+        description('ECP-AI 마이크로서비스 자동 빌드 파이프라인')
+      }
+      
+      pipelineJob('ECP-AI-Services/template-build') {
+        displayName('ECP-AI 서비스 템플릿 빌드')
+        description('GitHub 저장소에서 자동으로 Docker 이미지를 빌드하고 Nexus에 푸시')
+        
+        parameters {
+          stringParam('GITHUB_URL', '', 'GitHub Repository URL')
+          stringParam('BRANCH', 'main', 'Git Branch')
+          stringParam('SERVICE_NAME', '', 'ECP-AI Service Name')
+          stringParam('IMAGE_TAG', 'latest', 'Docker Image Tag')
+        }
+        
+        definition {
+          cps {
+            script('''
+              pipeline {
+                agent { label 'docker-agent' }
+                
+                environment {
+                  DOCKER_REGISTRY = "${env.DOCKER_REGISTRY}"
+                  NEXUS_URL = "${env.NEXUS_URL}"
+                }
+                
+                stages {
+                  stage('Checkout') {
+                    steps {
+                      git branch: "${params.BRANCH}", url: "${params.GITHUB_URL}"
+                    }
+                  }
+                  
+                  stage('Build Docker Image') {
+                    steps {
+                      script {
+                        def image = docker.build("${params.SERVICE_NAME}:${params.IMAGE_TAG}")
+                        docker.withRegistry("http://${DOCKER_REGISTRY}") {
+                          image.push()
+                          image.push('latest')
+                        }
+                      }
+                    }
+                  }
+                  
+                  stage('Notify Timbel Backend') {
+                    steps {
+                      script {
+                        sh '''
+                          curl -X POST http://host.docker.internal:3001/api/operations/cicd/jenkins/build-complete \\
+                               -H "Content-Type: application/json" \\
+                               -d "{\\"service\\": \\"${SERVICE_NAME}\\", \\"image\\": \\"${DOCKER_REGISTRY}/${SERVICE_NAME}:${IMAGE_TAG}\\", \\"status\\": \\"success\\"}"
+                        '''
+                      }
+                    }
+                  }
+                }
+                
+                post {
+                  always {
+                    cleanWs()
+                  }
+                }
+              }
+            ''')
+            sandbox()
+          }
+        }
+      }
+
+tool:
+  git:
+    installations:
+      - name: "Default"
+        home: "git"
+  
+  maven:
+    installations:
+      - name: "Maven-3.9"
+        properties:
+          - installSource:
+              installers:
+                - maven:
+                    id: "3.9.5"
+
+  jdk:
+    installations:
+      - name: "OpenJDK-11"
+        properties:
+          - installSource:
+              installers:
+                - jdkInstaller:
+                    id: "jdk-11.0.2+9"

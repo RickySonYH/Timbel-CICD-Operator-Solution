@@ -32,14 +32,22 @@ import SystemRepositoryView from './pages/systems/SystemRepositoryView';
 import SystemApprovalPending from './pages/admin/approvals/SystemApprovalPending';
 import AssetApprovalPending from './pages/admin/approvals/AssetApprovalPending';
 import ProjectApprovalManagement from './pages/admin/ProjectApprovalManagement';
-import ExecutiveDashboard from './pages/admin/ExecutiveDashboard';
+import ExecutiveDashboard from './pages/executive/ExecutiveDashboardReorganized';
 import PODashboard from './pages/po/PODashboard';
 import ProgressManagement from './pages/po/ProgressManagement';
 import ProgressPerformanceManagement from './pages/po/ProgressPerformanceManagement';
+import POWorkflowPage from './pages/po/POWorkflow';
+import EnhancedDeploymentRequestDashboard from './components/po/EnhancedDeploymentRequestDashboard';
+import CICDMonitoringDashboard from './components/operations/CICDMonitoringDashboard';
+import BuildFailureIssueReporter from './components/operations/BuildFailureIssueReporter';
+import RepositoryManagementDashboard from './components/operations/RepositoryManagementDashboard';
+import DeploymentApprovalCenter from './components/operations/DeploymentApprovalCenter';
+import EnvironmentDeploymentManager from './components/operations/EnvironmentDeploymentManager';
+import ProjectWorkflowDashboard from './components/operations/ProjectWorkflowDashboard';
+import DeploymentRequestManager from './components/operations/DeploymentRequestManager';
 import ApprovedAssetsManagement from './pages/admin/approvals/ApprovedAssetsManagement';
 import DiagramEditor from './pages/knowledge/DiagramEditor';
 import MyPendingApprovals from './pages/knowledge/MyPendingApprovals';
-import VibeStudio from './pages/VibeStudio';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import Analytics from './pages/admin/Analytics';
 import GroupManagement from './pages/admin/GroupManagement';
@@ -55,14 +63,18 @@ import ApiKeyManagement from './pages/admin/ApiKeyManagement';
 import PEWorkspace from './pages/pe/PEWorkspace';
 import QACenter from './pages/qa/QACenter';
 import OperationsCenter from './pages/operations/OperationsCenter';
+import CICDServerManagerEnhanced from './pages/operations/CICDServerManagerEnhanced';
+import PipelineConfigCenter from './pages/operations/PipelineConfigCenter';
+import BuildMonitoringCenter from './pages/operations/BuildMonitoringCenter';
+import DeploymentExecutionCenter from './pages/operations/DeploymentExecutionCenter';
+import PerformanceMonitoringCenter from './pages/operations/PerformanceMonitoringCenter';
+import IntegratedDeploymentCenter from './pages/operations/IntegratedDeploymentCenter';
 import CompletionChecklist from './pages/completion/CompletionChecklist';
 import RoleAccounts from './pages/RoleAccounts';
 import UserManagement from './pages/executive/UserManagement';
 import TestLogin from './pages/TestLogin';
 import PEKnowledgeManagement from './pages/pe/KnowledgeManagement';
 import CodeRegistration from './pages/pe/CodeRegistration';
-import MessageCenterTest from './components/notifications/MessageCenterTest';
-import MessageCenter from './components/notifications/MessageCenter';
 import ApprovalDashboard from './pages/approvals/ApprovalDashboard';
 import ApprovalDashboardTest from './components/approvals/ApprovalDashboardTest';
 import PEDashboard from './pages/pe/PEDashboard';
@@ -150,7 +162,7 @@ function AppContent() {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       {/* [advice from AI] 백스테이지IO 스타일의 메인 레이아웃 적용 */}
-      <BackstageLayout title="Timbel 지식자원 플랫폼">
+      <BackstageLayout title="Timbel Project Management Solution">
         <Routes>
           <Route path="/" element={<IntegratedHomeDashboard />} />
           <Route path="/monitoring" element={<IntegratedMonitoringCenter />} />
@@ -182,10 +194,9 @@ function AppContent() {
             <Route path="/catalog/relationships" element={<Navigate to="/knowledge/dashboard" replace />} />
             
             {/* 메시지 센터 라우트 */}
-            <Route path="/message-center" element={<MessageCenter />} />
             
             {/* 관리자 승인 관리 라우트 - 메시지 센터로 통합 */}
-            <Route path="/admin/approvals/dashboard" element={<Navigate to="/message-center" replace />} />
+            <Route path="/admin/approvals/dashboard" element={<Navigate to="/admin/approvals" replace />} />
             <Route path="/admin/approvals/systems-pending" element={<SystemApprovalPending />} />
             <Route path="/admin/approvals/assets-pending" element={<AssetApprovalPending />} />
             <Route path="/admin/approvals/approved-assets" element={<ApprovedAssetsManagement />} />
@@ -194,11 +205,21 @@ function AppContent() {
             
             {/* PO 전용 라우트 */}
             <Route path="/po-dashboard" element={<PODashboard />} />
+            <Route path="/po/workflow" element={<POWorkflowPage />} />
             <Route path="/po/progress" element={<ProgressPerformanceManagement />} />
+            <Route path="/po/deployment-request" element={<EnhancedDeploymentRequestDashboard />} />
+            
+            {/* 운영센터 전용 라우트 */}
+            <Route path="/operations/build-issues" element={<BuildFailureIssueReporter />} />
+            <Route path="/operations/workflow" element={<ProjectWorkflowDashboard />} />
+            <Route path="/operations/deployment-requests" element={<DeploymentRequestManager />} />
+                <Route path="/operations/deployment-approval" element={<DeploymentApprovalCenter />} />
+                <Route path="/operations/cicd-servers" element={<CICDServerManagerEnhanced />} />
+            <Route path="/operations/repositories" element={<RepositoryManagementDashboard />} />
+            <Route path="/operations/multi-tenant" element={<EnvironmentDeploymentManager />} />
             
             {/* QC/QA 전용 라우트 */}
             <Route path="/qc-dashboard" element={<QCDashboard />} />
-          <Route path="/vibe-studio" element={<VibeStudio />} />
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/executive" element={<ExecutiveDashboard />} />
           <Route path="/admin/analytics" element={<Analytics />} />
@@ -216,7 +237,14 @@ function AppContent() {
           <Route path="/pe-workspace" element={<PEWorkspace />} />
           <Route path="/completion" element={<CompletionChecklist />} />
           <Route path="/qa-center" element={<QACenter />} />
-          <Route path="/operations" element={<OperationsCenter />} />
+            <Route path="/operations" element={<OperationsCenter />} />
+            <Route path="/operations/cicd-management" element={<CICDServerManagerEnhanced />} />
+            <Route path="/operations/pipeline-config" element={<PipelineConfigCenter />} />
+            <Route path="/operations/build-monitoring" element={<BuildMonitoringCenter />} />
+            <Route path="/operations/deployment-center" element={<IntegratedDeploymentCenter />} />
+            <Route path="/operations/pipeline-templates" element={<PipelineConfigCenter />} />
+            <Route path="/operations/monitoring" element={<PerformanceMonitoringCenter />} />
+            <Route path="/operations/issues" element={<BuildMonitoringCenter />} />
           {/* [advice from AI] 운영센터 통합 라우트 */}
           <Route path="/operations/tenant-center" element={<TenantManagementCenter />} />
           <Route path="/operations/cicd-services" element={<CICDServiceCenter />} />
@@ -244,6 +272,7 @@ function AppContent() {
           <Route path="/operations/service-config" element={<Navigate to="/operations/tools-center?tab=1" replace />} />
           <Route path="/operations/auto-deploy" element={<Navigate to="/operations/tools-center?tab=0" replace />} />
           <Route path="/operations/cicd" element={<CICDPage />} />
+          <Route path="/operations/cicd-monitoring" element={<CICDMonitoringDashboard />} />
           <Route path="/operations/monitoring" element={<Navigate to="/operations/monitoring-center" replace />} />
           <Route path="/operations/infrastructure" element={<Navigate to="/operations/infrastructure-center" replace />} />
           
@@ -256,7 +285,6 @@ function AppContent() {
           <Route path="/test-login" element={<TestLogin />} />
           <Route path="/login-jwt" element={<LoginJWT />} />
           {/* [advice from AI] 메시지 센터 테스트 페이지 */}
-          <Route path="/test/message-center" element={<MessageCenterTest />} />
           {/* [advice from AI] 승인 대시보드 */}
           <Route path="/approvals/dashboard" element={<ApprovalDashboard />} />
           <Route path="/test/approval-dashboard" element={<ApprovalDashboardTest />} />

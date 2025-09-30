@@ -8,10 +8,10 @@ const router = express.Router();
 // PostgreSQL 연결
 const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'timbel_db',
+  port: parseInt(process.env.DB_PORT) || 5432,
+  database: process.env.DB_NAME || 'timbel_knowledge',
   user: process.env.DB_USER || 'timbel_user',
-  password: process.env.DB_PASSWORD || 'your_password'
+  password: process.env.DB_PASSWORD || 'timbel_password'
 });
 
 // [advice from AI] 도메인 목록 조회 - 등록 관리용 (모든 상태)
@@ -21,32 +21,21 @@ router.get('/', jwtAuth.verifyToken, async (req, res) => {
     
     const domainsResult = await client.query(`
       SELECT 
-        d.id, d.name, d.description, d.business_area, d.region,
-        d.contact_person, d.contact_email, d.priority_level,
-        d.approval_status, d.created_at, d.updated_at, 
-        d.total_systems, d.active_systems,
+        d.id, d.name, d.description, d.status,
+        d.created_at, d.updated_at,
         COUNT(s.id) as current_systems_count,
-        u.full_name as created_by_name
+        u.full_name as owner_name
       FROM domains d
       LEFT JOIN systems s ON d.id = s.domain_id
-      LEFT JOIN timbel_users u ON d.created_by = u.id
-      GROUP BY d.id, d.name, d.description, d.business_area, d.region,
-               d.contact_person, d.contact_email, d.priority_level,
-               d.approval_status, d.created_at, d.updated_at, 
-               d.total_systems, d.active_systems, u.full_name
+      LEFT JOIN timbel_users u ON d.owner_id = u.id
+      GROUP BY d.id, d.name, d.description, d.status,
+               d.created_at, d.updated_at, u.full_name
       ORDER BY 
-        CASE d.approval_status 
-          WHEN 'approved' THEN 1 
-          WHEN 'pending' THEN 2 
-          WHEN 'draft' THEN 3 
-          ELSE 4 
+        CASE d.status 
+          WHEN 'active' THEN 1 
+          WHEN 'inactive' THEN 2 
+          ELSE 3 
         END,
-        CASE d.priority_level 
-          WHEN 'critical' THEN 1 
-          WHEN 'high' THEN 2 
-          WHEN 'medium' THEN 3 
-          ELSE 4 
-        END, 
         d.name
     `);
     
@@ -79,12 +68,10 @@ router.post('/', jwtAuth.verifyToken, jwtAuth.requireRole(['admin', 'po', 'pe'])
     
     const result = await client.query(`
       INSERT INTO domains (
-        name, description, business_area, region, 
-        contact_person, contact_email, priority_level,
-        approval_status, created_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'draft', $8)
+        name, description, owner_id, status
+      ) VALUES ($1, $2, $3, 'active')
       RETURNING *
-    `, [name, description, business_area, region, contact_person, contact_email, priority_level, userId]);
+    `, [name, description, userId]);
     
     client.release();
     

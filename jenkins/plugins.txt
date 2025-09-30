@@ -1,0 +1,55 @@
+# [advice from AI] Jenkins 필수 플러그인 목록
+# CI/CD 파이프라인 구축을 위한 핵심 플러그인들
+
+# 기본 플러그인
+ant:475.vf34069fef73c
+antisamy-markup-formatter:162.v0e6ec0fcfcf6
+build-timeout:1.31
+credentials-binding:642.v737c34dea_6c2
+email-ext:2.102
+gradle:2.8.2
+ldap:682.v7b_544c9d1512
+mailer:463.vedf8358e006b_
+matrix-auth:3.2.1
+pam-auth:1.10
+pipeline-github-lib:42.v0739460cda_c4
+pipeline-stage-view:2.33
+ssh-slaves:2.916.vd17b_43357ce4
+timestamper:1.26
+workflow-aggregator:596.v8c21c963d92d
+ws-cleanup:0.45
+
+# Git 관련
+git:5.0.0
+github:1.37.3.1
+github-branch-source:1703.vd5a_2b_29c6cdc
+pipeline-github-lib:42.v0739460cda_c4
+
+# Docker 관련
+docker-workflow:563.vd5d2e5c4007f
+docker-plugin:1.5.0
+kubernetes:4029.v5712230ccb_f8
+
+# Pipeline 관련
+pipeline-build-step:540.vb_e8849e1a_b_d8
+pipeline-input-step:468.va_5db_051498a_4
+pipeline-milestone-step:111.v449306f708b_7
+pipeline-stage-step:305.ve96d0205c1c6
+pipeline-stage-tags-metadata:2.2143.v459d42b_85c16
+
+# 빌드 도구
+maven-plugin:3.22
+gradle:2.8.2
+nodejs:1.6.1
+
+# 알림 및 통합
+slack:664.vc9a_90f8b_c24a_
+email-ext:2.102
+build-user-vars-plugin:1.9
+
+# 보안
+role-strategy:689.v731678c3e0eb_
+matrix-auth:3.2.1
+
+# Configuration as Code
+configuration-as-code:1670.v564dc8b_982d0

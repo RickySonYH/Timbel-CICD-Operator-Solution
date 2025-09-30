@@ -6,7 +6,7 @@ const router = express.Router();
 const axios = require('axios');
 const { Pool } = require('pg');
 const { v4: uuidv4 } = require('uuid');
-const { authenticateToken, requireRole } = require('../middleware/auth');
+const { verifyToken, checkPermission } = require('../middleware/jwtAuth');
 
 // PostgreSQL 연결
 const pool = new Pool({
@@ -367,7 +367,7 @@ class GitHubEnhancedAPI {
 }
 
 // [advice from AI] GitHub 저장소 분석 API
-router.post('/analyze-repository', authenticateToken, async (req, res) => {
+router.post('/analyze-repository', verifyToken, async (req, res) => {
   try {
     console.log('🔍 GitHub 저장소 분석 요청 수신...');
     
@@ -460,7 +460,7 @@ router.post('/analyze-repository', authenticateToken, async (req, res) => {
 });
 
 // [advice from AI] DORA 메트릭 계산 API
-router.post('/calculate-dora-metrics', authenticateToken, async (req, res) => {
+router.post('/calculate-dora-metrics', verifyToken, async (req, res) => {
   try {
     console.log('📊 DORA 메트릭 계산 요청 수신...');
     
@@ -512,7 +512,7 @@ router.post('/calculate-dora-metrics', authenticateToken, async (req, res) => {
 });
 
 // [advice from AI] GitHub 저장소 목록 조회 API
-router.get('/repositories', authenticateToken, async (req, res) => {
+router.get('/repositories', verifyToken, async (req, res) => {
   try {
     console.log('📋 GitHub 저장소 목록 조회...');
     
@@ -547,7 +547,7 @@ router.get('/repositories', authenticateToken, async (req, res) => {
 });
 
 // [advice from AI] GitHub Actions 워크플로우 템플릿 조회 API
-router.get('/workflow-templates', authenticateToken, async (req, res) => {
+router.get('/workflow-templates', verifyToken, async (req, res) => {
   try {
     console.log('📋 GitHub Actions 워크플로우 템플릿 조회...');
     
@@ -602,7 +602,7 @@ router.get('/workflow-templates', authenticateToken, async (req, res) => {
 });
 
 // [advice from AI] GitHub Actions 워크플로우 생성 API (문서 가이드 기반)
-router.post('/generate-workflow', authenticateToken, async (req, res) => {
+router.post('/generate-workflow', verifyToken, async (req, res) => {
   try {
     console.log('🔄 GitHub Actions 워크플로우 생성 시작...');
     

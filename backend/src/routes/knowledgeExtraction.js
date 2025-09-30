@@ -20,7 +20,7 @@ const registerApprovedSystem = async (systemInfo, extractionData, userId) => {
   const pool = new Pool({
     user: process.env.DB_USER || 'timbel_user',
     host: process.env.DB_HOST || 'localhost',
-    database: process.env.DB_NAME || 'timbel_db',
+    database: process.env.DB_NAME || 'timbel_knowledge',
     password: process.env.DB_PASSWORD || 'timbel_password',
     port: process.env.DB_PORT || 5434,
   });
@@ -260,7 +260,7 @@ router.get('/scan-status', jwtAuth.verifyToken, async (req, res) => {
     const pool = new Pool({
       user: process.env.DB_USER || 'timbel_user',
       host: process.env.DB_HOST || 'localhost',
-      database: process.env.DB_NAME || 'timbel_db',
+      database: process.env.DB_NAME || 'timbel_knowledge',
       password: process.env.DB_PASSWORD || 'timbel_password',
       port: process.env.DB_PORT || 5434,
     });
@@ -327,7 +327,7 @@ router.get('/search', jwtAuth.verifyToken, async (req, res) => {
     const pool = new Pool({
       user: process.env.DB_USER || 'timbel_user',
       host: process.env.DB_HOST || 'localhost',
-      database: process.env.DB_NAME || 'timbel_db',
+      database: process.env.DB_NAME || 'timbel_knowledge',
       password: process.env.DB_PASSWORD || 'timbel_password',
       port: process.env.DB_PORT || 5434,
     });
@@ -422,7 +422,7 @@ router.get('/item/:type/:id', jwtAuth.verifyToken, async (req, res) => {
     const pool = new Pool({
       user: process.env.DB_USER || 'timbel_user',
       host: process.env.DB_HOST || 'localhost',
-      database: process.env.DB_NAME || 'timbel_db',
+      database: process.env.DB_NAME || 'timbel_knowledge',
       password: process.env.DB_PASSWORD || 'timbel_password',
       port: process.env.DB_PORT || 5434,
     });
@@ -549,7 +549,7 @@ router.get('/search', jwtAuth.verifyToken, async (req, res) => {
     const pool = new Pool({
       user: process.env.DB_USER || 'timbel_user',
       host: process.env.DB_HOST || 'localhost',
-      database: process.env.DB_NAME || 'timbel_db',
+      database: process.env.DB_NAME || 'timbel_knowledge',
       password: process.env.DB_PASSWORD || 'timbel_password',
       port: process.env.DB_PORT || 5434,
     });
@@ -654,7 +654,7 @@ router.get('/item/:assetType/:assetId', jwtAuth.verifyToken, async (req, res) =>
     const pool = new Pool({
       user: process.env.DB_USER || 'timbel_user',
       host: process.env.DB_HOST || 'localhost',
-      database: process.env.DB_NAME || 'timbel_db',
+      database: process.env.DB_NAME || 'timbel_knowledge',
       password: process.env.DB_PASSWORD || 'timbel_password',
       port: process.env.DB_PORT || 5434,
     });
@@ -805,7 +805,7 @@ router.post('/extract-from-source', jwtAuth.verifyToken, jwtAuth.requireRole(['a
           const tempPool = new Pool({
             user: process.env.DB_USER || 'timbel_user',
             host: process.env.DB_HOST || 'postgres',
-            database: process.env.DB_NAME || 'timbel_db',
+            database: process.env.DB_NAME || 'timbel_knowledge',
             password: process.env.DB_PASSWORD || 'timbel_password',
             port: process.env.DB_PORT || 5432,
           });
@@ -1104,7 +1104,7 @@ router.get('/diagrams', jwtAuth.verifyToken, async (req, res) => {
     const pool = new Pool({
       user: process.env.DB_USER || 'timbel_user',
       host: process.env.DB_HOST || 'localhost',
-      database: process.env.DB_NAME || 'timbel_db',
+      database: process.env.DB_NAME || 'timbel_knowledge',
       password: process.env.DB_PASSWORD || 'timbel_password',
       port: process.env.DB_PORT || 5434,
     });
@@ -1147,7 +1147,7 @@ router.get('/diagrams/:id', jwtAuth.verifyToken, async (req, res) => {
     const pool = new Pool({
       user: process.env.DB_USER || 'timbel_user',
       host: process.env.DB_HOST || 'localhost',
-      database: process.env.DB_NAME || 'timbel_db',
+      database: process.env.DB_NAME || 'timbel_knowledge',
       password: process.env.DB_PASSWORD || 'timbel_password',
       port: process.env.DB_PORT || 5434,
     });
@@ -1188,7 +1188,7 @@ router.get('/relationships/:assetType/:assetId', jwtAuth.verifyToken, async (req
     const pool = new Pool({
       user: process.env.DB_USER || 'timbel_user',
       host: process.env.DB_HOST || 'localhost',
-      database: process.env.DB_NAME || 'timbel_db',
+      database: process.env.DB_NAME || 'timbel_knowledge',
       password: process.env.DB_PASSWORD || 'timbel_password',
       port: process.env.DB_PORT || 5434,
     });
@@ -1294,7 +1294,7 @@ router.get('/relationship-graph', jwtAuth.verifyToken, async (req, res) => {
     const pool = new Pool({
       user: process.env.DB_USER || 'timbel_user',
       host: process.env.DB_HOST || 'localhost',
-      database: process.env.DB_NAME || 'timbel_db',
+      database: process.env.DB_NAME || 'timbel_knowledge',
       password: process.env.DB_PASSWORD || 'timbel_password',
       port: process.env.DB_PORT || 5434,
     });
@@ -1394,7 +1394,7 @@ router.get('/statistics', jwtAuth.verifyToken, async (req, res) => {
     const pool = new Pool({
       user: process.env.DB_USER || 'timbel_user',
       host: process.env.DB_HOST || 'localhost',
-      database: process.env.DB_NAME || 'timbel_db',
+      database: process.env.DB_NAME || 'timbel_knowledge',
       password: process.env.DB_PASSWORD || 'timbel_password',
       port: process.env.DB_PORT || 5434,
     });

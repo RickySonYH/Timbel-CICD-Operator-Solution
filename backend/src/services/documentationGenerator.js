@@ -10,7 +10,7 @@ class DocumentationGenerator {
     this.pool = new Pool({
       user: process.env.DB_USER || 'timbel_user',
       host: process.env.DB_HOST || 'localhost',
-      database: process.env.DB_NAME || 'timbel_db',
+      database: process.env.DB_NAME || 'timbel_knowledge',
       password: process.env.DB_PASSWORD || 'timbel_password',
       port: process.env.DB_PORT || 5434,
     });
@@ -498,12 +498,12 @@ class DocumentationGenerator {
   async generateProjectReadme(codeAnalysisData) {
     const { codeComponents, designAssets, documents, catalogComponents } = codeAnalysisData;
     
-    let readme = '# Timbel Knowledge Platform\n\n';
+    let readme = '# Timbel Project Management Solution\n\n';
     readme += '> 자동 생성된 프로젝트 README입니다.\n\n';
     
     // [advice from AI] 프로젝트 소개
     readme += '## 🚀 프로젝트 소개\n\n';
-    readme += 'Timbel Knowledge Platform은 지식 자원 관리 및 승인 워크플로우 시스템입니다.\n\n';
+    readme += 'Timbel Project Management Solution은 프로젝트 관리 및 승인 워크플로우 시스템입니다.\n\n';
 
     // [advice from AI] 주요 기능
     readme += '## ✨ 주요 기능\n\n';

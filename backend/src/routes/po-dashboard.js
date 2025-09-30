@@ -10,7 +10,7 @@ const router = express.Router();
 const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',
   port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'timbel_db',
+  database: process.env.DB_NAME || 'timbel_knowledge',
   user: process.env.DB_USER || 'timbel_user',
   password: process.env.DB_PASSWORD || 'timbel_password',
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
@@ -1298,6 +1298,43 @@ router.get('/deployment-ready-projects', jwtAuth.verifyToken, jwtAuth.requireRol
     });
   } finally {
     client.release();
+  }
+});
+
+// [advice from AI] 프로젝트 상태별 목록 조회
+router.get('/projects-by-status', jwtAuth.verifyToken, jwtAuth.requireRole(['po', 'admin', 'executive']), async (req, res) => {
+  try {
+    const client = await pool.connect();
+    
+    try {
+      const result = await client.query(`
+        SELECT 
+          p.id,
+          p.name,
+          p.project_status,
+          p.urgency_level,
+          p.created_at,
+          u.full_name as assigned_pe_name
+        FROM projects p
+        LEFT JOIN project_work_assignments pwa ON p.id = pwa.project_id
+        LEFT JOIN timbel_users u ON pwa.assigned_to = u.id
+        WHERE p.project_status NOT IN ('cancelled')
+        ORDER BY p.created_at DESC
+      `);
+
+      res.json({
+        success: true,
+        data: result.rows
+      });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('❌ 프로젝트 상태별 목록 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
   }
 });
 

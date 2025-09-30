@@ -36,6 +36,7 @@ import {
 } from '@mui/material';
 import { useJwtAuthStore } from '../../store/jwtAuthStore';
 import GitHubRepositoryAnalyzer from './GitHubRepositoryAnalyzer';
+import GitHubActionsBuilder from './GitHubActionsBuilder';
 
 // [advice from AI] 파이프라인 상태 인터페이스
 interface PipelineStatus {
@@ -74,6 +75,7 @@ const CICDPipelineManagement: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [pipelines, setPipelines] = useState<PipelineStatus[]>([]);
   const [cicdConfig, setCicdConfig] = useState<CICDConfig | null>(null);
+  const [repositoryAnalysis, setRepositoryAnalysis] = useState<any>(null);
   
   // 다이얼로그 상태
   const [configDialog, setConfigDialog] = useState(false);
@@ -241,10 +243,23 @@ const CICDPipelineManagement: React.FC = () => {
             <GitHubRepositoryAnalyzer 
               onAnalysisComplete={(analysis) => {
                 console.log('✅ GitHub 저장소 분석 완료:', analysis);
-                // 분석 결과를 기반으로 파이프라인 자동 생성 제안 등 추가 로직
+                setRepositoryAnalysis(analysis);
               }}
             />
           </Box>
+
+          {/* GitHub Actions 워크플로우 빌더 */}
+          {repositoryAnalysis && (
+            <Box sx={{ mb: 4 }}>
+              <GitHubActionsBuilder 
+                repositoryAnalysis={repositoryAnalysis}
+                onWorkflowGenerated={(workflow) => {
+                  console.log('✅ GitHub Actions 워크플로우 생성 완료:', workflow);
+                  // 생성된 워크플로우를 파이프라인 목록에 추가하거나 다른 처리
+                }}
+              />
+            </Box>
+          )}
         </Box>
       )}
 

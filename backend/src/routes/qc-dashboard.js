@@ -10,7 +10,7 @@ const jwtAuth = require('../middleware/jwtAuth');
 const pool = new Pool({
   user: process.env.DB_USER || 'timbel_user',
   host: process.env.DB_HOST || 'postgres',
-  database: process.env.DB_NAME || 'timbel_db',
+  database: process.env.DB_NAME || 'timbel_knowledge',
   password: process.env.DB_PASSWORD || 'timbel_password',
   port: process.env.DB_PORT || 5432,
 });
@@ -331,14 +331,14 @@ router.get('/stats', jwtAuth.verifyToken, jwtAuth.requireRole(['qa', 'admin', 'e
     const client = await pool.connect();
     
     try {
-      // QC/QA 요청 통계 조회
+      // QC/QA 요청 통계 조회 (프론트엔드 필터와 완전 동일)
       const statsResult = await client.query(`
         SELECT 
           COUNT(*) as total_requests,
-          COUNT(CASE WHEN request_status = 'pending' THEN 1 END) as pending_requests,
-          COUNT(CASE WHEN request_status = 'in_progress' THEN 1 END) as in_progress_requests,
-          COUNT(CASE WHEN request_status = 'completed' THEN 1 END) as completed_requests,
-          COUNT(CASE WHEN request_status = 'rejected' THEN 1 END) as rejected_requests,
+          COUNT(CASE WHEN request_status = 'pending' AND status = 'pending' THEN 1 END) as pending_requests,
+          COUNT(CASE WHEN request_status = 'in_progress' OR (request_status = 'approved' AND status = 'approved') THEN 1 END) as in_progress_requests,
+          COUNT(CASE WHEN approval_status = 'approved' THEN 1 END) as completed_requests,
+          COUNT(CASE WHEN status = 'rejected' THEN 1 END) as rejected_requests,
           ROUND(AVG(CASE WHEN quality_score IS NOT NULL THEN quality_score END), 1) as avg_quality_score
         FROM qc_qa_requests
       `);
@@ -406,6 +406,7 @@ router.get('/requests', jwtAuth.verifyToken, jwtAuth.requireRole(['qa', 'admin',
             qr.project_id,
             qr.completion_report_id,
             qr.request_status,
+            qr.status,
             qr.priority_level,
             qr.requested_by,
             qr.assigned_to,
@@ -467,7 +468,7 @@ router.get('/requests', jwtAuth.verifyToken, jwtAuth.requireRole(['qa', 'admin',
             ) as test_statistics
           FROM qc_qa_requests qr
           JOIN projects p ON qr.project_id = p.id
-          JOIN project_completion_reports pcr ON qr.completion_report_id = pcr.id
+          LEFT JOIN project_completion_reports pcr ON qr.completion_report_id = pcr.id
           JOIN timbel_users requester ON qr.requested_by = requester.id
           LEFT JOIN timbel_users assignee ON qr.assigned_to = assignee.id
           LEFT JOIN timbel_users approver ON qr.approved_by = approver.id
@@ -486,6 +487,7 @@ router.get('/requests', jwtAuth.verifyToken, jwtAuth.requireRole(['qa', 'admin',
             qr.project_id,
             qr.completion_report_id,
             qr.request_status,
+            qr.status,
             qr.priority_level,
             qr.requested_by,
             qr.assigned_to,
@@ -509,12 +511,13 @@ router.get('/requests', jwtAuth.verifyToken, jwtAuth.requireRole(['qa', 'admin',
             CASE 
               WHEN qr.request_status = 'completed' THEN 100
               WHEN qr.request_status = 'in_progress' THEN 50
+              WHEN qr.request_status = 'approved' THEN 50
               ELSE 0 
             END as test_progress_percentage,
             '{"total_tests": 0, "passed_tests": 0, "failed_tests": 0, "pending_tests": 0}'::jsonb as test_statistics
           FROM qc_qa_requests qr
           JOIN projects p ON qr.project_id = p.id
-          JOIN project_completion_reports pcr ON qr.completion_report_id = pcr.id
+          LEFT JOIN project_completion_reports pcr ON qr.completion_report_id = pcr.id
           JOIN timbel_users requester ON qr.requested_by = requester.id
           LEFT JOIN timbel_users assignee ON qr.assigned_to = assignee.id
           LEFT JOIN timbel_users approver ON qr.approved_by = approver.id
@@ -738,30 +741,12 @@ router.post('/test-plan', jwtAuth.verifyToken, jwtAuth.requireRole(['qa', 'admin
         ) VALUES ($1, $2, $3, 'in_progress', NOW())
       `, [request_id, userId, parseInt(test_plan.estimatedHours) || 40]);
 
-      // 5. 시스템 이벤트 스트림에 기록
-      await client.query(`
-        INSERT INTO system_event_stream (
-          id, event_type, event_category, title, description,
-          project_id, user_id, event_timestamp,
-          event_data, is_processed, requires_action
-        ) VALUES (
-          gen_random_uuid(), 'qc_test_plan_created', 'quality_assurance',
-          'QC/QA 테스트 계획 등록', $1,
-          $2, $3, NOW(),
-          $4, true, false
-        )
-      `, [
-        `${request.project_name} 프로젝트의 품질 검증 테스트 계획이 등록되었습니다.`,
-        request.project_id,
-        userId,
-        JSON.stringify({
-          request_id,
-          test_plan,
-          assigned_to: userId,
-          project_name: request.project_name,
-          estimated_hours: test_plan.estimatedHours
-        })
-      ]);
+      // 5. 이벤트 로그 기록 (system_event_stream 테이블 없으므로 스킵)
+      console.log('📝 테스트 계획 등록 이벤트:', {
+        project_name: request.project_name,
+        assigned_to: userId,
+        estimated_hours: test_plan.estimatedHours
+      });
 
       await client.query('COMMIT');
 
@@ -1794,23 +1779,14 @@ router.post('/test-execution', async (req, res) => {
         }
       }
 
-      // 시스템 이벤트 로그 생성
-      await client.query(`
-        INSERT INTO system_event_stream (
-          event_type, user_id, event_data, created_at
-        ) VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
-      `, [
-        'qc_test_execution',
-        userId,
-        JSON.stringify({
-          request_id,
-          overall_status,
-          total_tests: totalTests,
-          passed_tests: passedTests,
-          failed_tests: failedTests,
-          execution_id: executionResult.rows[0].id
-        })
-      ]);
+      // 이벤트 로그 기록 (system_event_stream 테이블 없으므로 스킵)
+      console.log('📝 테스트 실행 이벤트:', {
+        request_id,
+        overall_status,
+        total_tests: totalTests,
+        passed_tests: passedTests,
+        failed_tests: failedTests
+      });
 
       await client.query('COMMIT');
 
@@ -2481,6 +2457,232 @@ router.delete('/clear-test-progress/:requestId', jwtAuth.verifyToken, jwtAuth.re
       success: false,
       error: 'Failed to clear test progress',
       message: '테스트 진행 상황 삭제 중 오류가 발생했습니다.'
+    });
+  }
+});
+
+// [advice from AI] ExecutiveDashboard에서 필요한 QC 진행 상태 API
+router.get('/progress-status', jwtAuth.verifyToken, jwtAuth.requireRole(['admin', 'executive', 'qa']), async (req, res) => {
+  try {
+    console.log('🔍 QC 진행 상태 조회 시작');
+    
+    const client = await pool.connect();
+    const result = await client.query(`
+      SELECT 
+        COUNT(*) as total_requests,
+        COUNT(CASE WHEN request_status = 'pending' THEN 1 END) as pending_requests,
+        COUNT(CASE WHEN request_status = 'in_progress' THEN 1 END) as in_progress_requests,
+        COUNT(CASE WHEN request_status = 'completed' THEN 1 END) as completed_requests,
+        COUNT(CASE WHEN approval_status = 'rejected' THEN 1 END) as rejected_requests,
+        ROUND(AVG(quality_score), 1) as avg_quality_score
+      FROM qc_qa_requests
+      WHERE created_at >= NOW() - INTERVAL '30 days'
+    `);
+    client.release();
+
+    console.log('✅ QC 진행 상태 조회 완료');
+    res.json({
+      success: true,
+      data: result.rows[0] || {
+        total_requests: 0,
+        pending_requests: 0,
+        in_progress_requests: 0,
+        completed_requests: 0,
+        rejected_requests: 0,
+        avg_quality_score: 0
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ QC 진행 상태 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch QC progress status',
+      message: 'QC 진행 상태 조회에 실패했습니다.'
+    });
+  }
+});
+
+// [advice from AI] ExecutiveDashboard에서 필요한 QC 승인 알림 API
+router.get('/approval-notifications', jwtAuth.verifyToken, jwtAuth.requireRole(['admin', 'executive', 'qa']), async (req, res) => {
+  try {
+    console.log('🔍 QC 승인 알림 조회 시작');
+    
+    const client = await pool.connect();
+    const result = await client.query(`
+      SELECT 
+        qr.id,
+        qr.project_id,
+        p.name as project_name,
+        qr.priority_level,
+        qr.request_status,
+        qr.approval_status,
+        qr.quality_score,
+        qr.created_at,
+        u.full_name as requested_by_name
+      FROM qc_qa_requests qr
+      JOIN projects p ON qr.project_id = p.id
+      LEFT JOIN timbel_users u ON qr.requested_by = u.id
+      WHERE qr.approval_status = 'pending' 
+        AND qr.request_status = 'completed'
+      ORDER BY 
+        CASE qr.priority_level 
+          WHEN 'high' THEN 1 
+          WHEN 'normal' THEN 2 
+          WHEN 'low' THEN 3 
+        END,
+        qr.created_at ASC
+      LIMIT 10
+    `);
+    client.release();
+
+    console.log(`✅ QC 승인 알림 ${result.rows.length}건 조회 완료`);
+    res.json({
+      success: true,
+      data: result.rows,
+      message: `QC 승인 알림 ${result.rows.length}건 조회 완료`
+    });
+
+  } catch (error) {
+    console.error('❌ QC 승인 알림 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch QC approval notifications',
+      message: 'QC 승인 알림 조회에 실패했습니다.'
+    });
+  }
+});
+
+// [advice from AI] QA 작업 제어 API (거부/보류/취소)
+router.post('/control-work', jwtAuth.verifyToken, jwtAuth.requireRole(['qa', 'admin', 'executive']), async (req, res) => {
+  try {
+    const { request_id, action, reason } = req.body;
+    const userId = req.user?.userId || req.user?.id;
+    const userRole = req.user?.roleType;
+    
+    console.log('QA 작업 제어 요청:', { request_id, action, reason, userId, userRole });
+
+    if (!request_id || !action || !reason) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields',
+        message: '필수 필드가 누락되었습니다.'
+      });
+    }
+
+    const client = await pool.connect();
+    
+    try {
+      await client.query('BEGIN');
+
+      // QA 요청 확인
+      const requestResult = await client.query(`
+        SELECT qr.*, p.name as project_name
+        FROM qc_qa_requests qr
+        JOIN projects p ON qr.project_id = p.id
+        WHERE qr.id = $1
+      `, [request_id]);
+
+      if (requestResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({
+          success: false,
+          error: 'Request not found',
+          message: '해당 QA 요청을 찾을 수 없습니다.'
+        });
+      }
+
+      const request = requestResult.rows[0];
+
+      // 액션에 따른 상태 변경
+      let newRequestStatus, newStatus, newApprovalStatus;
+      
+      switch (action) {
+        case 'reject':
+          // 이전 단계(PE 개발)로 되돌리기
+          newRequestStatus = 'rejected';
+          newStatus = 'rejected';
+          newApprovalStatus = 'rejected';
+          
+          // 프로젝트 상태를 pe_assigned로 되돌리기
+          await client.query(`
+            UPDATE projects 
+            SET project_status = 'pe_assigned', updated_at = NOW()
+            WHERE id = $1
+          `, [request.project_id]);
+          break;
+          
+        case 'hold':
+          // 보류 상태
+          newRequestStatus = 'on_hold';
+          newStatus = 'on_hold';
+          newApprovalStatus = request.approval_status;
+          break;
+          
+        case 'cancel':
+          // 완전 취소
+          newRequestStatus = 'cancelled';
+          newStatus = 'cancelled';
+          newApprovalStatus = 'cancelled';
+          
+          // 프로젝트도 취소
+          await client.query(`
+            UPDATE projects 
+            SET project_status = 'cancelled', updated_at = NOW()
+            WHERE id = $1
+          `, [request.project_id]);
+          break;
+          
+        default:
+          throw new Error('Invalid action');
+      }
+
+      // QA 요청 상태 업데이트
+      await client.query(`
+        UPDATE qc_qa_requests 
+        SET 
+          request_status = $1,
+          status = $2,
+          approval_status = $3,
+          updated_at = NOW()
+        WHERE id = $4
+      `, [newRequestStatus, newStatus, newApprovalStatus, request_id]);
+
+      // 제어 이력 기록
+      await client.query(`
+        INSERT INTO project_control_actions (
+          project_id, action_type, initiated_by, reason, status, executed_at
+        ) VALUES ($1, $2, $3, $4, 'executed', NOW())
+      `, [request.project_id, `qa_${action}`, userId, reason]);
+
+      await client.query('COMMIT');
+
+      console.log('QA 작업 제어 완료:', {
+        request_id,
+        action,
+        new_status: newRequestStatus
+      });
+
+      res.json({
+        success: true,
+        message: `작업 ${action}가 완료되었습니다.`,
+        data: {
+          request_id,
+          action,
+          new_status: newRequestStatus
+        }
+      });
+
+    } finally {
+      client.release();
+    }
+
+  } catch (error) {
+    console.error('QA 작업 제어 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to control work',
+      message: error.message
     });
   }
 });

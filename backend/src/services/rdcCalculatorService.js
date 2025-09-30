@@ -70,6 +70,171 @@ class RDCCalculatorService {
     return null;
   }
 
+  // [advice from AI] 랭사 AICC 솔루션 전용 계산 메서드
+  async calculateLangsaAICC(requirements, gpuType = 'auto') {
+    try {
+      console.log('🤖 랭사 AICC 솔루션 계산 시작:', requirements);
+
+      // [advice from AI] 랭사 AICC 서비스별 리소스 계수
+      const langsaCoefficients = {
+        // 고객 대화 서비스
+        callbot: { cpu: 0.5, memory: 1.0, gpu: 0.1 },      // 콜봇: 음성 처리로 GPU 필요
+        chatbot: { cpu: 0.3, memory: 0.5, gpu: 0.05 },     // 챗봇: 텍스트 처리 위주
+        advisor: { cpu: 0.4, memory: 0.8, gpu: 0.08 },     // 어드바이저: 복합 AI 처리
+        
+        // AI 처리 서비스
+        stt: { cpu: 0.8, memory: 1.5, gpu: 0.2 },          // STT: 음성 인식, GPU 집약적
+        tts: { cpu: 0.6, memory: 1.2, gpu: 0.15 },         // TTS: 음성 합성
+        ta: { cpu: 1.0, memory: 2.0, gpu: 0.1 },           // TA: 텍스트 분석
+        qa: { cpu: 0.8, memory: 1.5, gpu: 0.05 }           // QA: 품질 분석
+      };
+
+      // [advice from AI] 기본 인프라 리소스
+      const baseInfrastructure = {
+        cpu: 4,      // 기본 인프라 CPU
+        memory: 8,   // 기본 인프라 메모리
+        storage: 100 // 기본 스토리지
+      };
+
+      // [advice from AI] 서비스별 리소스 계산
+      let totalCpu = baseInfrastructure.cpu;
+      let totalMemory = baseInfrastructure.memory;
+      let totalGpu = 0;
+      let totalStorage = baseInfrastructure.storage;
+
+      const serviceBreakdown = {};
+
+      Object.entries(requirements).forEach(([service, count]) => {
+        if (langsaCoefficients[service] && count > 0) {
+          const coeff = langsaCoefficients[service];
+          const serviceCpu = Math.ceil(count * coeff.cpu);
+          const serviceMemory = Math.ceil(count * coeff.memory);
+          const serviceGpu = Math.ceil(count * coeff.gpu);
+          
+          totalCpu += serviceCpu;
+          totalMemory += serviceMemory;
+          totalGpu += serviceGpu;
+          totalStorage += Math.ceil(count * 10); // 서비스당 10GB 스토리지
+
+          serviceBreakdown[service] = {
+            channels: count,
+            cpu: serviceCpu,
+            memory: serviceMemory,
+            gpu: serviceGpu
+          };
+        }
+      });
+
+      // [advice from AI] 서버 구성 테이블 생성
+      const serverConfigurations = [
+        {
+          role: 'AI Processing Server',
+          cpu_cores: Math.max(8, Math.ceil(totalCpu * 0.6)),
+          ram_gb: Math.max(16, Math.ceil(totalMemory * 0.6)),
+          quantity: Math.ceil(totalGpu / 4) || 1,
+          gpu_type: totalGpu > 0 ? 'T4' : '-',
+          gpu_quantity: totalGpu > 0 ? Math.min(4, totalGpu) : 0
+        },
+        {
+          role: 'Application Server',
+          cpu_cores: Math.max(4, Math.ceil(totalCpu * 0.3)),
+          ram_gb: Math.max(8, Math.ceil(totalMemory * 0.3)),
+          quantity: Math.ceil((requirements.callbot + requirements.chatbot + requirements.advisor) / 20) || 1,
+          gpu_type: '-',
+          gpu_quantity: 0
+        },
+        {
+          role: 'Database Server',
+          cpu_cores: Math.max(4, Math.ceil(totalCpu * 0.1)),
+          ram_gb: Math.max(8, Math.ceil(totalMemory * 0.1)),
+          quantity: 1,
+          gpu_type: '-',
+          gpu_quantity: 0
+        }
+      ];
+
+      // [advice from AI] 비용 추정 (간소화된 계산)
+      const estimatedCostAWS = serverConfigurations.reduce((total, server) => {
+        let serverCost = 0;
+        if (server.gpu_quantity > 0) {
+          serverCost = 500; // GPU 서버 기본 비용
+        } else {
+          serverCost = server.cpu_cores * 10 + server.ram_gb * 5; // CPU/메모리 기반 비용
+        }
+        return total + (serverCost * server.quantity);
+      }, 0);
+
+      const result = {
+        success: true,
+        message: '랭사 AICC 솔루션 하드웨어 계산 완료',
+        solution_type: 'langsa_aicc',
+        resources: {
+          cpu: {
+            total: totalCpu,
+            breakdown: serviceBreakdown
+          },
+          actual_memory_gb: totalMemory,
+          gpu: {
+            total: totalGpu,
+            type: 'T4'
+          },
+          storage: {
+            yearly_tb: totalStorage / 1024
+          }
+        },
+        server_config_table: serverConfigurations,
+        aws_cost_analysis: {
+          total_monthly_cost_usd: estimatedCostAWS,
+          total_annual_cost_usd: estimatedCostAWS * 12,
+          instance_breakdown: serverConfigurations.map(server => ({
+            server_role: server.role,
+            total_monthly_cost: (server.cpu_cores * 10 + server.ram_gb * 5) * server.quantity,
+            quantity: server.quantity,
+            aws_instance: {
+              instance_type: server.gpu_quantity > 0 ? 'g4dn.xlarge' : 'c5.2xlarge',
+              vcpu: server.cpu_cores,
+              memory_gb: server.ram_gb,
+              gpu_count: server.gpu_quantity,
+              gpu_type: server.gpu_type !== '-' ? server.gpu_type : undefined
+            }
+          }))
+        },
+        ncp_cost_analysis: {
+          total_monthly_cost_krw: estimatedCostAWS * 1200, // USD to KRW 환산
+          total_annual_cost_krw: estimatedCostAWS * 1200 * 12,
+          instance_breakdown: serverConfigurations.map(server => ({
+            server_role: server.role,
+            total_monthly_cost: (server.cpu_cores * 12000 + server.ram_gb * 6000) * server.quantity,
+            quantity: server.quantity,
+            ncp_instance: {
+              instance_type: server.gpu_quantity > 0 ? 'g1.c8m32.g1' : 'c2.c8m16',
+              vcpu: server.cpu_cores,
+              memory_gb: server.ram_gb,
+              gpu_count: server.gpu_quantity,
+              gpu_type: server.gpu_type !== '-' ? server.gpu_type : undefined
+            }
+          }))
+        }
+      };
+
+      console.log('✅ 랭사 AICC 계산 완료:', {
+        totalCpu,
+        totalMemory,
+        totalGpu,
+        totalStorage,
+        estimatedCostAWS
+      });
+
+      return result;
+
+    } catch (error) {
+      console.error('❌ 랭사 AICC 계산 실패:', error);
+      
+      // [advice from AI] 실패 시 기본 Fallback 사용
+      return this.calculateFallback(requirements, gpuType);
+    }
+  }
+
   /**
    * [advice from AI] 가이드 기반 정교한 하드웨어 계산 로직
    * RDC API 가이드 문서의 계산 방식을 구현

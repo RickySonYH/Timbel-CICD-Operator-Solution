@@ -6,7 +6,7 @@ const router = express.Router();
 const { Pool } = require('pg');
 const { v4: uuidv4 } = require('uuid');
 const JenkinsIntegration = require('../services/jenkinsIntegration');
-const { authenticateToken, requireRole } = require('../middleware/auth');
+const { verifyToken, requireRole } = require('../middleware/jwtAuth');
 
 // PostgreSQL 연결
 const pool = new Pool({
@@ -21,7 +21,7 @@ const pool = new Pool({
 const jenkinsService = new JenkinsIntegration();
 
 // [advice from AI] 파이프라인 목록 조회
-router.get('/pipelines', authenticateToken, async (req, res) => {
+router.get('/pipelines', verifyToken, async (req, res) => {
   try {
     console.log('🔍 CI/CD 파이프라인 목록 조회 시작...');
     
@@ -65,7 +65,7 @@ router.get('/pipelines', authenticateToken, async (req, res) => {
 });
 
 // [advice from AI] 새 파이프라인 생성
-router.post('/pipelines', authenticateToken, requireRole(['admin', 'po']), async (req, res) => {
+router.post('/pipelines', verifyToken, async (req, res) => {
   try {
     console.log('🚀 새 CI/CD 파이프라인 생성 시작...');
     
@@ -145,7 +145,7 @@ router.post('/pipelines', authenticateToken, requireRole(['admin', 'po']), async
 });
 
 // [advice from AI] 파이프라인 트리거 (빌드 시작)
-router.post('/pipelines/:id/trigger', authenticateToken, requireRole(['admin', 'po']), async (req, res) => {
+router.post('/pipelines/:id/trigger', verifyToken, async (req, res) => {
   try {
     console.log('🔥 파이프라인 트리거 시작...');
     
@@ -297,7 +297,7 @@ router.post('/pipelines/:id/status', async (req, res) => {
 });
 
 // [advice from AI] CI/CD 설정 조회
-router.get('/config', authenticateToken, requireRole(['admin']), async (req, res) => {
+router.get('/config', verifyToken, async (req, res) => {
   try {
     console.log('🔧 CI/CD 설정 조회 시작...');
     
@@ -332,7 +332,7 @@ router.get('/config', authenticateToken, requireRole(['admin']), async (req, res
 });
 
 // [advice from AI] 파이프라인 삭제
-router.delete('/pipelines/:id', authenticateToken, requireRole(['admin']), async (req, res) => {
+router.delete('/pipelines/:id', verifyToken, async (req, res) => {
   try {
     console.log('🗑️ 파이프라인 삭제 시작...');
     
@@ -375,6 +375,206 @@ router.delete('/pipelines/:id', authenticateToken, requireRole(['admin']), async
     res.status(500).json({
       success: false,
       message: '파이프라인 삭제 중 오류가 발생했습니다.',
+      error: error.message
+    });
+  }
+});
+
+// [advice from AI] Jenkins 서버 상태 확인
+router.get('/jenkins/health', verifyToken, async (req, res) => {
+  try {
+    console.log('🔍 Jenkins 서버 상태 확인...');
+    
+    const healthStatus = await jenkinsService.checkJenkinsHealth();
+    
+    res.json({
+      success: true,
+      data: healthStatus,
+      message: 'Jenkins 서버 상태 조회 완료'
+    });
+    
+  } catch (error) {
+    console.error('❌ Jenkins 서버 상태 확인 실패:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Jenkins 서버 상태 확인 중 오류가 발생했습니다.',
+      error: error.message
+    });
+  }
+});
+
+// [advice from AI] Jenkins Job 목록 조회
+router.get('/jenkins/jobs', verifyToken, async (req, res) => {
+  try {
+    console.log('🔍 Jenkins Job 목록 조회...');
+    
+    const jobsList = await jenkinsService.listJenkinsJobs();
+    
+    res.json({
+      success: true,
+      data: jobsList.jobs,
+      message: 'Jenkins Job 목록 조회 완료'
+    });
+    
+  } catch (error) {
+    console.error('❌ Jenkins Job 목록 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Jenkins Job 목록 조회 중 오류가 발생했습니다.',
+      error: error.message
+    });
+  }
+});
+
+// [advice from AI] Jenkins Job 생성
+router.post('/jenkins/jobs', verifyToken, requireRole(['admin', 'operations']), async (req, res) => {
+  try {
+    const { jobName, jobConfig } = req.body;
+    
+    if (!jobName || !jobConfig) {
+      return res.status(400).json({
+        success: false,
+        message: 'jobName과 jobConfig가 필요합니다.'
+      });
+    }
+    
+    console.log(`🔨 Jenkins Job 생성 요청: ${jobName}`);
+    
+    const result = await jenkinsService.createJenkinsJob(jobName, jobConfig);
+    
+    // 데이터베이스에 파이프라인 정보 저장
+    const pipelineId = uuidv4();
+    await pool.query(`
+      INSERT INTO cicd_pipelines (
+        id, name, description, repository_url, branch, 
+        jenkins_job_name, status, created_by, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+    `, [
+      pipelineId,
+      jobName,
+      `Jenkins Job: ${jobName}`,
+      jobConfig.githubUrl || '',
+      jobConfig.branch || 'main',
+      jobName,
+      'active',
+      req.user.userId
+    ]);
+    
+    res.json({
+      success: true,
+      data: {
+        pipelineId,
+        ...result
+      },
+      message: 'Jenkins Job이 성공적으로 생성되었습니다.'
+    });
+    
+  } catch (error) {
+    console.error('❌ Jenkins Job 생성 실패:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Jenkins Job 생성 중 오류가 발생했습니다.',
+      error: error.message
+    });
+  }
+});
+
+// [advice from AI] Jenkins Job 빌드 트리거
+router.post('/jenkins/jobs/:jobName/build', verifyToken, async (req, res) => {
+  try {
+    const { jobName } = req.params;
+    const { parameters = {} } = req.body;
+    
+    console.log(`🚀 Jenkins 빌드 트리거: ${jobName}`);
+    
+    const result = await jenkinsService.triggerJenkinsBuild(jobName, parameters);
+    
+    // 빌드 히스토리 저장
+    await pool.query(`
+      INSERT INTO cicd_build_history (
+        id, pipeline_id, build_number, status, 
+        started_by, started_at, jenkins_build_url
+      ) VALUES ($1, 
+        (SELECT id FROM cicd_pipelines WHERE jenkins_job_name = $2 LIMIT 1),
+        $3, $4, $5, NOW(), $6
+      )
+    `, [
+      uuidv4(),
+      jobName,
+      result.buildNumber,
+      'running',
+      req.user.userId,
+      result.buildUrl
+    ]);
+    
+    res.json({
+      success: true,
+      data: result,
+      message: '빌드가 성공적으로 시작되었습니다.'
+    });
+    
+  } catch (error) {
+    console.error('❌ Jenkins 빌드 트리거 실패:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Jenkins 빌드 트리거 중 오류가 발생했습니다.',
+      error: error.message
+    });
+  }
+});
+
+// [advice from AI] Jenkins Job 상태 조회
+router.get('/jenkins/jobs/:jobName/status', verifyToken, async (req, res) => {
+  try {
+    const { jobName } = req.params;
+    
+    console.log(`🔍 Jenkins Job 상태 조회: ${jobName}`);
+    
+    const result = await jenkinsService.getJobStatus(jobName);
+    
+    res.json({
+      success: true,
+      data: result.status,
+      message: 'Jenkins Job 상태 조회 완료'
+    });
+    
+  } catch (error) {
+    console.error('❌ Jenkins Job 상태 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Jenkins Job 상태 조회 중 오류가 발생했습니다.',
+      error: error.message
+    });
+  }
+});
+
+// [advice from AI] Jenkins Job 삭제
+router.delete('/jenkins/jobs/:jobName', verifyToken, requireRole(['admin', 'operations']), async (req, res) => {
+  try {
+    const { jobName } = req.params;
+    
+    console.log(`🗑️ Jenkins Job 삭제: ${jobName}`);
+    
+    const result = await jenkinsService.deleteJenkinsJob(jobName);
+    
+    // 데이터베이스에서 파이프라인 정보 삭제
+    await pool.query(`
+      UPDATE cicd_pipelines 
+      SET status = 'deleted', updated_at = NOW() 
+      WHERE jenkins_job_name = $1
+    `, [jobName]);
+    
+    res.json({
+      success: true,
+      data: result,
+      message: 'Jenkins Job이 성공적으로 삭제되었습니다.'
+    });
+    
+  } catch (error) {
+    console.error('❌ Jenkins Job 삭제 실패:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Jenkins Job 삭제 중 오류가 발생했습니다.',
       error: error.message
     });
   }

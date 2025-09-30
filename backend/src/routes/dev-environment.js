@@ -14,7 +14,7 @@ const router = express.Router();
 const pool = new Pool({
   user: process.env.DB_USER || 'timbel_user',
   host: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_NAME || 'timbel_db',
+  database: process.env.DB_NAME || 'timbel_knowledge',
   password: process.env.DB_PASSWORD || 'timbel_password',
   port: process.env.DB_PORT || 5432,
 });
@@ -84,7 +84,7 @@ router.post('/test-repository-connection', jwtAuth.verifyToken, async (req, res)
       apiUrl = `https://api.github.com/repos/${owner}/${repo}`;
       headers = {
         'Accept': 'application/vnd.github.v3+json',
-        'User-Agent': 'Timbel-Knowledge-Platform'
+        'User-Agent': 'Timbel-Project-Management-Solution'
       };
       // 토큰이 있는 경우에만 Authorization 헤더 추가
       if (access_token) {
@@ -1056,7 +1056,7 @@ router.post('/projects/:id/work-start-approval', jwtAuth.verifyToken, jwtAuth.re
         }
       );
 
-      // 2. 할당 정보 업데이트 (승인 과정 데이터 및 승인자 정보 포함)
+      // 2. 할당 정보 업데이트 (승인 과정 데이터)
       await client.query(`
         UPDATE project_work_assignments 
         SET 
@@ -1066,17 +1066,14 @@ router.post('/projects/:id/work-start-approval', jwtAuth.verifyToken, jwtAuth.re
           pe_estimated_hours = $2,
           difficulty_feedback = $3,
           pe_notes = $4,
-          approved_by = $5,
-          approved_at = NOW(),
           progress_percentage = 5, -- 작업 시작으로 5% 진행률
           updated_at = NOW()
-        WHERE id = $6
+        WHERE id = $5
       `, [
         pe_estimated_completion_date,
         estimated_hours,
         difficulty_feedback,
         work_start_confirmation,
-        userId, // 승인자 ID
         assignment.id
       ]);
 

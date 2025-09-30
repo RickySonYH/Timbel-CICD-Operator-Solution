@@ -13,6 +13,9 @@ const { Pool } = require('pg');
 // [advice from AI] 세션 기반 인증 미들웨어
 const SessionAuthMiddleware = require('./middleware/sessionAuth');
 
+// [advice from AI] JWT 기반 인증 미들웨어
+const jwtAuth = require('./middleware/jwtAuth');
+
 // 미들웨어 설정
 dotenv.config();
 
@@ -20,7 +23,7 @@ dotenv.config();
 const pool = new Pool({
   user: process.env.DB_USER || 'timbel_user',
   host: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_NAME || 'timbel_db',
+  database: process.env.DB_NAME || 'timbel_knowledge',
   password: process.env.DB_PASSWORD || 'timbel_password',
   port: process.env.DB_PORT || 5434,
 });
@@ -320,10 +323,70 @@ app.get('/api/auth/session-status', (req, res) => {
 const RDCCalculatorService = require('./services/rdcCalculatorService');
 const rdcService = new RDCCalculatorService();
 
-// [advice from AI] 하드웨어 리소스 계산 엔드포인트 (Fallback 포함)
+// [advice from AI] 운영센터 활동 로그 API
+app.get('/api/operations/activity-logs', jwtAuth.verifyToken, jwtAuth.requireRole(['admin', 'operations']), async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    
+    // [advice from AI] 실제 활동 로그 조회 (여러 테이블에서 통합)
+    const query = `
+      SELECT 
+        'deployment' as activity_type,
+        id,
+        CONCAT('배포 요청: ', project_name, ' (', target_environment, ')') as message,
+        current_status as status,
+        created_at
+      FROM deployment_requests
+      WHERE created_at >= NOW() - INTERVAL '7 days'
+      
+      UNION ALL
+      
+      SELECT 
+        'build_issue' as activity_type,
+        id,
+        CONCAT('빌드 실패: ', job_name, ' - ', error_summary) as message,
+        status,
+        created_at
+      FROM build_failure_issues
+      WHERE created_at >= NOW() - INTERVAL '7 days'
+      
+      UNION ALL
+      
+      SELECT 
+        'server_check' as activity_type,
+        id,
+        CONCAT('서버 상태 체크: ', server_name, ' (', server_type, ')') as message,
+        health_status as status,
+        last_health_check as created_at
+      FROM cicd_servers
+      WHERE last_health_check >= NOW() - INTERVAL '1 day'
+      
+      ORDER BY created_at DESC
+      LIMIT $1
+    `;
+    
+    const result = await pool.query(query, [limit]);
+    
+    res.json({
+      success: true,
+      data: result.rows,
+      message: `${result.rows.length}개의 활동 로그를 조회했습니다.`
+    });
+    
+  } catch (error) {
+    console.error('❌ 활동 로그 조회 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Activity logs fetch failed',
+      message: error.message
+    });
+  }
+});
+
+// [advice from AI] 하드웨어 리소스 계산 엔드포인트 (랭사 솔루션 지원)
 app.post('/api/operations/calculate-resources', async (req, res) => {
   try {
-    const { requirements, gpu_type = 'auto' } = req.body;
+    const { requirements, gpu_type = 'auto', solution_type = 'general' } = req.body;
     
     if (!requirements) {
       return res.status(400).json({ 
@@ -332,13 +395,27 @@ app.post('/api/operations/calculate-resources', async (req, res) => {
       });
     }
 
-    console.log('하드웨어 리소스 계산 요청:', { requirements, gpu_type });
+    console.log('🔧 하드웨어 리소스 계산 요청:', { 
+      requirements, 
+      gpu_type, 
+      solution_type 
+    });
 
+    // [advice from AI] 랭사 AICC 솔루션 전용 처리
+    if (solution_type === 'langsa_aicc') {
+      console.log('🤖 랭사 AICC 솔루션 계산 모드');
+      
+      // 랭사 솔루션 특화 계산 로직
+      const langsaResult = await rdcService.calculateLangsaAICC(requirements, gpu_type);
+      return res.json(langsaResult);
+    }
+
+    // [advice from AI] 일반 계산 모드
     const result = await rdcService.calculateHardware(requirements, gpu_type);
     res.json(result);
     
   } catch (error) {
-    console.error('하드웨어 계산 오류:', error);
+    console.error('❌ 하드웨어 계산 오류:', error);
     res.status(500).json({ 
       error: 'Hardware calculation failed',
       message: error.message
@@ -466,6 +543,30 @@ app.use('/api/qc', require('./routes/qc-dashboard'));
 // [advice from AI] 배포 인프라 관리 API
 app.use('/api/deployment-infrastructure', require('./routes/deployment-infrastructure'));
 
+// [advice from AI] 빌드 실패 이슈 레포트 관리 API
+app.use('/api/build-issues', require('./routes/build-failure-issues'));
+
+// [advice from AI] 프로젝트 워크플로우 관리 API
+app.use('/api/project-workflow', require('./routes/project-workflow'));
+
+// [advice from AI] 배포 요청서 관리 API
+app.use('/api/deployment-requests', require('./routes/deployment-requests'));
+
+// [advice from AI] 운영센터 대시보드 API
+app.use('/api/operations', require('./routes/operations-dashboard'));
+
+// [advice from AI] CI/CD 서버 관리 API
+app.use('/api/cicd-servers', require('./routes/cicd-servers'));
+
+// [advice from AI] 레포지토리 관리 API
+app.use('/api/repositories', require('./routes/repositories'));
+
+// [advice from AI] Jenkins 실제 연동 API
+app.use('/api/jenkins', require('./routes/jenkins-integration'));
+
+// [advice from AI] Jenkins Webhook 수신 API
+app.use('/api/webhooks', require('./routes/jenkins-webhook'));
+
 // [advice from AI] 배포 실행 관리 API
 app.use('/api/deployment', require('./routes/deployment'));
 
@@ -474,6 +575,21 @@ app.use('/api/operations/cicd', require('./routes/cicd-pipeline'));
 
 // [advice from AI] GitHub 통합 API
 app.use('/api/operations/github', require('./routes/github-integration'));
+
+// [advice from AI] CI/CD 모니터링 API
+app.use('/api/operations/monitoring', require('./routes/cicd-monitoring'));
+app.use('/api/operations', require('./routes/operations-deployment'));
+app.use('/api/cicd', require('./routes/cicd-servers'));
+app.use('/api/ingress', require('./routes/ingress-manager'));
+app.use('/api/images', require('./routes/image-management'));
+app.use('/api/build', require('./routes/build-monitoring'));
+app.use('/api/deployment', require('./routes/deployment-monitoring'));
+
+// [advice from AI] 경영진 대시보드 API
+app.use('/api/executive-dashboard', require('./routes/executive-dashboard'));
+
+// [advice from AI] 프로젝트 상태 관리 및 히스토리 API  
+// app.use('/api/project-status', jwtAuth, require('./routes/project-status-management'));
 
 // [advice from AI] 전역 에러 핸들러 추가
 process.on('uncaughtException', (error) => {

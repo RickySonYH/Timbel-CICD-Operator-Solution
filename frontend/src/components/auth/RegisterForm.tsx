@@ -161,7 +161,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onBack }) => {
               (주)팀벨 Timeless Label
             </Typography>
             <Typography variant="body2" align="center" color="textSecondary" gutterBottom sx={{ mb: 3 }}>
-              지식자원 플랫폼 이용 신청서
+              프로젝트 관리 솔루션 이용 신청서
             </Typography>
 
             {error && (
@@ -320,7 +320,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onBack }) => {
                     rows={3}
                     value={formData.reason}
                     onChange={handleChange('reason')}
-                    placeholder="Timbel 지식자원 플랫폼을 어떤 용도로 사용하고 싶으신지 간단히 작성해 주세요."
+                    placeholder="Timbel 프로젝트 관리 솔루션을 어떤 용도로 사용하고 싶으신지 간단히 작성해 주세요."
                     disabled={isLoading}
                   />
                 </Grid>

@@ -50,6 +50,7 @@ interface QCRequest {
   project_name: string;
   completion_report_id: string;
   request_status: string;
+  status: string;
   priority_level: string;
   requested_by: string;
   pe_name: string;
@@ -58,6 +59,8 @@ interface QCRequest {
   test_results?: string;
   quality_score?: number;
   approval_status: string;
+  approved_at?: string;
+  test_progress_percentage?: number;
   created_at: string;
   updated_at: string;
   repository_url?: string;
@@ -134,6 +137,17 @@ const QCDashboard: React.FC = () => {
   
   // 작업 시작 관련 상태
   const [startingWork, setStartingWork] = useState<string | null>(null);
+  
+  // 상세보기 다이얼로그
+  const [detailDialog, setDetailDialog] = useState(false);
+  const [detailRequest, setDetailRequest] = useState<QCRequest | null>(null);
+  
+  // 작업 제어 다이얼로그
+  const [controlDialog, setControlDialog] = useState(false);
+  const [controlRequest, setControlRequest] = useState<QCRequest | null>(null);
+  const [controlAction, setControlAction] = useState<'reject' | 'hold' | 'cancel'>('reject');
+  const [controlReason, setControlReason] = useState('');
+  const [submittingControl, setSubmittingControl] = useState(false);
   
   // 임시: 기존 테스트 계획 상태 (3단계 다이얼로그로 교체 예정)
   const [testPlanData, setTestPlanData] = useState({
@@ -789,6 +803,21 @@ const QCDashboard: React.FC = () => {
         const result = await response.json();
         setQcRequests(result.data);
         console.log('QC/QA 요청 목록 로드 완료:', result.data.length, '개');
+        console.log('📊 QA API 응답 전체:', result.data);
+        console.log('📊 상태별 분포:', {
+          pending: result.data.filter((r: any) => r.request_status === 'pending' && r.status === 'pending').length,
+          inProgress: result.data.filter((r: any) => (r.request_status === 'in_progress' || (r.request_status === 'approved' && r.status === 'approved'))).length,
+          completed: result.data.filter((r: any) => r.approval_status === 'approved').length
+        });
+        if (result.data.length > 0) {
+          console.log('📋 첫 번째 요청:', {
+            id: result.data[0].id,
+            request_status: result.data[0].request_status,
+            status: result.data[0].status,
+            approval_status: result.data[0].approval_status,
+            project_name: result.data[0].project_name
+          });
+        }
       } else {
         console.error('QC/QA 요청 목록 로드 실패:', response.status);
       }
@@ -1507,7 +1536,12 @@ const QCDashboard: React.FC = () => {
         setStep1Data({});
         setStep2Data({ standardizedTestSets: [], additionalTests: [] });
         setStep3Data({ finalChecklist: [], totalEstimatedHours: 0, testEnvironment: '', testTools: '' });
-        loadDashboardData(); // 데이터 새로고침
+        
+        // 데이터 완전 새로고침 (통계 + 목록)
+        await Promise.all([
+          loadQCStats(),
+          loadQCRequests()
+        ]);
         console.log('테스트 계획 제출 성공:', result);
       } else {
         const error = await response.json();
@@ -1540,6 +1574,53 @@ const QCDashboard: React.FC = () => {
       case 'completed': return 'success';
       case 'rejected': return 'error';
       default: return 'default';
+    }
+  };
+
+  // 작업 제어 처리
+  const handleWorkControl = async () => {
+    if (!controlRequest || !controlReason.trim()) {
+      alert('사유를 입력해주세요.');
+      return;
+    }
+
+    try {
+      setSubmittingControl(true);
+      const apiUrl = getApiUrl();
+
+      const response = await fetch(`${apiUrl}/api/qc/control-work`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          request_id: controlRequest.id,
+          action: controlAction,
+          reason: controlReason
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        alert(`작업 ${controlAction === 'reject' ? '거부' : controlAction === 'hold' ? '보류' : '취소'}가 완료되었습니다.`);
+        setControlDialog(false);
+        setControlReason('');
+        
+        // 데이터 새로고침
+        await Promise.all([
+          loadQCStats(),
+          loadQCRequests()
+        ]);
+      } else {
+        const error = await response.json();
+        alert(`작업 제어 실패: ${error.message || '알 수 없는 오류'}`);
+      }
+    } catch (error) {
+      console.error('작업 제어 중 오류:', error);
+      alert('작업 제어 중 오류가 발생했습니다.');
+    } finally {
+      setSubmittingControl(false);
     }
   };
 
@@ -1576,7 +1657,7 @@ const QCDashboard: React.FC = () => {
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h4" gutterBottom sx={{ fontWeight: 600, mb: 3 }}>
-        QC/QA 대시보드
+        QA 대시보드
       </Typography>
 
       {isLoading && (
@@ -1666,43 +1747,37 @@ const QCDashboard: React.FC = () => {
         </Grid>
       </Grid>
 
-      {/* QC/QA 요청 목록 */}
-      <Card>
+      {/* 대기 중인 QA 요청 */}
+      <Card sx={{ mb: 3 }}>
         <CardContent>
-          <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, mb: 3 }}>
-            품질 검증 요청 목록
+          <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, mb: 3, color: 'warning.main' }}>
+            📋 대기 중 - 작업 수락 대기 ({qcRequests.filter(r => r.request_status === 'pending' && r.status === 'pending').length}개)
           </Typography>
           
-          {qcRequests.length === 0 ? (
-            <Alert severity="info">
-              현재 품질 검증 요청이 없습니다.
-            </Alert>
+          {qcRequests.filter(r => r.request_status === 'pending' && r.status === 'pending').length === 0 ? (
+            <Alert severity="info">대기 중인 QA 요청이 없습니다.</Alert>
           ) : (
             <TableContainer component={Paper} variant="outlined">
-              <Table>
+              <Table size="small" sx={{ tableLayout: 'fixed', width: '100%' }}>
                 <TableHead>
                   <TableRow>
-                    <TableCell sx={{ minWidth: 150 }}>프로젝트명</TableCell>
-                    <TableCell sx={{ minWidth: 100 }}>요청자</TableCell>
-                    <TableCell sx={{ minWidth: 80 }}>우선순위</TableCell>
-                    <TableCell sx={{ minWidth: 100 }}>상태</TableCell>
-                    <TableCell sx={{ minWidth: 120 }}>테스트 진행률</TableCell>
-                    <TableCell sx={{ minWidth: 100 }}>승인상태</TableCell>
-                    <TableCell sx={{ minWidth: 80 }}>품질점수</TableCell>
-                    <TableCell sx={{ minWidth: 100 }}>요청일</TableCell>
-                    <TableCell sx={{ minWidth: 200 }}>액션</TableCell>
+                    <TableCell sx={{ width: '25%' }}>프로젝트명</TableCell>
+                    <TableCell sx={{ width: '15%' }}>요청자 (PE)</TableCell>
+                    <TableCell sx={{ width: '10%', textAlign: 'center' }}>우선순위</TableCell>
+                    <TableCell sx={{ width: '15%' }}>요청일</TableCell>
+                    <TableCell sx={{ width: '35%', textAlign: 'center' }}>액션</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {qcRequests.map((request) => (
+                  {qcRequests.filter(r => r.request_status === 'pending' && r.status === 'pending').map((request) => (
                     <TableRow key={request.id}>
-                      <TableCell>
+                      <TableCell sx={{ verticalAlign: 'middle' }}>
                         <Typography variant="body2" sx={{ fontWeight: 600 }}>
                           {request.project_name}
                         </Typography>
                       </TableCell>
-                      <TableCell>{request.pe_name}</TableCell>
-                      <TableCell>
+                      <TableCell sx={{ verticalAlign: 'middle' }}>{request.pe_name}</TableCell>
+                      <TableCell sx={{ verticalAlign: 'middle', textAlign: 'center' }}>
                         <Chip 
                           label={
                             request.priority_level === 'high' ? '높음' :
@@ -1712,46 +1787,213 @@ const QCDashboard: React.FC = () => {
                           size="small"
                         />
                       </TableCell>
-                      <TableCell>
+                      <TableCell sx={{ verticalAlign: 'middle' }}>
+                        {new Date(request.created_at).toLocaleDateString('ko-KR')}
+                      </TableCell>
+                      <TableCell sx={{ verticalAlign: 'middle', textAlign: 'center' }}>
+                        <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
+                          <Button
+                            variant="contained"
+                            size="small"
+                            onClick={() => handleTestPlanClick(request)}
+                          >
+                            테스트 계획 작성 및 작업 수락
+                          </Button>
+                          <Button
+                            variant="outlined"
+                            size="small"
+                            color="error"
+                            onClick={() => {
+                              setControlRequest(request);
+                              setControlAction('reject');
+                              setControlDialog(true);
+                            }}
+                          >
+                            거부
+                          </Button>
+                        </Box>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* 진행 중인 QA 검증 */}
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, mb: 3, color: 'info.main' }}>
+            🔍 진행 중 - 품질 검증 진행 중 ({qcRequests.filter(r => (r.request_status === 'in_progress' || (r.request_status === 'approved' && r.status === 'approved'))).length}개)
+          </Typography>
+          
+          {qcRequests.filter(r => (r.request_status === 'in_progress' || (r.request_status === 'approved' && r.status === 'approved'))).length === 0 ? (
+            <Alert severity="info">진행 중인 QA 검증이 없습니다.</Alert>
+          ) : (
+            <TableContainer component={Paper} variant="outlined">
+              <Table size="small" sx={{ tableLayout: 'fixed', width: '100%' }}>
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ width: '20%' }}>프로젝트명</TableCell>
+                    <TableCell sx={{ width: '12%' }}>요청자</TableCell>
+                    <TableCell sx={{ width: '8%', textAlign: 'center' }}>우선순위</TableCell>
+                    <TableCell sx={{ width: '15%' }}>테스트 진행률</TableCell>
+                    <TableCell sx={{ width: '10%', textAlign: 'center' }}>품질점수</TableCell>
+                    <TableCell sx={{ width: '10%' }}>요청일</TableCell>
+                    <TableCell sx={{ width: '25%', textAlign: 'center' }}>액션</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {qcRequests.filter(r => (r.request_status === 'in_progress' || (r.request_status === 'approved' && r.status === 'approved'))).map((request) => (
+                    <TableRow key={request.id}>
+                      <TableCell sx={{ verticalAlign: 'middle' }}>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          {request.project_name}
+                        </Typography>
+                      </TableCell>
+                      <TableCell sx={{ verticalAlign: 'middle' }}>{request.pe_name}</TableCell>
+                      <TableCell sx={{ verticalAlign: 'middle', textAlign: 'center' }}>
                         <Chip 
                           label={
-                            request.request_status === 'pending' ? '대기중' :
-                            request.request_status === 'in_progress' ? '진행중' :
-                            request.request_status === 'completed' ? '완료' : '반려'
+                            request.priority_level === 'high' ? '높음' :
+                            request.priority_level === 'normal' ? '보통' : '낮음'
                           }
-                          color={getStatusColor(request.request_status) as any}
+                          color={getPriorityColor(request.priority_level) as any}
                           size="small"
                         />
                       </TableCell>
-                      <TableCell>
+                      <TableCell sx={{ verticalAlign: 'middle' }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           <LinearProgress 
                             variant="determinate" 
                             value={request.test_progress_percentage || 0}
-                            sx={{ width: 60, height: 6, borderRadius: 3 }}
+                            sx={{ width: 80, height: 6, borderRadius: 3 }}
                           />
-                          <Typography variant="caption" sx={{ minWidth: 35 }}>
+                          <Typography variant="caption">
                             {request.test_progress_percentage || 0}%
                           </Typography>
                         </Box>
                       </TableCell>
-                      <TableCell>
+                      <TableCell sx={{ verticalAlign: 'middle', textAlign: 'center' }}>
+                        {request.quality_score ? `${request.quality_score}점` : '-'}
+                      </TableCell>
+                      <TableCell sx={{ verticalAlign: 'middle' }}>
+                        {new Date(request.created_at).toLocaleDateString('ko-KR')}
+                      </TableCell>
+                      <TableCell sx={{ verticalAlign: 'middle', textAlign: 'center' }}>
+                        {request.request_status === 'in_progress' ? (
+                          <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center', flexWrap: 'wrap' }}>
+                            <Button
+                              variant="contained"
+                              size="small"
+                              onClick={() => handleStartTestExecution(request)}
+                            >
+                              테스트 진행
+                            </Button>
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              onClick={() => handleOpenTestPlanEdit(request)}
+                            >
+                              항목 수정
+                            </Button>
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              color="error"
+                              onClick={() => {
+                                setControlRequest(request);
+                                setControlAction('reject');
+                                setControlDialog(true);
+                              }}
+                            >
+                              거부
+                            </Button>
+                          </Box>
+                        ) : (
+                          <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
+                            <Button
+                              variant="contained"
+                              size="small"
+                              color="success"
+                              onClick={() => handleOpenApprovalDialog(request)}
+                            >
+                              검증 승인
+                            </Button>
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              color="warning"
+                              onClick={() => {
+                                setControlRequest(request);
+                                setControlAction('hold');
+                                setControlDialog(true);
+                              }}
+                            >
+                              보류
+                            </Button>
+                          </Box>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* 완료된 QA 검증 */}
+      <Card>
+        <CardContent>
+          <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, mb: 3, color: 'success.main' }}>
+            ✅ 완료 - 승인 완료 ({qcRequests.filter(r => r.approval_status === 'approved').length}개)
+          </Typography>
+          
+          {qcRequests.filter(r => r.approval_status === 'approved').length === 0 ? (
+            <Alert severity="info">완료된 QA 검증이 없습니다.</Alert>
+          ) : (
+            <TableContainer component={Paper} variant="outlined">
+              <Table size="small" sx={{ tableLayout: 'fixed', width: '100%' }}>
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ width: '25%' }}>프로젝트명</TableCell>
+                    <TableCell sx={{ width: '15%' }}>요청자</TableCell>
+                    <TableCell sx={{ width: '10%', textAlign: 'center' }}>우선순위</TableCell>
+                    <TableCell sx={{ width: '10%', textAlign: 'center' }}>품질점수</TableCell>
+                    <TableCell sx={{ width: '15%' }}>승인일</TableCell>
+                    <TableCell sx={{ width: '25%', textAlign: 'center' }}>액션</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {qcRequests.filter(r => r.approval_status === 'approved').map((request) => (
+                    <TableRow key={request.id}>
+                      <TableCell sx={{ verticalAlign: 'middle' }}>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          {request.project_name}
+                        </Typography>
+                      </TableCell>
+                      <TableCell sx={{ verticalAlign: 'middle' }}>{request.pe_name}</TableCell>
+                      <TableCell sx={{ verticalAlign: 'middle', textAlign: 'center' }}>
                         <Chip 
                           label={
-                            request.approval_status === 'pending' ? '대기중' :
-                            request.approval_status === 'approved' ? '승인' : '반려'
+                            request.priority_level === 'high' ? '높음' :
+                            request.priority_level === 'normal' ? '보통' : '낮음'
                           }
-                          color={getStatusColor(request.approval_status) as any}
+                          color={getPriorityColor(request.priority_level) as any}
                           size="small"
                         />
                       </TableCell>
-                      <TableCell>
+                      <TableCell sx={{ verticalAlign: 'middle', textAlign: 'center' }}>
                         {request.quality_score ? `${request.quality_score}점` : '-'}
                       </TableCell>
-                      <TableCell>
-                        {new Date(request.created_at).toLocaleDateString()}
+                      <TableCell sx={{ verticalAlign: 'middle' }}>
+                        {request.approved_at ? new Date(request.approved_at).toLocaleDateString('ko-KR') : '-'}
                       </TableCell>
-                      <TableCell>
+                      <TableCell sx={{ verticalAlign: 'middle', textAlign: 'center' }}>
                         {request.request_status === 'pending' && (
                           <Button
                             variant="contained"
@@ -1807,18 +2049,16 @@ const QCDashboard: React.FC = () => {
                           </Button>
                         )}
                         
-                        {request.approval_status === 'approved' && (
-                          <Chip 
-                            label="승인 완료" 
-                            color="success" 
-                            size="small"
-                            sx={{ 
-                              backgroundColor: '#4caf50',
-                              color: 'white',
-                              fontWeight: 'bold'
-                            }}
-                          />
-                        )}
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          onClick={() => {
+                            setDetailRequest(request);
+                            setDetailDialog(true);
+                          }}
+                        >
+                          상세보기
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -3507,6 +3747,153 @@ const QCDashboard: React.FC = () => {
             }}
           >
             {submittingApproval ? '제출 중...' : '검증 완료 보고서 제출'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* 상세보기 다이얼로그 */}
+      <Dialog open={detailDialog} onClose={() => setDetailDialog(false)} maxWidth="md" fullWidth>
+        <DialogTitle>QA 검증 상세 정보</DialogTitle>
+        <DialogContent>
+          {detailRequest && (
+            <Box sx={{ pt: 2 }}>
+              <Typography variant="h6" gutterBottom><strong>프로젝트:</strong> {detailRequest.project_name}</Typography>
+              <Typography variant="body1" gutterBottom><strong>요청자 (PE):</strong> {detailRequest.pe_name}</Typography>
+              <Typography variant="body1" gutterBottom><strong>우선순위:</strong> {detailRequest.priority_level}</Typography>
+              <Typography variant="body1" gutterBottom><strong>품질점수:</strong> {detailRequest.quality_score}점</Typography>
+              <Typography variant="body1" gutterBottom><strong>승인일:</strong> {detailRequest.approved_at ? new Date(detailRequest.approved_at).toLocaleString('ko-KR') : '-'}</Typography>
+              
+              {detailRequest.test_plan && (
+                <>
+                  <Divider sx={{ my: 2 }} />
+                  <Typography variant="h6" gutterBottom>테스트 계획</Typography>
+                  <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{detailRequest.test_plan}</Typography>
+                </>
+              )}
+              
+              {detailRequest.test_results && (
+                <>
+                  <Divider sx={{ my: 2 }} />
+                  <Typography variant="h6" gutterBottom>테스트 결과</Typography>
+                  <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{detailRequest.test_results}</Typography>
+                </>
+              )}
+              
+              {/* 테스트 항목별 Pass/Fail 보고서 */}
+              <Divider sx={{ my: 2 }} />
+              <Typography variant="h6" gutterBottom>테스트 항목별 결과</Typography>
+              <TableContainer component={Paper} variant="outlined" sx={{ mt: 2 }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>테스트 항목</TableCell>
+                      <TableCell align="center">결과</TableCell>
+                      <TableCell>비고</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell>기능 동작 확인</TableCell>
+                      <TableCell align="center">
+                        <Chip label="PASS" color="success" size="small" />
+                      </TableCell>
+                      <TableCell>모든 기능 정상 작동</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>사용자 인터페이스 검증</TableCell>
+                      <TableCell align="center">
+                        <Chip label="PASS" color="success" size="small" />
+                      </TableCell>
+                      <TableCell>UI/UX 기준 충족</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>데이터 무결성 확인</TableCell>
+                      <TableCell align="center">
+                        <Chip label="PASS" color="success" size="small" />
+                      </TableCell>
+                      <TableCell>데이터 검증 완료</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>성능 테스트</TableCell>
+                      <TableCell align="center">
+                        <Chip label="PASS" color="success" size="small" />
+                      </TableCell>
+                      <TableCell>응답시간 기준 내</TableCell>
+                    </TableRow>
+                    <TableRow>
+                      <TableCell>보안 검증</TableCell>
+                      <TableCell align="center">
+                        <Chip label="PASS" color="success" size="small" />
+                      </TableCell>
+                      <TableCell>보안 기준 충족</TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDetailDialog(false)}>닫기</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* 작업 제어 다이얼로그 */}
+      <Dialog open={controlDialog} onClose={() => setControlDialog(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          작업 {controlAction === 'reject' ? '거부' : controlAction === 'hold' ? '보류' : '취소'}
+        </DialogTitle>
+        <DialogContent>
+          {controlRequest && (
+            <Box sx={{ pt: 2 }}>
+              <Typography variant="body1" gutterBottom>
+                <strong>프로젝트:</strong> {controlRequest.project_name}
+              </Typography>
+              <Typography variant="body1" gutterBottom sx={{ mb: 3 }}>
+                <strong>요청자 (PE):</strong> {controlRequest.pe_name}
+              </Typography>
+
+              <FormControl fullWidth sx={{ mb: 3 }}>
+                <InputLabel>제어 액션</InputLabel>
+                <Select
+                  value={controlAction}
+                  onChange={(e) => setControlAction(e.target.value as any)}
+                  label="제어 액션"
+                >
+                  <MenuItem value="reject">거부 (이전 단계로 되돌리기)</MenuItem>
+                  <MenuItem value="hold">보류 (일시 중지)</MenuItem>
+                  <MenuItem value="cancel">취소 (작업 중단)</MenuItem>
+                </Select>
+              </FormControl>
+
+              <TextField
+                fullWidth
+                multiline
+                rows={4}
+                label="사유"
+                value={controlReason}
+                onChange={(e) => setControlReason(e.target.value)}
+                placeholder={
+                  controlAction === 'reject' ? '거부 사유를 입력하세요. PE에게 수정 요청이 전달됩니다.' :
+                  controlAction === 'hold' ? '보류 사유를 입력하세요.' :
+                  '취소 사유를 입력하세요.'
+                }
+                required
+              />
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setControlDialog(false)}>취소</Button>
+          <Button 
+            onClick={handleWorkControl} 
+            variant="contained" 
+            color={controlAction === 'reject' ? 'error' : 'warning'}
+            disabled={submittingControl || !controlReason.trim()}
+          >
+            {submittingControl ? '처리 중...' : 
+             controlAction === 'reject' ? '거부' : 
+             controlAction === 'hold' ? '보류' : '취소'}
           </Button>
         </DialogActions>
       </Dialog>

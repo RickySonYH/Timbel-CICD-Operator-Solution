@@ -1049,13 +1049,13 @@ const PODashboard: React.FC = () => {
                           <Grid item xs={6}>
                             <Typography variant="caption" color="text.secondary">완료율</Typography>
                             <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                              {(pePerformanceData.team_benchmark?.team_avg_completion_rate || 0).toFixed(1)}%
+                              {(parseFloat(pePerformanceData.team_benchmark?.team_avg_completion_rate) || 0).toFixed(1)}%
                             </Typography>
                           </Grid>
                           <Grid item xs={6}>
                             <Typography variant="caption" color="text.secondary">품질점수</Typography>
                             <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                              {(pePerformanceData.team_benchmark?.team_avg_quality_score || 0).toFixed(1)}점
+                              {(parseFloat(pePerformanceData.team_benchmark?.team_avg_quality_score) || 0).toFixed(1)}점
                             </Typography>
                           </Grid>
                         </Grid>
@@ -1104,12 +1104,12 @@ const PODashboard: React.FC = () => {
                                 </TableCell>
                                 <TableCell align="center">
                                   <Typography variant="body2">
-                                    {(pe.completion_rate || 0).toFixed(1)}%
+                                    {(parseFloat(pe.completion_rate) || 0).toFixed(1)}%
                                   </Typography>
                                 </TableCell>
                                 <TableCell align="center">
                                   <Typography variant="body2">
-                                    {(pe.avg_quality_score || 0).toFixed(1)}점
+                                    {(parseFloat(pe.avg_quality_score) || 0).toFixed(1)}점
                                   </Typography>
                                 </TableCell>
                                 <TableCell align="center">
@@ -1589,9 +1589,17 @@ const PODashboard: React.FC = () => {
                         <Button
                           variant="outlined"
                           size="small"
-                          onClick={() => setDeploymentDialog(true)}
+                          onClick={() => navigate('/po/deployment-request')}
                         >
-                          배포 요청하기
+                          새 배포 요청서 작성
+                        </Button>
+                        <Button
+                          variant="text"
+                          size="small"
+                          onClick={() => setDeploymentDialog(true)}
+                          sx={{ ml: 1 }}
+                        >
+                          간단 배포 요청
                         </Button>
                       </Box>
                     </Box>
@@ -1681,7 +1689,7 @@ const PODashboard: React.FC = () => {
                               />
                                     {pe.avg_progress > 0 && (
                               <Chip
-                                        label={`평균 ${(pe.avg_progress || 0).toFixed(0)}%`} 
+                                        label={`평균 ${(parseFloat(pe.avg_progress) || 0).toFixed(0)}%`} 
                                 size="small"
                                         color={pe.avg_progress > 70 ? "success" : pe.avg_progress > 40 ? "warning" : "error"}
                                         variant="outlined"
@@ -1707,7 +1715,7 @@ const PODashboard: React.FC = () => {
                                     color={getProgressColor(pe.avg_progress || 0)}
                                   />
                                   <Typography variant="caption" sx={{ minWidth: '40px' }}>
-                                    {(pe.avg_progress || 0).toFixed(0)}%
+                                    {(parseFloat(pe.avg_progress) || 0).toFixed(0)}%
                                   </Typography>
                                 </Box>
                               </TableCell>
@@ -2519,7 +2527,7 @@ const PODashboard: React.FC = () => {
                       <Grid item xs={12} md={3}>
                         <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'info.50', borderRadius: 1 }}>
                           <Typography variant="h4" sx={{ fontWeight: 700, color: 'info.main' }}>
-                            {(pePerformanceData.team_benchmark?.team_avg_completion_rate || 0).toFixed(1)}%
+                            {(parseFloat(pePerformanceData.team_benchmark?.team_avg_completion_rate) || 0).toFixed(1)}%
                           </Typography>
                           <Typography variant="caption" color="text.secondary">평균 완료율</Typography>
                         </Box>
@@ -2527,7 +2535,7 @@ const PODashboard: React.FC = () => {
                       <Grid item xs={12} md={3}>
                         <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'warning.50', borderRadius: 1 }}>
                           <Typography variant="h4" sx={{ fontWeight: 700, color: 'warning.main' }}>
-                            {(pePerformanceData.team_benchmark?.team_avg_quality_score || 0).toFixed(1)}
+                            {(parseFloat(pePerformanceData.team_benchmark?.team_avg_quality_score) || 0).toFixed(1)}
                           </Typography>
                           <Typography variant="caption" color="text.secondary">평균 품질점수</Typography>
                         </Box>
@@ -2615,13 +2623,13 @@ const PODashboard: React.FC = () => {
                                     }
                                   />
                                   <Typography variant="caption">
-                                    {(pe.completion_rate || 0).toFixed(1)}%
+                                    {(parseFloat(pe.completion_rate) || 0).toFixed(1)}%
                                   </Typography>
                                 </Box>
                               </TableCell>
                               <TableCell align="center">
                                 <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                  {(pe.avg_quality_score || 0).toFixed(1)}점
+                                  {(parseFloat(pe.avg_quality_score) || 0).toFixed(1)}점
                                 </Typography>
                               </TableCell>
                               <TableCell align="center">
@@ -2637,7 +2645,7 @@ const PODashboard: React.FC = () => {
                                     (pe.rework_rate || 0) > 10 ? 'warning.main' : 'success.main'
                                   }
                                 >
-                                  {(pe.rework_rate || 0).toFixed(1)}%
+                                  {(parseFloat(pe.rework_rate) || 0).toFixed(1)}%
                                 </Typography>
                               </TableCell>
                               <TableCell align="center">
@@ -2710,7 +2718,7 @@ const PODashboard: React.FC = () => {
                     <Grid container spacing={2}>
                       {['overloaded', 'busy', 'balanced', 'light', 'available'].map((status) => {
                         const count = workloadDistributionData.workload_analysis.filter((pe: any) => pe.workload_status === status).length;
-                        const percentage = ((count / workloadDistributionData.workload_analysis.length) * 100 || 0).toFixed(1);
+                        const percentage = (parseFloat((count / workloadDistributionData.workload_analysis.length) * 100) || 0).toFixed(1);
                         const statusLabels = {
                           overloaded: '과부하',
                           busy: '바쁨',

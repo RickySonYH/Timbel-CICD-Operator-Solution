@@ -400,7 +400,7 @@ const CompletionChecklist: React.FC = () => {
       const mockProjects: Project[] = [
         {
           id: 'proj-001',
-          name: 'Timbel Knowledge Platform',
+          name: 'Timbel Project Management Solution',
           status: 'in_progress',
           completion_percentage: 75,
           checklist_items: standardChecklistTemplate

@@ -13,6 +13,7 @@ import {
   ListItem,
   ListItemButton,
   ListItemText,
+  ListItemIcon,
   Divider,
   useTheme,
   useMediaQuery,
@@ -27,9 +28,8 @@ import {
   Avatar,
   CircularProgress
 } from '@mui/material';
-// [advice from AI] 접기/펼치기 아이콘만 복원
-import { ExpandLess as ExpandLessIcon, ExpandMore as ExpandMoreIcon, Notifications as NotificationsIcon } from '@mui/icons-material';
-import { useNavigate, useLocation } from 'react-router-dom';
+// [advice from AI] 메시지 센터 제거로 알림 아이콘 불필요
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import UserInfo from './UserInfo';
 import { useJwtAuthStore } from '../../store/jwtAuthStore';
 
@@ -37,12 +37,10 @@ import { useJwtAuthStore } from '../../store/jwtAuthStore';
 const DRAWER_WIDTH = 240;
 
 // [advice from AI] Phase 2: 통합된 네비게이션 메뉴 (지식자원 카탈로그로 명칭 변경)
-const navigationItems = [
-  { text: '홈', path: '/' },
-  { text: '지식자원 카탈로그', path: '/knowledge', hasSubMenu: true },
-  { text: 'VibeStudio', path: '/vibe-studio' },
-  { text: '메시지 센터', path: '/message-center' },
-];
+  const navigationItems = [
+    { text: '홈', path: '/' },
+    { text: '지식자원 카탈로그', path: '/knowledge', hasSubMenu: true },
+  ];
 
 // [advice from AI] Phase 1: 통합된 지식자원 관리 하위 메뉴 (권한 기반 기능 차등 제공 예정)
 const knowledgeSubMenus = [
@@ -64,20 +62,19 @@ const adminApprovalSubMenus = [
 ];
 
 
-// [advice from AI] 역할별 대시보드 메뉴 (하위 메뉴 포함)
-const roleDashboards = [
-  { text: '최고 관리자', path: '/executive', hasSubMenu: false },
-  { text: 'PO 대시보드', path: '/po-dashboard', hasSubMenu: true }, // 프로젝트 관리, PE 관리, 요구사항 관리
-  { text: 'PE 대시보드', path: '/pe-workspace', hasSubMenu: true }, // PE 작업 대시보드 및 하위 기능들
-  { text: 'QC/QA 대시보드', path: '/qc-dashboard', hasSubMenu: false }, // 품질 검증 및 테스트 관리
-  { text: '운영 센터', path: '/operations', hasSubMenu: true }, // 현재 4개 하위 센터
+// [advice from AI] 업무 영역 메뉴 (최고관리자 단순화, 아이콘 통일)
+const workAreas = [
+  { text: '최고 관리자', path: '/executive', hasSubMenu: false, icon: '●' },
+  { text: 'PO 업무영역', path: '/po-dashboard', hasSubMenu: true, icon: '▼' }, // 프로젝트 관리, PE 관리, 요구사항 관리
+  { text: 'PE 업무영역', path: '/pe-workspace', hasSubMenu: true, icon: '▼' }, // PE 작업 대시보드 및 하위 기능들
+  { text: 'QA 센터', path: '/qc-dashboard', hasSubMenu: false, icon: '●' }, // 품질 검증 및 테스트 관리
+  { text: '운영 센터', path: '/operations', hasSubMenu: true, icon: '▼' }, // 현재 4개 하위 센터
 ];
 
-// [advice from AI] PE 대시보드 하위 메뉴
-// [advice from AI] PO 대시보드 하위 메뉴 (정리됨)
+// [advice from AI] PO 대시보드 하위 메뉴 (프로젝트 워크플로우 추가)
 const poDashboardSubMenus = [
   { text: 'PO 대시보드', path: '/po-dashboard', highlight: false },
-  { text: '진행 현황 및 성과 관리', path: '/po/progress', highlight: false },
+  { text: '프로젝트 워크플로우', path: '/po/workflow', highlight: true, description: '7단계 생명주기 전체 현황' }
 ];
 
 const peWorkspaceSubMenus = [
@@ -85,16 +82,22 @@ const peWorkspaceSubMenus = [
   { text: '진행 상황 보고', path: '/pe-workspace/reports', highlight: false }, // 업무 관리와 주간 보고서 통합
 ];
 
-// [advice from AI] 운영센터 하위 메뉴 (CI/CD 통합 관리로 개선)
+  // [advice from AI] 운영센터 하위 메뉴 (7단계 프로젝트 생명주기 기반 재구성)
+// [advice from AI] 7단계 프로젝트 생명주기에 맞춘 운영센터 메뉴 구조 (프로젝트 워크플로우는 Executive/PO 메뉴로 이동)
 const operationsSubMenus = [
-  { text: '운영 대시보드', path: '/operations', highlight: true },
-  { text: 'CI/CD 파이프라인', path: '/operations/cicd', highlight: true },
-  { text: '인프라 관리', path: '/operations/infrastructure', highlight: true },
-  { text: '멀티테넌트 관리', path: '/operations/multi-tenant', highlight: true },
-  { text: '모니터링', path: '/operations/monitoring', highlight: true },
-  { text: '자동배포', path: '/operations/auto-deploy', highlight: false },
-  { text: '하드웨어 계산기', path: '/operations/hardware-calc', highlight: false },
-  { text: '서비스 설정', path: '/operations/service-config', highlight: false }
+  // === 📊 운영 현황 ===
+  { text: '📊 운영 대시보드', path: '/operations', highlight: true, description: '배포 요청 접수 및 전체 운영 현황' },
+  
+  // === ⚙️ 사전 설정 관리 (한 번 설정) ===
+  { text: '⚙️ CI/CD 서버 관리', path: '/operations/cicd-management', highlight: true, description: 'Jenkins, Nexus, Argo CD 서버 등록 및 관리' },
+  { text: '📋 파이프라인 템플릿', path: '/operations/pipeline-templates', highlight: true, description: '재사용 가능한 빌드/배포 템플릿 관리' },
+  
+  // === 🚀 배포 실행 (요청 기반 자동 진행) ===
+  { text: '🚀 통합 배포 실행 센터', path: '/operations/deployment-center', highlight: true, description: '배포 요청 → 자동 5단계 진행 → 완료 (원스톱)' },
+  
+  // === 📊 모니터링 & 관리 ===
+  { text: '📊 성능 모니터링', path: '/operations/monitoring', highlight: true, description: '배포된 서비스 실시간 성능 추적' },
+  { text: '🔍 이슈 관리', path: '/operations/issues', highlight: false, description: '빌드/배포 실패 이슈 관리 및 PE 할당' }
 ];
 
 // [advice from AI] 시스템 관리 하위 메뉴
@@ -127,29 +130,24 @@ interface BackstageLayoutProps {
 
 const BackstageLayout: React.FC<BackstageLayoutProps> = ({ 
   children, 
-  title = "Timbel 지식자원 플랫폼" 
+  title = "Timbel Project Management Solution" 
 }) => {
   const theme = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [executiveOpen, setExecutiveOpen] = useState(false);
   const [operationsOpen, setOperationsOpen] = useState(false);
   const [peWorkspaceOpen, setPeWorkspaceOpen] = useState(false);
   const [poDashboardOpen, setPoDashboardOpen] = useState(false);
   const [knowledgeOpen, setKnowledgeOpen] = useState(false);
   const [approvalOpen, setApprovalOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
+// [advice from AI] toolsOpen 상태 제거 (운영센터로 통합됨)
   const { user, token } = useJwtAuthStore();
   
-  // [advice from AI] 알림 상태 관리
-  const [notificationCount, setNotificationCount] = useState(0);
-  const [loading, setLoading] = useState(false);
-  
-  // [advice from AI] 알림 미리보기 상태
-  const [notificationAnchor, setNotificationAnchor] = useState<HTMLElement | null>(null);
-  const [recentNotifications, setRecentNotifications] = useState<any[]>([]);
-  const [loadingNotifications, setLoadingNotifications] = useState(false);
+  // [advice from AI] 메시지 센터 제거로 알림 관련 상태 불필요
 
   // [advice from AI] API URL 생성 함수
   const getApiUrl = () => {
@@ -164,78 +162,9 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
     return 'http://localhost:3001';
   };
 
-  // [advice from AI] 알림 데이터 로드
-  const loadNotificationCount = async () => {
-    if (!user || !token) return;
+  // [advice from AI] 메시지 센터 제거로 알림 관련 함수들 불필요
 
-    try {
-      setLoading(true);
-      const apiUrl = getApiUrl();
-      
-      const response = await fetch(`${apiUrl}/api/notifications/stats`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        // 읽지 않은 메시지 수 계산
-        const unreadCount = (data.unread_messages || 0) + 
-                           (data.my_pending_approvals || 0) + 
-                           (data.my_pending_requests || 0);
-        setNotificationCount(unreadCount);
-      }
-    } catch (error) {
-      console.error('❌ 알림 데이터 로드 실패:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // [advice from AI] 최근 알림 미리보기 로드
-  const loadRecentNotifications = async () => {
-    if (!user || !token) return;
-
-    try {
-      setLoadingNotifications(true);
-      const apiUrl = getApiUrl();
-      
-      const response = await fetch(`${apiUrl}/api/notifications?limit=5`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setRecentNotifications(data.notifications || data.data || []);
-      }
-    } catch (error) {
-      console.error('❌ 최근 알림 로드 실패:', error);
-    } finally {
-      setLoadingNotifications(false);
-    }
-  };
-
-  // [advice from AI] 알림 미리보기 열기/닫기
-  const handleNotificationClick = (event: React.MouseEvent<HTMLElement>) => {
-    if (notificationAnchor) {
-      setNotificationAnchor(null);
-    } else {
-      setNotificationAnchor(event.currentTarget);
-      loadRecentNotifications();
-    }
-  };
-
-  // [advice from AI] 컴포넌트 마운트 시 알림 로드
-  useEffect(() => {
-    loadNotificationCount();
-    
-    // 30초마다 알림 새로고침
-    const interval = setInterval(loadNotificationCount, 30000);
-    return () => clearInterval(interval);
-  }, [user, token]);
+  // [advice from AI] 메시지 센터 제거로 알림 로드 useEffect 불필요
 
   // [advice from AI] 역할별 대시보드 자동 리다이렉트 - 비활성화 (홈 화면을 통합 모니터링으로 설정)
   // useEffect(() => {
@@ -262,6 +191,26 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
       roles: ['admin', 'executive'], 
       level: 0, 
       description: '최고 관리자 전용 기능입니다.' 
+    },
+    '/executive/workflow': { 
+      roles: ['admin', 'executive'], 
+      level: 0, 
+      description: '프로젝트 워크플로우는 최고 관리자 전용 기능입니다.' 
+    },
+    '/executive/strategic-analysis': { 
+      roles: ['admin', 'executive'], 
+      level: 0, 
+      description: '전략 분석은 최고 관리자 전용 기능입니다.' 
+    },
+    '/executive/performance-reports': { 
+      roles: ['admin', 'executive'], 
+      level: 0, 
+      description: '성과 리포트는 최고 관리자 전용 기능입니다.' 
+    },
+    '/po/workflow': { 
+      roles: ['admin', 'executive', 'po'], 
+      level: 1, 
+      description: '프로젝트 워크플로우는 PO가 확인할 수 있습니다.' 
     },
     '/po-dashboard': { 
       roles: ['admin', 'executive', 'po'], 
@@ -298,25 +247,92 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
       level: 4, 
       description: '멀티테넌트 관리는 운영팀 전용 기능입니다.' 
     },
-    '/operations/monitoring': { 
-      roles: ['admin', 'executive', 'operations'], 
-      level: 4, 
-      description: '시스템 모니터링은 운영팀 전용 기능입니다.' 
-    },
     '/operations/auto-deploy': { 
       roles: ['admin', 'executive', 'operations'], 
       level: 4, 
       description: '자동배포 관리는 운영팀 전용 기능입니다.' 
     },
-    '/operations/hardware-calc': { 
+    '/operations/deployment': { 
       roles: ['admin', 'executive', 'operations'], 
       level: 4, 
-      description: '하드웨어 계산기는 운영팀 전용 기능입니다.' 
+      description: '배포 관리는 운영팀 전용 기능입니다.' 
+    },
+    '/operations/hardware-calc': { 
+      roles: ['admin', 'executive', 'operations', 'po', 'pe'], 
+      level: 3, 
+      description: '하드웨어 계산기는 프로젝트 관련 역할이 사용할 수 있습니다.' 
     },
     '/operations/service-config': { 
       roles: ['admin', 'executive', 'operations'], 
       level: 4, 
       description: '서비스 설정은 운영팀 전용 기능입니다.' 
+    },
+    // === 운영 현황 및 전체 관리 ===
+    '/operations/workflow': { 
+      roles: ['admin', 'executive', 'po'], 
+      level: 2, 
+      description: '프로젝트 워크플로우는 최고운영자와 PO가 확인할 수 있습니다.' 
+    },
+    
+    // === 6단계 → 7단계: 배포 요청 접수 및 처리 ===
+    '/operations/deployment-requests': { 
+      roles: ['admin', 'executive', 'operations'], 
+      level: 3, 
+      description: '배포 요청 접수는 운영팀 전용 기능입니다.' 
+    },
+    '/operations/deployment-approval': { 
+      roles: ['admin', 'executive', 'operations'], 
+      level: 3, 
+      description: '배포 승인 처리는 운영팀 전용 기능입니다.' 
+    },
+    '/operations/cicd-servers': { 
+      roles: ['admin', 'operations'], 
+      level: 3, 
+      description: 'CI/CD 서버 관리는 관리자 및 운영팀 전용 기능입니다.' 
+    },
+    
+    // === 7단계: 실제 배포 실행 프로세스 ===
+    '/operations/repositories': { 
+      roles: ['admin', 'executive', 'operations'], 
+      level: 3, 
+      description: '레포지토리 준비는 운영팀 전용 기능입니다.' 
+    },
+    '/operations/build-pipeline': { 
+      roles: ['admin', 'executive', 'operations', 'pe'], 
+      level: 3, 
+      description: '빌드 파이프라인은 운영팀과 PE가 사용할 수 있습니다.' 
+    },
+    '/operations/image-registry': { 
+      roles: ['admin', 'executive', 'operations'], 
+      level: 3, 
+      description: '이미지 레지스트리는 운영팀 전용 기능입니다.' 
+    },
+    '/operations/deployment-execution': { 
+      roles: ['admin', 'executive', 'operations'], 
+      level: 3, 
+      description: '배포 실행은 운영팀 전용 기능입니다.' 
+    },
+    
+    // === 배포 후 운영 및 모니터링 ===
+    '/operations/environments': { 
+      roles: ['admin', 'executive', 'operations'], 
+      level: 3, 
+      description: '환경별 운영은 운영팀 전용 기능입니다.' 
+    },
+    '/operations/monitoring': { 
+      roles: ['admin', 'executive', 'operations', 'pe'], 
+      level: 2, 
+      description: '시스템 모니터링은 운영팀과 PE가 확인할 수 있습니다.' 
+    },
+    '/operations/incident-response': { 
+      roles: ['admin', 'executive', 'operations'], 
+      level: 3, 
+      description: '장애 대응은 운영팀 전용 기능입니다.' 
+    },
+    '/operations/build-issues': { 
+      roles: ['admin', 'executive', 'operations', 'pe'], 
+      level: 3, 
+      description: '빌드 이슈 관리는 운영팀과 PE가 사용할 수 있습니다.' 
     },
     '/catalog/knowledge/design': { 
       roles: ['admin', 'executive', 'designer', 'pe'], 
@@ -415,7 +431,7 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
             mt: 0.5
           }}
         >
-          지식자원 플랫폼
+          Project Management Solution
         </Typography>
       </Box>
 
@@ -463,7 +479,9 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
                       }}
                       sx={{ pl: 1 }}
                     />
-                    {knowledgeOpen ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                    <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                      {knowledgeOpen ? '−' : '+'}
+                    </Box>
                   </ListItemButton>
                 </ListItem>
                 <Collapse in={knowledgeOpen} timeout="auto" unmountOnExit>
@@ -577,7 +595,7 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
 
       <Divider sx={{ my: 1 }} />
 
-      {/* [advice from AI] 역할별 대시보드 메뉴 */}
+      {/* [advice from AI] 업무 영역 메뉴 */}
       <Box sx={{ px: 2, py: 1 }}>
         <Typography 
           variant="overline" 
@@ -588,16 +606,69 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
             letterSpacing: '0.5px'
           }}
         >
-          역할별 대시보드
+          업무 영역
         </Typography>
       </Box>
       
       <List>
-        {roleDashboards.map((item) => {
+        {workAreas.map((item) => {
           // [advice from AI] 메뉴 접근 권한 확인
           const hasAccess = canAccess(item.path);
           const accessInfo = getMenuAccessInfo(item.path);
           
+          // [advice from AI] Executive 대시보드는 단일 메뉴로 변경
+          if (item.path === '/executive') {
+            return (
+              <ListItem key={item.text} disablePadding>
+                <Tooltip 
+                  title={hasAccess ? '' : accessInfo.description}
+                  placement="right"
+                  arrow
+                >
+                  <span>
+                    <ListItemButton
+                      component={Link}
+                      to={item.path}
+                      onClick={() => {
+                        if (!hasAccess) return;
+                        // [advice from AI] 다른 메뉴들 모두 닫기
+                        setPoDashboardOpen(false);
+                        setPeWorkspaceOpen(false);
+                        setOperationsOpen(false);
+                        setExecutiveOpen(false);
+                      }}
+                      sx={{
+                        minHeight: 48,
+                        justifyContent: 'flex-start',
+                        px: 2.5,
+                        opacity: hasAccess ? 1 : 0.5,
+                        cursor: hasAccess ? 'pointer' : 'not-allowed',
+                        backgroundColor: location.pathname === item.path ? 'action.selected' : 'transparent',
+                        '&:hover': {
+                          backgroundColor: hasAccess ? 'action.hover' : 'transparent'
+                        }
+                      }}
+                      disabled={!hasAccess}
+                    >
+                      <ListItemIcon sx={{ minWidth: 24, mr: 1 }}>
+                        <span style={{ fontSize: '12px' }}>{item.icon}</span>
+                      </ListItemIcon>
+                      <ListItemText 
+                        primary={item.text} 
+                        sx={{ 
+                          '& .MuiListItemText-primary': {
+                            fontSize: '0.875rem',
+                            fontWeight: 500
+                          }
+                        }}
+                      />
+                    </ListItemButton>
+                  </span>
+                </Tooltip>
+              </ListItem>
+            );
+          }
+
           // [advice from AI] PO 대시보드는 하위 메뉴가 있음
           if (item.path === '/po-dashboard') {
             return (
@@ -646,8 +717,10 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
                               fontWeight: location.pathname === item.path || location.pathname.startsWith('/po/') ? 600 : 400,
                             }
                           }}
-                        />
-                        {poDashboardOpen ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                    />
+                    <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                      {poDashboardOpen ? '−' : '+'}
+                    </Box>
                       </ListItemButton>
                     </span>
                   </Tooltip>
@@ -771,8 +844,10 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
                               fontWeight: location.pathname === item.path || location.pathname.startsWith('/pe-workspace/') ? 600 : 400,
                             }
                           }}
-                        />
-                        {peWorkspaceOpen ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                    />
+                    <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                      {peWorkspaceOpen ? '−' : '+'}
+                    </Box>
                       </ListItemButton>
                     </span>
                   </Tooltip>
@@ -891,7 +966,9 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
                         }
                       }}
                     />
-                    {operationsOpen ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                    <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                      {operationsOpen ? '−' : '+'}
+                    </Box>
                   </ListItemButton>
                     </span>
                   </Tooltip>
@@ -1072,7 +1149,9 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
                     fontWeight: location.pathname.startsWith('/admin/approvals') ? 600 : 400,
                   }}
                 />
-                {approvalOpen ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                  {approvalOpen ? '−' : '+'}
+                </Box>
               </ListItemButton>
             </ListItem>
             <Collapse in={approvalOpen} timeout="auto" unmountOnExit>
@@ -1164,7 +1243,9 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
                 fontWeight: location.pathname === '/admin' || location.pathname.startsWith('/admin/') ? 600 : 400,
               }}
             />
-            {adminOpen ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+            <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+              {adminOpen ? '−' : '+'}
+            </Box>
           </ListItemButton>
         </ListItem>
         <Collapse in={adminOpen} timeout="auto" unmountOnExit>
@@ -1249,36 +1330,7 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
             {title}
           </Typography>
           
-          {/* [advice from AI] 메시지 센터 미리보기 버튼 (알림 배지 포함) */}
-          <Badge 
-            variant={notificationCount > 0 ? "dot" : "standard"}
-            color="error"
-            sx={{ 
-              mr: 2,
-              '& .MuiBadge-dot': {
-                width: 8,
-                height: 8,
-                borderRadius: '50%'
-              }
-            }}
-          >
-            <Button
-              size="small"
-              variant="outlined"
-              onClick={handleNotificationClick}
-              startIcon={<NotificationsIcon />}
-              sx={{ 
-                borderColor: notificationCount > 0 ? 'error.main' : 'divider',
-                color: notificationCount > 0 ? 'error.main' : 'text.primary',
-                '&:hover': {
-                  borderColor: notificationCount > 0 ? 'error.dark' : 'primary.main',
-                  backgroundColor: notificationCount > 0 ? 'error.light' : 'action.hover'
-                }
-              }}
-            >
-              메시지 센터
-            </Button>
-          </Badge>
+          {/* [advice from AI] 메시지 센터 제거됨 */}
           
           {/* [advice from AI] 사용자 정보 표시 */}
           <UserInfo />
@@ -1344,140 +1396,6 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
         {children}
       </Box>
 
-      {/* [advice from AI] 알림 미리보기 팝오버 */}
-      <Popover
-        open={Boolean(notificationAnchor)}
-        anchorEl={notificationAnchor}
-        onClose={() => setNotificationAnchor(null)}
-        anchorOrigin={{
-          vertical: 'bottom',
-          horizontal: 'right',
-        }}
-        transformOrigin={{
-          vertical: 'top',
-          horizontal: 'right',
-        }}
-        PaperProps={{
-          sx: {
-            width: 400,
-            maxHeight: 500,
-            mt: 1
-          }
-        }}
-      >
-        <Box sx={{ p: 2 }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-            <Typography variant="h6" sx={{ fontWeight: 600 }}>
-              최근 알림
-            </Typography>
-            {notificationCount > 0 && (
-              <Chip 
-                label="NEW" 
-                size="small" 
-                color="error"
-                sx={{ 
-                  fontSize: '0.7rem',
-                  height: 20,
-                  fontWeight: 600
-                }}
-              />
-            )}
-          </Box>
-          
-          {loadingNotifications ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
-              <CircularProgress size={24} />
-            </Box>
-          ) : recentNotifications.length > 0 ? (
-            <List sx={{ py: 0 }}>
-              {recentNotifications.slice(0, 5).map((notification, index) => (
-                <ListItem 
-                  key={notification.id || index}
-                  sx={{ 
-                    px: 0,
-                    py: 1,
-                    borderBottom: index < 4 ? '1px solid' : 'none',
-                    borderColor: 'divider'
-                  }}
-                >
-                  <ListItemAvatar>
-                    <Avatar
-                      sx={{
-                        width: 32,
-                        height: 32,
-                        backgroundColor: notification.message_type === 'error' ? 'error.main' :
-                                        notification.message_type === 'warning' ? 'warning.main' :
-                                        notification.message_type === 'success' ? 'success.main' : 'info.main',
-                      }}
-                    >
-                      <NotificationsIcon sx={{ fontSize: 16 }} />
-                    </Avatar>
-                  </ListItemAvatar>
-                  <ListItemText
-                    primary={
-                      <Typography variant="body2" sx={{ fontWeight: 500, fontSize: '0.875rem' }}>
-                        {notification.title || notification.subject || '알림'}
-                      </Typography>
-                    }
-                    secondary={
-                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
-                        {notification.message || notification.content || '내용 없음'}
-                      </Typography>
-                    }
-                  />
-                  {!notification.is_read && (
-                    <Chip
-                      label="NEW"
-                      size="small"
-                      color="primary"
-                      sx={{ fontSize: '0.6rem', height: 16, ml: 1 }}
-                    />
-                  )}
-                </ListItem>
-              ))}
-            </List>
-          ) : (
-            <Box sx={{ textAlign: 'center', py: 3 }}>
-              <Typography variant="body2" color="text.secondary">
-                새로운 알림이 없습니다
-              </Typography>
-            </Box>
-          )}
-          
-          <Divider sx={{ my: 2 }} />
-          
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <Button
-              fullWidth
-              variant="outlined"
-              size="small"
-              onClick={() => {
-                setNotificationAnchor(null);
-                navigate('/message-center');
-              }}
-            >
-              전체 보기
-            </Button>
-            <Button
-              fullWidth
-              variant="contained"
-              size="small"
-              onClick={() => {
-                setNotificationAnchor(null);
-                // 메시지 생성 페이지로 이동하거나 다이얼로그 열기
-                navigate('/message-center');
-                // 추후 메시지 생성 다이얼로그를 바로 열 수 있도록 쿼리 파라미터 추가
-                setTimeout(() => {
-                  const createButton = document.querySelector('[data-testid="create-message-button"]') as HTMLElement;
-                  if (createButton) createButton.click();
-                }, 500);
-              }}
-            >
-              메시지 작성
-            </Button>
-          </Box>
-        </Box>
-      </Popover>
     </Box>
   );
 };

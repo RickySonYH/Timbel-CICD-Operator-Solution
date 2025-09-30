@@ -19,9 +19,20 @@ import {
   Paper,
   Alert,
   IconButton,
-  Tooltip
+  Tooltip,
+  List,
+  ListItem,
+  ListItemText
 } from '@mui/material';
 // [advice from AI] 사용자 요청에 따라 아이콘 제거
+import { 
+  Refresh as RefreshIcon,
+  Assignment as AssignmentIcon,
+  BugReport as BugReportIcon,
+  Warning as WarningIcon,
+  Check as CheckIcon,
+  Add as AddIcon
+} from '@mui/icons-material';
 import BackstageCard from '../../components/layout/BackstageCard';
 
 interface QAMetrics {
@@ -50,6 +61,18 @@ interface TestCase {
   created_at: string;
 }
 
+interface ProjectStats {
+  stage1_count: number;
+  stage2_count: number;
+  stage3_count: number;
+  stage4_count: number;
+  stage5_count: number;
+  stage6_count: number;
+  stage7_count: number;
+  total_projects: number;
+  completed_projects: number;
+}
+
 const QADashboard: React.FC = () => {
   const { isAuthenticated, token, user } = useJwtAuthStore();
   const [metrics, setMetrics] = useState<QAMetrics>({
@@ -61,6 +84,7 @@ const QADashboard: React.FC = () => {
   });
   const [recentBugs, setRecentBugs] = useState<BugReport[]>([]);
   const [recentTestCases, setRecentTestCases] = useState<TestCase[]>([]);
+  const [projectStats, setProjectStats] = useState<ProjectStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -90,6 +114,15 @@ const QADashboard: React.FC = () => {
       });
       const bugReportsData = await bugReportsResponse.json();
 
+      // 프로젝트 통계 조회
+      const statsResponse = await fetch('http://localhost:3001/api/project-workflow/overview', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      const statsData = await statsResponse.json();
+
       if (testCasesData.success && bugReportsData.success) {
         const testCases = testCasesData.data.test_cases || [];
         const bugReports = bugReportsData.data.bug_reports || [];
@@ -113,6 +146,29 @@ const QADashboard: React.FC = () => {
 
         setRecentBugs(bugReports.slice(0, 5));
         setRecentTestCases(testCases.slice(0, 5));
+
+        // [advice from AI] 프로젝트 통계 설정 - 실제 API 응답 구조에 맞게 매핑
+        if (statsData.success && statsData.data.stage_statistics) {
+          const stats = statsData.data.stage_statistics;
+          setProjectStats({
+            stage1_count: stats.stage1_planning || 0,
+            stage2_count: stats.stage2_admin_approval || 0,
+            stage3_count: stats.stage3_po_assignment || 0,
+            stage4_count: stats.stage4_development || 0,
+            stage5_count: stats.stage5_qa_review || 0,
+            stage6_count: stats.stage6_deployment_decision || 0,
+            stage7_count: stats.stage7_operations_deployment || 0,
+            total_projects: stats.total_projects || 0,
+            completed_projects: stats.completed_projects || 0
+          });
+        } else {
+          console.warn('⚠️ 프로젝트 통계 API 응답이 없습니다');
+          setProjectStats({
+            stage1_count: 0, stage2_count: 0, stage3_count: 0, stage4_count: 0,
+            stage5_count: 0, stage6_count: 0, stage7_count: 0,
+            total_projects: 0, completed_projects: 0
+          });
+        }
       } else {
         setError('데이터를 불러오는데 실패했습니다.');
       }
@@ -269,6 +325,50 @@ const QADashboard: React.FC = () => {
               <Typography variant="body2" color="text.secondary">
                 완료율
               </Typography>
+            </CardContent>
+          </BackstageCard>
+        </Grid>
+      </Grid>
+
+      {/* 프로젝트 단계별 현황 */}
+      <Grid container spacing={3} sx={{ mb: 3 }}>
+        <Grid item xs={12}>
+          <BackstageCard>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                프로젝트 단계별 현황
+              </Typography>
+              {projectStats ? (
+                <List dense>
+                  {[
+                    { label: '1단계: 프로젝트 생성', count: projectStats.stage1_count },
+                    { label: '2단계: 최고운영자 승인', count: projectStats.stage2_count },
+                    { label: '3단계: PO 검토/PE 할당', count: projectStats.stage3_count },
+                    { label: '4단계: PE 개발 진행', count: projectStats.stage4_count },
+                    { label: '5단계: QA 승인 대기', count: projectStats.stage5_count },
+                    { label: '6단계: PO 배포 결정', count: projectStats.stage6_count },
+                    { label: '7단계: 운영팀 배포', count: projectStats.stage7_count },
+                  ].map((stage, index) => (
+                    <ListItem key={index} disablePadding>
+                      <ListItemText
+                        primary={stage.label}
+                        secondary={`${stage.count} 건`}
+                        primaryTypographyProps={{ variant: 'body2' }}
+                        secondaryTypographyProps={{ variant: 'caption' }}
+                      />
+                      <LinearProgress
+                        variant="determinate"
+                        value={(stage.count / (projectStats.total_projects || 1)) * 100}
+                        sx={{ width: '40%', ml: 1 }}
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              ) : (
+                <Alert severity="warning">
+                  프로젝트 통계를 불러올 수 없습니다.
+                </Alert>
+              )}
             </CardContent>
           </BackstageCard>
         </Grid>

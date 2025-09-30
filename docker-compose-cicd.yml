@@ -1,0 +1,208 @@
+# [advice from AI] 자체 CI/CD 서버 통합 구축
+# Jenkins + Argo CD + Nexus + GitOps 완전 자동화
+
+version: '3.8'
+
+networks:
+  cicd-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  jenkins_home:
+    driver: local
+  nexus_data:
+    driver: local
+  argocd_data:
+    driver: local
+  gitea_data:
+    driver: local
+
+services:
+  # ===========================================
+  # Jenkins CI/CD Server
+  # ===========================================
+  jenkins:
+    image: jenkins/jenkins:2.426.1-lts
+    container_name: timbel-jenkins
+    restart: unless-stopped
+    user: root
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./jenkins/plugins.txt:/usr/share/jenkins/ref/plugins.txt
+      - ./jenkins/casc.yaml:/var/jenkins_home/casc_configs/jenkins.yaml
+    environment:
+      - JENKINS_OPTS=--httpPort=8080
+      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false -Xmx2g
+      - CASC_JENKINS_CONFIG=/var/jenkins_home/casc_configs/jenkins.yaml
+    networks:
+      cicd-network:
+        ipv4_address: 172.20.0.10
+    depends_on:
+      - nexus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ===========================================
+  # Nexus Repository Manager
+  # ===========================================
+  nexus:
+    image: sonatype/nexus3:3.42.0
+    container_name: timbel-nexus
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+      - "8082:8082"  # Docker Registry
+    volumes:
+      - nexus_data:/nexus-data
+    environment:
+      - NEXUS_SECURITY_RANDOMPASSWORD=false
+      - INSTALL4J_ADD_VM_PARAMS=-Xms1g -Xmx2g -XX:MaxDirectMemorySize=2g
+    networks:
+      cicd-network:
+        ipv4_address: 172.20.0.20
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/service/rest/v1/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ===========================================
+  # Argo CD GitOps
+  # ===========================================
+  argocd-server:
+    image: quay.io/argoproj/argocd:v2.8.4
+    container_name: timbel-argocd-server
+    restart: unless-stopped
+    ports:
+      - "8083:8080"
+      - "8084:8443"
+    command: [argocd-server, --insecure]
+    environment:
+      - ARGOCD_SERVER_INSECURE=true
+    volumes:
+      - argocd_data:/home/argocd
+    networks:
+      cicd-network:
+        ipv4_address: 172.20.0.30
+    depends_on:
+      - argocd-redis
+      - argocd-repo-server
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  argocd-repo-server:
+    image: quay.io/argoproj/argocd:v2.8.4
+    container_name: timbel-argocd-repo-server
+    restart: unless-stopped
+    command: [argocd-repo-server]
+    volumes:
+      - argocd_data:/home/argocd
+    networks:
+      cicd-network:
+        ipv4_address: 172.20.0.31
+
+  argocd-application-controller:
+    image: quay.io/argoproj/argocd:v2.8.4
+    container_name: timbel-argocd-controller
+    restart: unless-stopped
+    command: [argocd-application-controller]
+    volumes:
+      - argocd_data:/home/argocd
+    networks:
+      cicd-network:
+        ipv4_address: 172.20.0.32
+
+  argocd-redis:
+    image: redis:7.2-alpine
+    container_name: timbel-argocd-redis
+    restart: unless-stopped
+    networks:
+      cicd-network:
+        ipv4_address: 172.20.0.33
+
+  # ===========================================
+  # Gitea (Self-hosted Git Server)
+  # ===========================================
+  gitea:
+    image: gitea/gitea:1.20.5
+    container_name: timbel-gitea
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+      - "2222:22"
+    volumes:
+      - gitea_data:/data
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      - GITEA__database__DB_TYPE=postgres
+      - GITEA__database__HOST=postgres:5432
+      - GITEA__database__NAME=gitea
+      - GITEA__database__USER=gitea
+      - GITEA__database__PASSWD=gitea_password
+    networks:
+      cicd-network:
+        ipv4_address: 172.20.0.40
+    depends_on:
+      - gitea-db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  gitea-db:
+    image: postgres:15-alpine
+    container_name: timbel-gitea-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=gitea
+      - POSTGRES_PASSWORD=gitea_password
+      - POSTGRES_DB=gitea
+    volumes:
+      - ./data/gitea-postgres:/var/lib/postgresql/data
+    networks:
+      cicd-network:
+        ipv4_address: 172.20.0.41
+
+  # ===========================================
+  # Nginx Reverse Proxy
+  # ===========================================
+  cicd-nginx:
+    image: nginx:1.25-alpine
+    container_name: timbel-cicd-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/cicd.conf:/etc/nginx/conf.d/default.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+    networks:
+      cicd-network:
+        ipv4_address: 172.20.0.50
+    depends_on:
+      - jenkins
+      - nexus
+      - argocd-server
+      - gitea
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

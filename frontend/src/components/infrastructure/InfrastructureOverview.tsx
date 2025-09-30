@@ -25,15 +25,22 @@ import { useJwtAuthStore } from '../../store/jwtAuthStore';
 
 interface Infrastructure {
   id: string;
+  service_name: string;
   service_type: string;
   environment: string;
   service_url: string;
   admin_username: string;
+  admin_password_encrypted?: string;
+  service_accounts?: any;
+  description?: string;
+  tags?: any;
   health_check_url?: string;
   metadata?: any;
-  status: string;
+  status?: string;
   health_status?: string;
   health_message?: string;
+  response_time_ms?: number;
+  last_health_check?: string;
   created_at: string;
   updated_at: string;
 }
@@ -150,6 +157,7 @@ const InfrastructureOverview: React.FC = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
+      case 'operational': return 'success';
       case 'active': return 'success';
       case 'inactive': return 'default';
       case 'maintenance': return 'warning';
@@ -160,8 +168,10 @@ const InfrastructureOverview: React.FC = () => {
 
   const getHealthStatusColor = (healthStatus?: string) => {
     switch (healthStatus) {
+      case 'active': return 'success';
       case 'healthy': return 'success';
-      case 'warning': return 'warning';
+      case 'inactive': return 'warning';
+      case 'timeout': return 'warning';
       case 'error': return 'error';
       default: return 'default';
     }
@@ -241,7 +251,7 @@ const InfrastructureOverview: React.FC = () => {
             <Grid item xs={12} sm={3}>
               <Paper sx={{ p: 2, textAlign: 'center' }}>
                 <Typography variant="h4" color="success.main">
-                  {infrastructures.filter(i => i.health_status === 'healthy').length}
+                  {infrastructures.filter(i => i.health_status === 'active' || i.health_status === 'healthy').length}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   정상 상태
@@ -251,7 +261,7 @@ const InfrastructureOverview: React.FC = () => {
             <Grid item xs={12} sm={3}>
               <Paper sx={{ p: 2, textAlign: 'center' }}>
                 <Typography variant="h4" color="error.main">
-                  {infrastructures.filter(i => i.health_status === 'error').length}
+                  {infrastructures.filter(i => i.health_status === 'error' || i.health_status === 'inactive' || i.health_status === 'timeout').length}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   오류 상태
@@ -278,7 +288,7 @@ const InfrastructureOverview: React.FC = () => {
                   <TableRow key={infrastructure.id}>
                     <TableCell>
                       <Typography variant="body2" fontWeight="medium">
-                        {getServiceTypeLabel(infrastructure.service_type)}
+                        {infrastructure.service_name || getServiceTypeLabel(infrastructure.service_type)}
                       </Typography>
                     </TableCell>
                     <TableCell>

@@ -12,7 +12,7 @@ const router = express.Router();
 const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',
   port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'timbel_db',
+  database: process.env.DB_NAME || 'timbel_knowledge',
   user: process.env.DB_USER || 'timbel_user',
   password: process.env.DB_PASSWORD || 'timbel_password',
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
@@ -1281,7 +1281,7 @@ router.get('/system-registration-requests', async (req, res) => {
   try {
     console.log('🔍 시스템 등록 승인 요청 목록 조회 시작');
     
-    // PO가 승인한 시스템 등록 요청들 조회
+    // [advice from AI] 완전한 시스템 등록 요청 조회 (비즈니스 정보 포함)
     const requestsResult = await client.query(`
       SELECT 
         sr.id,
@@ -1295,11 +1295,10 @@ router.get('/system-registration-requests', async (req, res) => {
         p.name as project_name,
         p.target_system_name,
         p.project_overview,
-        pcr.quality_score,
         pcr.repository_url,
         po.full_name as po_name,
-        qr.quality_score as qc_quality_score,
-        qr.approval_status as qc_approval_status,
+        COALESCE(qr.quality_score, 0) as qc_quality_score,
+        COALESCE(qr.approval_status, 'pending') as qc_approval_status,
         qr.approved_at as qc_approved_at
       FROM system_registrations sr
       JOIN projects p ON sr.project_id = p.id

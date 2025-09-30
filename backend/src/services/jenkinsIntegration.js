@@ -6,11 +6,18 @@ const { v4: uuidv4 } = require('uuid');
 
 class JenkinsIntegration {
   constructor() {
-    // [advice from AI] Jenkins 서버 설정
-    this.jenkinsURL = process.env.JENKINS_URL || 'http://localhost:8080';
+    // [advice from AI] Jenkins 서버 설정 - 실제 jenkins.langsa.ai 연동
+    this.jenkinsURL = process.env.JENKINS_URL || 'https://jenkins.langsa.ai';
     this.jenkinsUser = process.env.JENKINS_USER || 'admin';
-    this.jenkinsToken = process.env.JENKINS_TOKEN || '';
+    this.jenkinsToken = process.env.JENKINS_TOKEN || 'timbelJenkins0901!';
     this.jenkinsTimeout = parseInt(process.env.JENKINS_TIMEOUT || '30000');
+    
+    // [advice from AI] Jenkins API 기본 헤더 설정
+    this.defaultHeaders = {
+      'Content-Type': 'application/json',
+      'Authorization': `Basic ${Buffer.from(`${this.jenkinsUser}:${this.jenkinsToken}`).toString('base64')}`,
+      'Jenkins-Crumb': null // 동적으로 설정됨
+    };
     
     // [advice from AI] 지원 이미지 레지스트리
     this.supportedRegistries = [
@@ -88,6 +95,85 @@ class JenkinsIntegration {
         githubTemplate: 'https://github.com/ECP-AI/common-infrastructure-template'
       }
     ];
+  }
+
+  // [advice from AI] Jenkins CSRF 보호를 위한 Crumb 토큰 획득
+  async getCrumbToken() {
+    try {
+      const response = await axios.get(`${this.jenkinsURL}/crumbIssuer/api/json`, {
+        headers: {
+          'Authorization': this.defaultHeaders.Authorization
+        },
+        timeout: this.jenkinsTimeout,
+        httpsAgent: new (require('https')).Agent({
+          rejectUnauthorized: false // 자체 서명 인증서 허용
+        })
+      });
+      
+      if (response.data && response.data.crumb) {
+        this.defaultHeaders['Jenkins-Crumb'] = response.data.crumb;
+        this.defaultHeaders[response.data.crumbRequestField] = response.data.crumb;
+        console.log('✅ Jenkins Crumb 토큰 획득 성공');
+        return response.data.crumb;
+      }
+    } catch (error) {
+      console.warn('⚠️ Jenkins Crumb 토큰 획득 실패:', error.message);
+      // Crumb 없이도 진행 가능한 경우가 있음
+      return null;
+    }
+  }
+
+  // [advice from AI] Jenkins API 호출 헬퍼 메서드
+  async makeJenkinsRequest(method, endpoint, data = null) {
+    try {
+      // Crumb 토큰이 없으면 먼저 획득
+      if (!this.defaultHeaders['Jenkins-Crumb']) {
+        await this.getCrumbToken();
+      }
+
+      const config = {
+        method,
+        url: `${this.jenkinsURL}${endpoint}`,
+        headers: { ...this.defaultHeaders },
+        timeout: this.jenkinsTimeout,
+        httpsAgent: new (require('https')).Agent({
+          rejectUnauthorized: false
+        })
+      };
+
+      if (data) {
+        config.data = data;
+      }
+
+      const response = await axios(config);
+      return response;
+    } catch (error) {
+      console.error(`❌ Jenkins API 호출 실패 [${method} ${endpoint}]:`, error.message);
+      throw error;
+    }
+  }
+
+  // [advice from AI] Jenkins 서버 상태 확인
+  async checkJenkinsHealth() {
+    try {
+      const response = await this.makeJenkinsRequest('GET', '/api/json');
+      return {
+        status: 'healthy',
+        version: response.data.version || 'unknown',
+        mode: response.data.mode || 'NORMAL',
+        numExecutors: response.data.numExecutors || 0,
+        jobs: response.data.jobs?.length || 0
+      };
+    } catch (error) {
+      return {
+        status: 'error',
+        error: error.message,
+        version: null,
+        mode: null,
+        numExecutors: 0,
+        jobs: 0
+      };
+    }
   }
 
   // [advice from AI] Jenkins에서 이미지 목록 가져오기
@@ -582,6 +668,181 @@ pipeline {
     } catch (error) {
       console.error('GitHub Repository 검증 오류:', error);
       throw new Error(`GitHub Repository 검증 실패: ${error.message}`);
+    }
+  }
+
+  // [advice from AI] 실제 Jenkins Job 생성
+  async createJenkinsJob(jobName, jobConfig) {
+    try {
+      console.log(`🔨 Jenkins Job 생성 시작: ${jobName}`);
+      
+      const pipelineXml = this.generateJobConfigXML(jobConfig);
+      
+      const response = await this.makeJenkinsRequest(
+        'POST',
+        `/createItem?name=${encodeURIComponent(jobName)}`,
+        pipelineXml
+      );
+
+      console.log(`✅ Jenkins Job 생성 성공: ${jobName}`);
+      return {
+        success: true,
+        jobName,
+        jobUrl: `${this.jenkinsURL}/job/${encodeURIComponent(jobName)}/`,
+        message: 'Jenkins Job이 성공적으로 생성되었습니다'
+      };
+    } catch (error) {
+      console.error(`❌ Jenkins Job 생성 실패: ${jobName}`, error.message);
+      throw new Error(`Jenkins Job 생성 실패: ${error.message}`);
+    }
+  }
+
+  // [advice from AI] Jenkins Job Config XML 생성
+  generateJobConfigXML(jobConfig) {
+    const {
+      githubUrl,
+      branch = 'main',
+      dockerRegistry = 'nexus.langsa.ai',
+      imageName,
+      buildScript = 'docker build -t $IMAGE_NAME:$BUILD_NUMBER .'
+    } = jobConfig;
+
+    return `<?xml version='1.1' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job@2.40">
+  <actions/>
+  <description>ECP-AI 서비스 자동 빌드 파이프라인</description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty>
+      <triggers>
+        <com.cloudbees.jenkins.GitHubPushTrigger plugin="github@1.34.1">
+          <spec></spec>
+        </com.cloudbees.jenkins.GitHubPushTrigger>
+      </triggers>
+    </org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty>
+  </properties>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@2.92">
+    <script>${this.generatePipelineScript(jobConfig)}</script>
+    <sandbox>true</sandbox>
+  </definition>
+  <triggers/>
+  <disabled>false</disabled>
+</flow-definition>`;
+  }
+
+  // [advice from AI] 실제 Jenkins Job 빌드 트리거
+  async triggerJenkinsBuild(jobName, parameters = {}) {
+    try {
+      console.log(`🚀 Jenkins 빌드 트리거: ${jobName}`);
+      
+      const buildParams = Object.keys(parameters).length > 0 
+        ? `?${Object.entries(parameters).map(([key, value]) => `${key}=${encodeURIComponent(value)}`).join('&')}`
+        : '';
+
+      const response = await this.makeJenkinsRequest(
+        'POST',
+        `/job/${encodeURIComponent(jobName)}/build${buildParams}`
+      );
+
+      // 빌드 번호 추출 (Location 헤더에서)
+      const buildNumber = this.extractBuildNumber(response.headers.location);
+
+      console.log(`✅ Jenkins 빌드 트리거 성공: ${jobName} #${buildNumber}`);
+      return {
+        success: true,
+        jobName,
+        buildNumber,
+        buildUrl: `${this.jenkinsURL}/job/${encodeURIComponent(jobName)}/${buildNumber}/`,
+        message: '빌드가 성공적으로 시작되었습니다'
+      };
+    } catch (error) {
+      console.error(`❌ Jenkins 빌드 트리거 실패: ${jobName}`, error.message);
+      throw new Error(`Jenkins 빌드 트리거 실패: ${error.message}`);
+    }
+  }
+
+  // [advice from AI] 빌드 번호 추출 헬퍼
+  extractBuildNumber(locationHeader) {
+    if (!locationHeader) return 'unknown';
+    const match = locationHeader.match(/\/(\d+)\/$/);
+    return match ? match[1] : 'unknown';
+  }
+
+  // [advice from AI] Jenkins Job 상태 조회
+  async getJobStatus(jobName) {
+    try {
+      const response = await this.makeJenkinsRequest('GET', `/job/${encodeURIComponent(jobName)}/api/json`);
+      const jobData = response.data;
+
+      return {
+        success: true,
+        jobName,
+        status: {
+          displayName: jobData.displayName,
+          description: jobData.description,
+          buildable: jobData.buildable,
+          color: jobData.color,
+          lastBuild: jobData.lastBuild ? {
+            number: jobData.lastBuild.number,
+            url: jobData.lastBuild.url
+          } : null,
+          lastSuccessfulBuild: jobData.lastSuccessfulBuild ? {
+            number: jobData.lastSuccessfulBuild.number,
+            url: jobData.lastSuccessfulBuild.url
+          } : null,
+          lastFailedBuild: jobData.lastFailedBuild ? {
+            number: jobData.lastFailedBuild.number,
+            url: jobData.lastFailedBuild.url
+          } : null,
+          nextBuildNumber: jobData.nextBuildNumber
+        }
+      };
+    } catch (error) {
+      console.error(`❌ Jenkins Job 상태 조회 실패: ${jobName}`, error.message);
+      throw new Error(`Jenkins Job 상태 조회 실패: ${error.message}`);
+    }
+  }
+
+  // [advice from AI] Jenkins Job 삭제
+  async deleteJenkinsJob(jobName) {
+    try {
+      console.log(`🗑️ Jenkins Job 삭제: ${jobName}`);
+      
+      await this.makeJenkinsRequest('POST', `/job/${encodeURIComponent(jobName)}/doDelete`);
+
+      console.log(`✅ Jenkins Job 삭제 성공: ${jobName}`);
+      return {
+        success: true,
+        jobName,
+        message: 'Jenkins Job이 성공적으로 삭제되었습니다'
+      };
+    } catch (error) {
+      console.error(`❌ Jenkins Job 삭제 실패: ${jobName}`, error.message);
+      throw new Error(`Jenkins Job 삭제 실패: ${error.message}`);
+    }
+  }
+
+  // [advice from AI] Jenkins에서 모든 Job 목록 조회
+  async listJenkinsJobs() {
+    try {
+      const response = await this.makeJenkinsRequest('GET', '/api/json?tree=jobs[name,color,url,lastBuild[number,result,timestamp]]');
+      
+      return {
+        success: true,
+        jobs: response.data.jobs.map(job => ({
+          name: job.name,
+          status: job.color,
+          url: job.url,
+          lastBuild: job.lastBuild ? {
+            number: job.lastBuild.number,
+            result: job.lastBuild.result,
+            timestamp: job.lastBuild.timestamp
+          } : null
+        }))
+      };
+    } catch (error) {
+      console.error('❌ Jenkins Job 목록 조회 실패:', error.message);
+      throw new Error(`Jenkins Job 목록 조회 실패: ${error.message}`);
     }
   }
 }

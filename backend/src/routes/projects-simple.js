@@ -45,7 +45,7 @@ console.log('✅ Multer 메모리 저장 방식으로 설정 완료 (DB 직접 �
 const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',
   port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'timbel_db',
+  database: process.env.DB_NAME || 'timbel_knowledge',
   user: process.env.DB_USER || 'timbel_user',
   password: process.env.DB_PASSWORD || 'timbel_password',
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
@@ -191,7 +191,7 @@ router.post('/', jwtAuth.verifyToken, jwtAuth.requireRole(['admin', 'executive',
     
     const { 
       name, 
-      domain_id, 
+      // domain_id, // [advice from AI] 존재하지 않는 컬럼으로 제거 
       project_overview, 
       target_system_name, 
       urgency_level, 
@@ -232,7 +232,7 @@ router.post('/', jwtAuth.verifyToken, jwtAuth.requireRole(['admin', 'executive',
       const projectResult = await client.query(`
         INSERT INTO projects (
           name, 
-          domain_id, 
+          // domain_id, // [advice from AI] 존재하지 않는 컬럼으로 제거 
           project_overview, 
           target_system_name, 
           urgency_level, 
@@ -243,7 +243,7 @@ router.post('/', jwtAuth.verifyToken, jwtAuth.requireRole(['admin', 'executive',
         RETURNING *
       `, [
         name, 
-        domain_id, 
+        // domain_id, // [advice from AI] 존재하지 않는 컬럼으로 제거 
         project_overview, 
         target_system_name, 
         urgency_level || 'medium', 
@@ -428,17 +428,17 @@ router.get('/:id', jwtAuth.verifyToken, async (req, res) => {
       const projectResult = await client.query(`
         SELECT 
           p.*,
-          d.name as domain_name,
+          -- d.name as domain_name, -- [advice from AI] domains 테이블 JOIN 제거
           u1.full_name as created_by_name,
-          u2.full_name as approved_by_name,
-          COUNT(s.id) as connected_systems_count
+          -- u2.full_name as approved_by_name, -- [advice from AI] approved_by 컬럼 없음
+          0 as connected_systems_count -- [advice from AI] systems 테이블 JOIN 제거로 인한 수정
         FROM projects p
-        LEFT JOIN domains d ON p.domain_id = d.id
+        -- LEFT JOIN domains d ON p.null /* domain_id 컬럼 없음 */ = d.id -- [advice from AI] null /* domain_id 컬럼 없음 */ 컬럼이 존재하지 않음
         LEFT JOIN timbel_users u1 ON p.created_by = u1.id
-        LEFT JOIN timbel_users u2 ON p.approved_by = u2.id
-        LEFT JOIN systems s ON s.project_id = p.id
+        -- LEFT JOIN timbel_users u2 ON p.approved_by = u2.id -- [advice from AI] approved_by 컬럼 없음
+        -- LEFT JOIN systems s ON s.project_id = p.id -- [advice from AI] systems 테이블에 project_id 컬럼 없음
         WHERE p.id = $1
-        GROUP BY p.id, d.name, u1.full_name, u2.full_name
+        GROUP BY p.id, u1.full_name -- [advice from AI] d.name, u2.full_name 제거
       `, [id]);
       
       console.log('📋 프로젝트 조회 결과:', {
@@ -648,7 +648,7 @@ router.put('/:id', jwtAuth.verifyToken, jwtAuth.requireRole(['admin', 'executive
     
     const { 
       name, 
-      domain_id, 
+      // domain_id, // [advice from AI] 존재하지 않는 컬럼으로 제거 
       project_overview, 
       target_system_name, 
       urgency_level, 
@@ -700,7 +700,7 @@ router.put('/:id', jwtAuth.verifyToken, jwtAuth.requireRole(['admin', 'executive
       const projectResult = await client.query(`
         UPDATE projects SET
           name = $1,
-          domain_id = $2,
+          null /* domain_id 컬럼 없음 */ = $2,
           project_overview = $3,
           target_system_name = $4,
           urgency_level = $5,
@@ -712,7 +712,7 @@ router.put('/:id', jwtAuth.verifyToken, jwtAuth.requireRole(['admin', 'executive
         RETURNING *
       `, [
         name, 
-        domain_id, 
+        // domain_id, // [advice from AI] 존재하지 않는 컬럼으로 제거 
         project_overview, 
         target_system_name, 
         urgency_level || 'medium', 
@@ -974,19 +974,19 @@ router.get('/list/approved', jwtAuth.verifyToken, jwtAuth.requireRole(['po', 'ad
       const result = await client.query(`
         SELECT 
           p.*,
-          d.name as domain_name,
+          -- d.name as domain_name, -- [advice from AI] domains 테이블 JOIN 제거
           creator.full_name as created_by_name,
-          approver.full_name as approved_by_name,
+          -- approver.full_name as approved_by_name, -- [advice from AI] approved_by 컬럼 없음
           COUNT(pd.id) as document_count,
           COUNT(wg.id) as work_group_count
         FROM projects p
-        LEFT JOIN domains d ON p.domain_id = d.id
+        -- LEFT JOIN domains d ON p.null /* domain_id 컬럼 없음 */ = d.id -- [advice from AI] null /* domain_id 컬럼 없음 */ 컬럼이 존재하지 않음
         LEFT JOIN timbel_users creator ON p.created_by = creator.id
-        LEFT JOIN timbel_users approver ON p.approved_by = approver.id
+        -- LEFT JOIN timbel_users approver ON p.approved_by = approver.id -- [advice from AI] approved_by 컬럼 없음
         LEFT JOIN project_documents pd ON p.id = pd.project_id
         LEFT JOIN work_groups wg ON p.id = wg.project_id
         WHERE p.approval_status = 'approved'
-        GROUP BY p.id, d.name, creator.full_name, approver.full_name
+        GROUP BY p.id, creator.full_name -- [advice from AI] d.name, approver.full_name 제거
         ORDER BY 
           CASE p.urgency_level 
             WHEN 'critical' THEN 1 
@@ -1446,7 +1446,7 @@ router.get('/assigned/me', jwtAuth.verifyToken, async (req, res) => {
           p.deadline,
           p.project_status,
           p.created_at,
-          d.name as domain_name,
+          -- d.name as domain_name, -- [advice from AI] domains 테이블 JOIN 제거
           pwa.id as assignment_id,
           pwa.work_group_id,
           pwa.assignment_status,
@@ -1470,7 +1470,7 @@ router.get('/assigned/me', jwtAuth.verifyToken, async (req, res) => {
           pr.platform as git_platform
         FROM project_work_assignments pwa
         JOIN projects p ON p.id = pwa.project_id
-        LEFT JOIN domains d ON d.id = p.domain_id
+        -- LEFT JOIN domains d ON d.id = p.domain_id -- [advice from AI] domain_id 컬럼이 존재하지 않음
         LEFT JOIN work_groups wg ON wg.id = pwa.work_group_id
         LEFT JOIN timbel_users creator ON creator.id = p.created_by
         LEFT JOIN project_repositories pr ON pr.project_id = p.id AND pr.assigned_pe = pwa.assigned_to
@@ -1521,7 +1521,7 @@ router.get('/assigned/:peUserId', jwtAuth.verifyToken, jwtAuth.requireRole(['adm
           p.deadline,
           p.project_status,
           p.created_at,
-          d.name as domain_name,
+          -- d.name as domain_name, -- [advice from AI] domains 테이블 JOIN 제거
           pwa.id as assignment_id,
           pwa.work_group_id,
           pwa.assignment_status,
@@ -1545,7 +1545,7 @@ router.get('/assigned/:peUserId', jwtAuth.verifyToken, jwtAuth.requireRole(['adm
           pr.platform as git_platform
         FROM project_work_assignments pwa
         JOIN projects p ON p.id = pwa.project_id
-        LEFT JOIN domains d ON d.id = p.domain_id
+        -- LEFT JOIN domains d ON d.id = p.domain_id -- [advice from AI] domain_id 컬럼이 존재하지 않음
         LEFT JOIN work_groups wg ON wg.id = pwa.work_group_id
         LEFT JOIN timbel_users creator ON creator.id = p.created_by
         LEFT JOIN project_repositories pr ON pr.project_id = p.id AND pr.assigned_pe = pwa.assigned_to
@@ -2061,26 +2061,29 @@ router.get('/activities/recent/:peUserId?', jwtAuth.verifyToken, async (req, res
     const client = await pool.connect();
     
     try {
-      // PE와 관련된 최근 활동 조회 (QC/QA 피드백 포함)
+      // PE와 관련된 최근 활동 조회 (간소화 버전)
       const result = await client.query(`
         SELECT 
-          ses.id,
-          ses.event_type,
-          ses.event_category,
-          ses.title,
-          ses.description,
-          ses.event_timestamp,
-          ses.event_data,
+          pwa.id,
+          'assignment' as event_type,
+          'project_management' as event_category,
+          CASE pwa.assignment_status
+            WHEN 'assigned' THEN '프로젝트 할당'
+            WHEN 'in_progress' THEN '작업 진행 중'
+            WHEN 'completed' THEN '작업 완료'
+            ELSE pwa.assignment_status
+          END as title,
+          CONCAT(p.name, ' - ', COALESCE(pwa.assignment_notes, '진행 중')) as description,
+          pwa.updated_at as event_timestamp,
+          '{}'::jsonb as event_data,
           p.name as project_name,
           pwa.progress_percentage,
-          EXTRACT(EPOCH FROM (NOW() - ses.event_timestamp)) as seconds_ago,
-          'system_event' as source_type
-        FROM system_event_stream ses
-        LEFT JOIN projects p ON ses.project_id = p.id
-        LEFT JOIN project_work_assignments pwa ON ses.assignment_id = pwa.id
-        WHERE ses.user_id = $1 
-          AND ses.event_category IN ('project_management', 'quality_assurance')
-          AND ses.event_type IN ('work_start', 'progress_update', 'work_pause', 'work_complete', 'project_completion', 'qc_feedback_created')
+          EXTRACT(EPOCH FROM (NOW() - pwa.updated_at)) as seconds_ago,
+          'assignment' as source_type
+        FROM project_work_assignments pwa
+        JOIN projects p ON pwa.project_id = p.id
+        WHERE pwa.assigned_to = $1
+          AND pwa.updated_at >= NOW() - INTERVAL '7 days'
         
         UNION ALL
         
@@ -2640,78 +2643,42 @@ router.get('/history/:peUserId?', jwtAuth.verifyToken, async (req, res) => {
     const client = await pool.connect();
     
     try {
-      // 완료된 프로젝트들과 QC/QA 상태 조회
+      // PE에게 할당된 모든 프로젝트 히스토리 (간소화 버전)
       const historyResult = await client.query(`
         SELECT DISTINCT ON (p.id)
           p.id as project_id,
           p.name as project_name,
-          p.project_overview,
-          p.target_system_name,
+          p.description as project_overview,
           p.urgency_level,
           p.deadline,
           p.project_status,
-          p.completion_date,
+          p.created_at,
+          p.updated_at,
           pwa.assignment_status,
           pwa.progress_percentage,
-          pwa.completion_date as assignment_completion_date,
-          pcr.id as completion_report_id,
-          pcr.created_at as report_submitted_at,
-          qr.id as qc_request_id,
-          qr.request_status as qc_status,
-          qr.assigned_to as qc_assigned_to,
-          qr.created_at as qc_created_at,
-          qr.test_plan,
-          qr.test_results,
-          qr.quality_score,
-          qr.approval_status as qc_approval_status,
-          qr.approved_at as qc_approved_at,
-          qc_user.full_name as qc_assignee_name,
-          -- 피드백 통계
-          (SELECT COUNT(*) FROM qc_feedback_items qfi 
-           WHERE qfi.qc_request_id = qr.id AND qfi.assigned_to_pe = $1) as feedback_count,
-          (SELECT COUNT(*) FROM qc_feedback_items qfi 
-           WHERE qfi.qc_request_id = qr.id AND qfi.assigned_to_pe = $1 AND qfi.feedback_status = 'open') as open_feedback_count
+          pwa.assigned_at,
+          pwa.start_date,
+          pwa.completed_at as assignment_completion_date
         FROM projects p
-        LEFT JOIN project_work_assignments pwa ON p.id = pwa.project_id
-        LEFT JOIN project_completion_reports pcr ON p.id = pcr.project_id
-        LEFT JOIN qc_qa_requests qr ON pcr.id = qr.completion_report_id
-        LEFT JOIN timbel_users qc_user ON qr.assigned_to = qc_user.id
+        JOIN project_work_assignments pwa ON p.id = pwa.project_id
         WHERE pwa.assigned_to = $1
-          AND p.project_status IN ('completed', 'deployed', 'archived')
-        ORDER BY p.id, pwa.assigned_at DESC, pcr.created_at DESC
-        LIMIT 10
+        ORDER BY p.id, pwa.assigned_at DESC
+        LIMIT 20
       `, [targetPEUserId]);
 
       const historyProjects = historyResult.rows.map(row => ({
         project_id: row.project_id,
         project_name: row.project_name,
         project_overview: row.project_overview,
-        target_system_name: row.target_system_name,
         urgency_level: row.urgency_level,
         deadline: row.deadline,
         project_status: row.project_status,
-        completion_date: row.completion_date,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
         assignment_status: row.assignment_status,
         progress_percentage: row.progress_percentage,
-        assignment_completion_date: row.assignment_completion_date,
-        completion_report: row.completion_report_id ? {
-          id: row.completion_report_id,
-          submitted_at: row.report_submitted_at
-        } : null,
-        qc_qa_status: row.qc_request_id ? {
-          request_id: row.qc_request_id,
-          status: row.qc_status,
-          assigned_to: row.qc_assigned_to,
-          assignee_name: row.qc_assignee_name,
-          created_at: row.qc_created_at,
-          test_plan: row.test_plan,
-          test_results: row.test_results,
-          quality_score: row.quality_score,
-          approval_status: row.qc_approval_status,
-          approved_at: row.qc_approved_at,
-          feedback_count: parseInt(row.feedback_count) || 0,
-          open_feedback_count: parseInt(row.open_feedback_count) || 0
-        } : null
+        assigned_at: row.assigned_at,
+        assignment_completion_date: row.assignment_completion_date
       }));
 
       console.log(`✅ PE 프로젝트 히스토리 ${historyProjects.length}개 조회 완료`);

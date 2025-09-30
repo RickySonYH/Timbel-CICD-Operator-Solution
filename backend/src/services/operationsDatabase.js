@@ -9,7 +9,7 @@ class OperationsDatabase {
     this.pool = new Pool({
       host: process.env.DB_HOST || 'postgres', // Docker 컨테이너 이름
       port: parseInt(process.env.DB_PORT || '5432'), // 내부 포트
-      database: process.env.DB_NAME || 'timbel_db', // Docker Compose 설정과 맞춤
+      database: process.env.DB_NAME || 'timbel_knowledge', // Docker Compose 설정과 맞춤
       user: process.env.DB_USER || 'timbel_user',
       password: process.env.DB_PASSWORD || 'timbel_password',
       max: 20, // 최대 연결 수

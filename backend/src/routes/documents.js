@@ -11,7 +11,7 @@ const router = express.Router();
 const pool = new Pool({
   user: process.env.DB_USER || 'timbel_user',
   host: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_NAME || 'timbel_db',
+  database: process.env.DB_NAME || 'timbel_knowledge',
   password: process.env.DB_PASSWORD || 'timbel_password',
   port: process.env.DB_PORT || 5434,
 });
@@ -115,7 +115,7 @@ router.get('/', authenticateToken, async (req, res) => {
     let query = `
       SELECT d.*, u.full_name as author_name
       FROM documents d
-      LEFT JOIN timbel_users u ON d.author_id = u.id
+      LEFT JOIN timbel_users u ON d.creator_id = u.id
       WHERE 1=1
     `;
     const params = [];
@@ -129,7 +129,7 @@ router.get('/', authenticateToken, async (req, res) => {
 
     if (type) {
       paramCount++;
-      query += ` AND d.format = $${paramCount}`;
+      query += ` AND d.type = $${paramCount}`;
       params.push(type);
     }
 

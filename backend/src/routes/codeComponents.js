@@ -9,7 +9,7 @@ const router = express.Router();
 const pool = new Pool({
   user: process.env.DB_USER || 'timbel_user',
   host: process.env.DB_HOST || 'postgres',
-  database: process.env.DB_NAME || 'timbel_db',
+  database: process.env.DB_NAME || 'timbel_knowledge',
   password: process.env.DB_PASSWORD || 'timbel_password',
   port: process.env.DB_PORT || 5432,
 });
@@ -40,7 +40,7 @@ router.get('/', jwtAuth.verifyToken, async (req, res) => {
     }
     
     if (status) {
-      whereConditions.push(`cc.approval_status = $${paramIndex}`);
+      whereConditions.push(`cc.status = $${paramIndex}`);
       queryParams.push(status);
       paramIndex++;
     }
@@ -55,7 +55,7 @@ router.get('/', jwtAuth.verifyToken, async (req, res) => {
     const countQuery = `
       SELECT COUNT(*) as total
       FROM code_components cc
-      LEFT JOIN timbel_users cb ON cc.created_by = cb.id
+      LEFT JOIN timbel_users cb ON cc.creator_id = cb.id
       ${whereClause}
     `;
     
@@ -65,12 +65,12 @@ router.get('/', jwtAuth.verifyToken, async (req, res) => {
     // 데이터 조회
     const dataQuery = `
       SELECT 
-        cc.id, cc.name, cc.title, cc.description, cc.type, cc.version,
-        cc.language, cc.framework, cc.dependencies, cc.source_code,
-        cc.file_info, cc.documentation, cc.examples, cc.props_schema,
+        cc.id, cc.name, cc.description, cc.type, cc.version,
+        cc.language, cc.framework, cc.dependencies,
+        cc.file_info, cc.usage_example, cc.source_type, cc.source_url, cc.source_info, cc.download_count,
         cc.status, cc.created_at, cc.updated_at,
-        cb.full_name as created_by_name,
-        cb.email as created_by_email
+        cb.full_name as creator_id_name,
+        cb.email as creator_id_email
       FROM code_components cc
       LEFT JOIN timbel_users cb ON cc.creator_id = cb.id
       ${whereClause}
@@ -85,14 +85,12 @@ router.get('/', jwtAuth.verifyToken, async (req, res) => {
     const statsQuery = `
       SELECT 
         COUNT(*) as total,
-        COUNT(CASE WHEN approval_status = 'approved' THEN 1 END) as approved,
-        COUNT(CASE WHEN approval_status = 'pending' THEN 1 END) as pending,
-        COUNT(CASE WHEN approval_status = 'draft' THEN 1 END) as draft,
-        COUNT(CASE WHEN approval_status = 'rejected' THEN 1 END) as rejected,
-        AVG(complexity_score) as avg_complexity,
-        AVG(rating) as avg_rating
+        COUNT(CASE WHEN cc.status = 'active' THEN 1 END) as active,
+        COUNT(CASE WHEN cc.status = 'archived' THEN 1 END) as archived,
+        COUNT(CASE WHEN cc.status = 'deprecated' THEN 1 END) as deprecated,
+        AVG(cc.download_count) as avg_downloads
       FROM code_components cc
-      LEFT JOIN timbel_users cb ON cc.created_by = cb.id
+      LEFT JOIN timbel_users cb ON cc.creator_id = cb.id
       ${whereClause.replace('cc.', 'cc.')}
     `;
     
@@ -133,14 +131,14 @@ router.get('/:id', jwtAuth.verifyToken, async (req, res) => {
     const query = `
       SELECT 
         cc.*,
-        cb.full_name as created_by_name,
-        cb.email as created_by_email,
+        cb.full_name as creator_id_name,
+        cb.email as creator_id_email,
         s.title as system_title,
         s.description as system_description,
         d.name as domain_name,
         d.business_area as domain_business_area
       FROM code_components cc
-      LEFT JOIN timbel_users cb ON cc.created_by = cb.id
+      LEFT JOIN timbel_users cb ON cc.creator_id = cb.id
       LEFT JOIN systems s ON cc.system_id = s.id
       LEFT JOIN domains d ON s.domain_id = d.id
       WHERE cc.id = $1

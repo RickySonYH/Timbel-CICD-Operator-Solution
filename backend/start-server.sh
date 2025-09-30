@@ -17,7 +17,7 @@ sleep 2
 # 환경 변수 설정
 export DB_HOST=localhost
 export DB_PORT=5434
-export DB_NAME=timbel_db
+export DB_NAME=timbel_knowledge
 export DB_USER=timbel_user
 export DB_PASSWORD=timbel_password
 export NODE_ENV=development

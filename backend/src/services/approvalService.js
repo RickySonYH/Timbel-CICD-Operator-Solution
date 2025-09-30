@@ -11,7 +11,7 @@ const ApprovalWorkflowEngine = require('./approvalWorkflowEngine');
 const pool = new Pool({
   user: process.env.DB_USER || 'timbel_user',
   host: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_NAME || 'timbel_db',
+  database: process.env.DB_NAME || 'timbel_knowledge',
   password: process.env.DB_PASSWORD || 'timbel_password',
   port: process.env.DB_PORT || 5434,
 });
@@ -21,7 +21,7 @@ class ApprovalService {
     this.pool = new Pool({
       user: process.env.DB_USER || 'timbel_user',
       host: process.env.DB_HOST || 'postgres',
-      database: process.env.DB_NAME || 'timbel_db',
+      database: process.env.DB_NAME || 'timbel_knowledge',
       password: process.env.DB_PASSWORD || 'timbel_password',
       port: process.env.DB_PORT || 5432,
     });

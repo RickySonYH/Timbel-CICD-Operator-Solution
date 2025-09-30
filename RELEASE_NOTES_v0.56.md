@@ -101,7 +101,7 @@
 # 백엔드 (.env)
 DB_HOST=localhost
 DB_PORT=5434
-DB_NAME=timbel_db
+DB_NAME=timbel_knowledge
 JWT_SECRET=timbel-super-secret-jwt-key-change-in-production
 
 # 프론트엔드 (.env)

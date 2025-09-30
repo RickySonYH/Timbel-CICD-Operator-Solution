@@ -146,7 +146,7 @@ router.get('/approvers', jwtAuth.verifyToken, async (req, res) => {
     const pool = new Pool({
       user: process.env.DB_USER || 'timbel_user',
       host: process.env.DB_HOST || 'postgres',
-      database: process.env.DB_NAME || 'timbel_db',
+      database: process.env.DB_NAME || 'timbel_knowledge',
       password: process.env.DB_PASSWORD || 'timbel_password',
       port: process.env.DB_PORT || 5432,
     });
@@ -202,7 +202,7 @@ router.get('/messages', jwtAuth.verifyToken, async (req, res) => {
     const pool = new Pool({
       user: process.env.DB_USER || 'timbel_user',
       host: process.env.DB_HOST || 'postgres',
-      database: process.env.DB_NAME || 'timbel_db',
+      database: process.env.DB_NAME || 'timbel_knowledge',
       password: process.env.DB_PASSWORD || 'timbel_password',
       port: process.env.DB_PORT || 5432,
     });
@@ -264,7 +264,7 @@ router.get('/dashboard/stats', jwtAuth.verifyToken, async (req, res) => {
     const pool = new Pool({
       user: process.env.DB_USER || 'timbel_user',
       host: process.env.DB_HOST || 'postgres',
-      database: process.env.DB_NAME || 'timbel_db',
+      database: process.env.DB_NAME || 'timbel_knowledge',
       password: process.env.DB_PASSWORD || 'timbel_password',
       port: process.env.DB_PORT || 5432,
     });
@@ -329,7 +329,7 @@ router.get('/requests', jwtAuth.verifyToken, async (req, res) => {
     const pool = new Pool({
       user: process.env.DB_USER || 'timbel_user',
       host: process.env.DB_HOST || 'postgres',
-      database: process.env.DB_NAME || 'timbel_db',
+      database: process.env.DB_NAME || 'timbel_knowledge',
       password: process.env.DB_PASSWORD || 'timbel_password',
       port: process.env.DB_PORT || 5432,
     });
@@ -495,7 +495,7 @@ router.get('/pending-assets', jwtAuth.verifyToken, async (req, res) => {
     const pool = new Pool({
       user: process.env.DB_USER || 'timbel_user',
       host: process.env.DB_HOST || 'postgres',
-      database: process.env.DB_NAME || 'timbel_db',
+      database: process.env.DB_NAME || 'timbel_knowledge',
       password: process.env.DB_PASSWORD || 'timbel_password',
       port: process.env.DB_PORT || 5432,
     });
@@ -610,7 +610,7 @@ router.get('/approved-assets', jwtAuth.verifyToken, async (req, res) => {
     const pool = new Pool({
       user: process.env.DB_USER || 'timbel_user',
       host: process.env.DB_HOST || 'postgres',
-      database: process.env.DB_NAME || 'timbel_db',
+      database: process.env.DB_NAME || 'timbel_knowledge',
       password: process.env.DB_PASSWORD || 'timbel_password',
       port: process.env.DB_PORT || 5432,
     });
@@ -770,7 +770,7 @@ router.get('/my-items', jwtAuth.verifyToken, async (req, res) => {
     const pool = new Pool({
       user: process.env.DB_USER || 'timbel_user',
       host: process.env.DB_HOST || 'postgres',
-      database: process.env.DB_NAME || 'timbel_db',
+      database: process.env.DB_NAME || 'timbel_knowledge',
       password: process.env.DB_PASSWORD || 'timbel_password',
       port: process.env.DB_PORT || 5432,
     });

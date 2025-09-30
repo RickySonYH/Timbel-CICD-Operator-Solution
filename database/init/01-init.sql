@@ -10,7 +10,7 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 SET timezone = 'Asia/Seoul';
 
 -- 기본 데이터베이스 설정
-COMMENT ON DATABASE timbel_db IS 'Timbel 지식자원 플랫폼 데이터베이스';
+COMMENT ON DATABASE timbel_knowledge IS 'Timbel 지식자원 플랫폼 데이터베이스';
 
 -- 기본 스키마 생성
 CREATE SCHEMA IF NOT EXISTS timbel_catalog;

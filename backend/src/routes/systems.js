@@ -13,32 +13,15 @@ router.get('/', jwtAuth.verifyToken, async (req, res) => {
     
     const systemsResult = await client.query(`
       SELECT 
-        s.id, s.name, s.title, s.description, s.version, s.category,
-        s.tech_stack, s.programming_languages, s.frameworks, s.databases,
-        s.lifecycle, s.deployment_status, s.owner_group,
-        s.total_code_components, s.total_documents, s.total_design_assets, s.total_catalog_components,
-        s.code_quality_score, s.documentation_coverage, s.test_coverage, s.security_score,
-        s.source_type, s.source_url, s.source_branch, s.approval_status,
-        s.created_at, s.updated_at, s.last_accessed_at,
-        d.name as domain_name, d.business_area,
-        pc.full_name as primary_contact_name,
-        tl.full_name as technical_lead_name,
-        bo.full_name as business_owner_name,
-        cb.full_name as created_by_name
+        s.id, s.name, s.description, s.version, s.status,
+        s.domain_id, s.owner_id,
+        s.created_at, s.updated_at,
+        d.name as domain_name,
+        u.full_name as owner_name
       FROM systems s
       LEFT JOIN domains d ON s.domain_id = d.id
-      LEFT JOIN timbel_users pc ON s.primary_contact = pc.id
-      LEFT JOIN timbel_users tl ON s.technical_lead = tl.id
-      LEFT JOIN timbel_users bo ON s.business_owner = bo.id
-      LEFT JOIN timbel_users cb ON s.created_by = cb.id
-      ORDER BY 
-        CASE s.approval_status 
-          WHEN 'approved' THEN 1 
-          WHEN 'pending' THEN 2 
-          WHEN 'draft' THEN 3 
-          ELSE 4 
-        END,
-        s.created_at DESC
+      LEFT JOIN timbel_users u ON s.owner_id = u.id
+      ORDER BY s.name
     `);
     
     client.release();
@@ -64,7 +47,7 @@ router.get('/', jwtAuth.verifyToken, async (req, res) => {
 const pool = new Pool({
   user: process.env.DB_USER || 'timbel_user',
   host: process.env.DB_HOST || 'postgres',
-  database: process.env.DB_NAME || 'timbel_db',
+  database: process.env.DB_NAME || 'timbel_knowledge',
   password: process.env.DB_PASSWORD || 'timbel_password',
   port: process.env.DB_PORT || 5432,
 });

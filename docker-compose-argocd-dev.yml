@@ -1,0 +1,61 @@
+# [advice from AI] 개발 환경용 Argo CD 간단 설정
+# Kubernetes 없이 작동하는 standalone 모드
+
+version: '3.8'
+
+networks:
+  cicd-network:
+    external: true
+
+volumes:
+  argocd_data:
+
+services:
+  # Redis for Argo CD
+  argocd-redis:
+    image: redis:7-alpine
+    container_name: timbel-argocd-redis
+    restart: unless-stopped
+    networks:
+      - cicd-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Argo CD Server (개발용 standalone 모드)
+  argocd-server:
+    image: quay.io/argoproj/argocd:v2.8.4
+    container_name: timbel-argocd-server
+    restart: unless-stopped
+    ports:
+      - "8084:8080"
+    command: 
+      - argocd-server
+      - --insecure
+      - --staticassets
+      - /shared/app
+      - --disable-auth=false
+      - --server.disable.auth=false
+    environment:
+      - ARGOCD_SERVER_INSECURE=true
+      - ARGOCD_SERVER_ROOTPATH=/
+      - ARGOCD_REDIS_SERVER=argocd-redis:6379
+      # 개발용 admin 계정 설정 (admin123!)
+      - ARGOCD_ADMIN_PASSWORD=$2a$10$rRyBsGSHK6.uc8fntPwVIuLVHgsAhAX7TcdrqW/RADU0uh7CaChLa
+      - ARGOCD_ADMIN_MTIME="2023-01-01T00:00:00Z"
+    volumes:
+      - argocd_data:/home/argocd
+      - ./argocd/config:/app/config
+    networks:
+      - cicd-network
+    depends_on:
+      argocd-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s

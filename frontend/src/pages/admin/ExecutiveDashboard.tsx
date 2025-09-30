@@ -2147,7 +2147,7 @@ const ExecutiveDashboard: React.FC = () => {
               PE 재할당
             </Typography>
             <IconButton onClick={() => setReassignDialog(false)} size="small">
-              <CloseIcon />
+              ✕
             </IconButton>
           </Box>
         </DialogTitle>

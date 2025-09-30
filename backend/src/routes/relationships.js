@@ -9,7 +9,7 @@ const router = express.Router();
 const pool = new Pool({
   host: process.env.DB_HOST || 'localhost',
   port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'timbel_db',
+  database: process.env.DB_NAME || 'timbel_knowledge',
   user: process.env.DB_USER || 'timbel_user',
   password: process.env.DB_PASSWORD || 'your_password'
 });

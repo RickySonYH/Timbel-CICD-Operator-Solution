@@ -1,0 +1,317 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<!-- [advice from AI] ECP-AI K8s Orchestrator 프로젝트용 Jenkins 파이프라인 -->
+<flow-definition plugin="workflow-job@1316.vd2290d3341a_f">
+  <actions/>
+  <description>ECP-AI Kubernetes Orchestrator - Multi-tenant AI Service Deployment System</description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty>
+      <triggers>
+        <com.cloudbees.jenkins.GitHubPushTrigger plugin="github@1.37.3.1">
+          <spec></spec>
+        </com.cloudbees.jenkins.GitHubPushTrigger>
+      </triggers>
+    </org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty>
+  </properties>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@3659.v582dc37621d8">
+    <script>pipeline {
+    agent any
+    
+    environment {
+        DOCKER_REGISTRY = 'localhost:8082'
+        NEXUS_REGISTRY = 'localhost:8081'
+        PROJECT_NAME = 'ecp-ai-k8s-orchestrator'
+        BUILD_VERSION = "${BUILD_NUMBER}-${GIT_COMMIT.take(7)}"
+        KUBECONFIG = '/var/jenkins_home/.kube/config'
+    }
+    
+    stages {
+        stage('🔍 Checkout') {
+            steps {
+                echo '📥 소스코드 체크아웃 중...'
+                git branch: 'main', 
+                    url: 'https://github.com/RickySonYH/ecp-ai-k8s-orchestrator.git'
+                
+                script {
+                    env.GIT_COMMIT = sh(returnStdout: true, script: 'git rev-parse HEAD').trim()
+                    env.BUILD_VERSION = "${BUILD_NUMBER}-${env.GIT_COMMIT.take(7)}"
+                }
+                
+                echo "✅ 체크아웃 완료: ${env.GIT_COMMIT}"
+            }
+        }
+        
+        stage('🔧 Build Backend') {
+            steps {
+                echo '🐍 Python 백엔드 빌드 중...'
+                dir('backend') {
+                    sh '''
+                        echo "📦 Python 의존성 설치..."
+                        python3 -m pip install --user -r requirements.txt
+                        
+                        echo "🧪 Python 코드 검증..."
+                        python3 -m py_compile *.py || echo "⚠️ Python 컴파일 경고 무시"
+                        
+                        echo "✅ 백엔드 빌드 완료"
+                    '''
+                }
+            }
+        }
+        
+        stage('🎨 Build Frontend') {
+            steps {
+                echo '⚛️ React 프론트엔드 빌드 중...'
+                dir('frontend') {
+                    sh '''
+                        echo "📦 Node.js 의존성 설치..."
+                        npm install --silent
+                        
+                        echo "🏗️ React 앱 빌드..."
+                        npm run build
+                        
+                        echo "✅ 프론트엔드 빌드 완료"
+                    '''
+                }
+            }
+        }
+        
+        stage('🐳 Build Docker Images') {
+            parallel {
+                stage('Backend Image') {
+                    steps {
+                        echo '🐍 백엔드 Docker 이미지 빌드 중...'
+                        dir('backend') {
+                            sh '''
+                                docker build -t ${PROJECT_NAME}-backend:${BUILD_VERSION} .
+                                docker tag ${PROJECT_NAME}-backend:${BUILD_VERSION} ${PROJECT_NAME}-backend:latest
+                                echo "✅ 백엔드 이미지 빌드 완료"
+                            '''
+                        }
+                    }
+                }
+                stage('Frontend Image') {
+                    steps {
+                        echo '⚛️ 프론트엔드 Docker 이미지 빌드 중...'
+                        dir('frontend') {
+                            sh '''
+                                docker build -t ${PROJECT_NAME}-frontend:${BUILD_VERSION} .
+                                docker tag ${PROJECT_NAME}-frontend:${BUILD_VERSION} ${PROJECT_NAME}-frontend:latest
+                                echo "✅ 프론트엔드 이미지 빌드 완료"
+                            '''
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('📤 Push to Registry') {
+            parallel {
+                stage('Push Backend') {
+                    steps {
+                        echo '📤 백엔드 이미지 레지스트리 푸시 중...'
+                        sh '''
+                            docker tag ${PROJECT_NAME}-backend:${BUILD_VERSION} ${DOCKER_REGISTRY}/${PROJECT_NAME}-backend:${BUILD_VERSION}
+                            docker tag ${PROJECT_NAME}-backend:latest ${DOCKER_REGISTRY}/${PROJECT_NAME}-backend:latest
+                            
+                            docker push ${DOCKER_REGISTRY}/${PROJECT_NAME}-backend:${BUILD_VERSION}
+                            docker push ${DOCKER_REGISTRY}/${PROJECT_NAME}-backend:latest
+                            
+                            echo "✅ 백엔드 이미지 푸시 완료"
+                        '''
+                    }
+                }
+                stage('Push Frontend') {
+                    steps {
+                        echo '📤 프론트엔드 이미지 레지스트리 푸시 중...'
+                        sh '''
+                            docker tag ${PROJECT_NAME}-frontend:${BUILD_VERSION} ${DOCKER_REGISTRY}/${PROJECT_NAME}-frontend:${BUILD_VERSION}
+                            docker tag ${PROJECT_NAME}-frontend:latest ${DOCKER_REGISTRY}/${PROJECT_NAME}-frontend:latest
+                            
+                            docker push ${DOCKER_REGISTRY}/${PROJECT_NAME}-frontend:${BUILD_VERSION}
+                            docker push ${DOCKER_REGISTRY}/${PROJECT_NAME}-frontend:latest
+                            
+                            echo "✅ 프론트엔드 이미지 푸시 완료"
+                        '''
+                    }
+                }
+            }
+        }
+        
+        stage('🚀 Deploy to Kubernetes') {
+            steps {
+                echo '☸️ Kubernetes 배포 중...'
+                sh '''
+                    echo "📝 Kubernetes 매니페스트 생성 중..."
+                    
+                    # 네임스페이스 생성
+                    kubectl create namespace ecp-ai-dev --dry-run=client -o yaml | kubectl apply -f -
+                    
+                    # 백엔드 배포
+                    cat <<EOF | kubectl apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ecp-ai-backend
+  namespace: ecp-ai-dev
+  labels:
+    app: ecp-ai-backend
+    version: ${BUILD_VERSION}
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ecp-ai-backend
+  template:
+    metadata:
+      labels:
+        app: ecp-ai-backend
+        version: ${BUILD_VERSION}
+    spec:
+      containers:
+      - name: backend
+        image: ${DOCKER_REGISTRY}/${PROJECT_NAME}-backend:${BUILD_VERSION}
+        ports:
+        - containerPort: 8000
+        env:
+        - name: ENVIRONMENT
+          value: "development"
+        - name: BUILD_VERSION
+          value: "${BUILD_VERSION}"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ecp-ai-backend-service
+  namespace: ecp-ai-dev
+spec:
+  selector:
+    app: ecp-ai-backend
+  ports:
+  - port: 8000
+    targetPort: 8000
+  type: ClusterIP
+EOF
+
+                    # 프론트엔드 배포
+                    cat <<EOF | kubectl apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ecp-ai-frontend
+  namespace: ecp-ai-dev
+  labels:
+    app: ecp-ai-frontend
+    version: ${BUILD_VERSION}
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ecp-ai-frontend
+  template:
+    metadata:
+      labels:
+        app: ecp-ai-frontend
+        version: ${BUILD_VERSION}
+    spec:
+      containers:
+      - name: frontend
+        image: ${DOCKER_REGISTRY}/${PROJECT_NAME}-frontend:${BUILD_VERSION}
+        ports:
+        - containerPort: 3000
+        env:
+        - name: REACT_APP_API_URL
+          value: "http://ecp-ai-backend-service:8000"
+        - name: BUILD_VERSION
+          value: "${BUILD_VERSION}"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ecp-ai-frontend-service
+  namespace: ecp-ai-dev
+spec:
+  selector:
+    app: ecp-ai-frontend
+  ports:
+  - port: 3000
+    targetPort: 3000
+    nodePort: 30300
+  type: NodePort
+EOF
+
+                    echo "✅ Kubernetes 배포 완료"
+                    
+                    # 배포 상태 확인
+                    kubectl get pods -n ecp-ai-dev
+                    kubectl get services -n ecp-ai-dev
+                '''
+            }
+        }
+        
+        stage('🔍 Health Check') {
+            steps {
+                echo '🏥 애플리케이션 헬스체크 중...'
+                sh '''
+                    echo "⏳ 파드 준비 대기 중..."
+                    kubectl wait --for=condition=ready pod -l app=ecp-ai-backend -n ecp-ai-dev --timeout=300s
+                    kubectl wait --for=condition=ready pod -l app=ecp-ai-frontend -n ecp-ai-dev --timeout=300s
+                    
+                    echo "🔍 서비스 상태 확인..."
+                    kubectl get pods -n ecp-ai-dev -o wide
+                    
+                    echo "✅ 헬스체크 완료"
+                '''
+            }
+        }
+    }
+    
+    post {
+        always {
+            echo '🧹 빌드 정리 중...'
+            sh '''
+                # 로컬 Docker 이미지 정리
+                docker image prune -f
+                
+                echo "📊 빌드 결과 요약:"
+                echo "  📦 프로젝트: ${PROJECT_NAME}"
+                echo "  🏷️ 버전: ${BUILD_VERSION}"
+                echo "  🔗 Git 커밋: ${GIT_COMMIT}"
+                echo "  📅 빌드 시간: $(date)"
+            '''
+        }
+        success {
+            echo '🎉 파이프라인 성공!'
+            sh '''
+                echo "✅ ECP-AI K8s Orchestrator 배포 성공!"
+                echo "🌐 프론트엔드 접속: http://localhost:30300"
+                echo "🔧 백엔드 API: http://localhost:30300/api"
+            '''
+        }
+        failure {
+            echo '❌ 파이프라인 실패!'
+            sh '''
+                echo "💥 빌드 실패 - 로그를 확인하세요"
+                kubectl get events -n ecp-ai-dev --sort-by='.lastTimestamp' | tail -10
+            '''
+        }
+    }
+}</script>
+    <sandbox>true</sandbox>
+  </definition>
+  <triggers/>
+  <disabled>false</disabled>
+</flow-definition>

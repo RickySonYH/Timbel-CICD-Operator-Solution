@@ -138,7 +138,7 @@ const PEDashboard: React.FC = () => {
   const [rejectionDetails, setRejectionDetails] = useState('');
   
   // [advice from AI] Admin용 PE 선택 상태
-  const [selectedPEUser, setSelectedPEUser] = useState<any>(null);
+  const [selectedPEUser, setSelectedPEUser] = useState<string>('');
   const [peUsers, setPeUsers] = useState<any[]>([]);
   const [loadingPEUsers, setLoadingPEUsers] = useState(false);
   
@@ -242,8 +242,11 @@ const PEDashboard: React.FC = () => {
           if (user?.roleType === 'pe') {
             setSelectedPEUser(user.id);
             console.log('🔧 PE 사용자 - 본인 계정 자동 선택:', user.username);
+          } else if ((user?.roleType === 'admin' || user?.roleType === 'executive' || user?.roleType === 'po') && result.data.length > 0) {
+            // Admin/PO/Executive인 경우 첫 번째 PE 자동 선택
+            setSelectedPEUser(result.data[0].id);
+            console.log('🔧 관리자 - 첫 번째 PE 자동 선택:', result.data[0].full_name);
           }
-          // Admin/PO/Executive인 경우 수동 선택하도록 변경 (자동 선택 제거)
         }
       }
     } catch (error) {
@@ -3141,7 +3144,7 @@ const PEDashboard: React.FC = () => {
               📋 프로젝트 관리 - {selectedManageProject?.project_name}
             </Typography>
             <IconButton onClick={() => setProjectManageDialog(false)}>
-              <CloseIcon />
+              ✕
             </IconButton>
           </Box>
         </DialogTitle>

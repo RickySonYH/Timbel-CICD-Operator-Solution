@@ -1,0 +1,88 @@
+# [advice from AI] 간단한 CI/CD 스택 구성
+# Jenkins + Nexus + Argo CD 기본 구성
+
+version: '3.8'
+
+networks:
+  cicd-network:
+    driver: bridge
+
+volumes:
+  jenkins_home:
+  nexus_data:
+  argocd_data:
+
+services:
+  # Jenkins CI/CD Server
+  jenkins:
+    image: jenkins/jenkins:lts
+    container_name: timbel-jenkins
+    restart: unless-stopped
+    user: root
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - JENKINS_OPTS=--httpPort=8080
+      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false -Xmx1g
+    networks:
+      - cicd-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Nexus Repository Manager
+  nexus:
+    image: sonatype/nexus3:latest
+    container_name: timbel-nexus
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+      - "8082:8082"
+    volumes:
+      - nexus_data:/nexus-data
+    environment:
+      - NEXUS_SECURITY_RANDOMPASSWORD=false
+      - INSTALL4J_ADD_VM_PARAMS=-Xms512m -Xmx1g
+    networks:
+      - cicd-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/service/rest/v1/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Argo CD Server
+  argocd-server:
+    image: quay.io/argoproj/argocd:latest
+    container_name: timbel-argocd
+    restart: unless-stopped
+    ports:
+      - "8083:8080"
+    command: [argocd-server, --insecure]
+    environment:
+      - ARGOCD_SERVER_INSECURE=true
+    volumes:
+      - argocd_data:/home/argocd
+    networks:
+      - cicd-network
+    depends_on:
+      - argocd-redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Redis for Argo CD
+  argocd-redis:
+    image: redis:alpine
+    container_name: timbel-argocd-redis
+    restart: unless-stopped
+    networks:
+      - cicd-network

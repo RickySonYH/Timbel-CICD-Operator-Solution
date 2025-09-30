@@ -125,7 +125,7 @@ const Dashboard: React.FC = () => {
             mb: 2
           }}
         >
-          Timbel 지식자원 플랫폼
+          Timbel Project Management Solution
         </Typography>
         <Typography 
           variant="h6" 
