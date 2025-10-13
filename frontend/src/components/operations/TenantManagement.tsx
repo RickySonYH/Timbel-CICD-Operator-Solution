@@ -205,12 +205,12 @@ const TenantManagement: React.FC = () => {
   // [advice from AI] 서비스 상태별 아이콘
   const getServiceIcon = (status: string) => {
     const icons = {
-      running: <CheckCircleIcon color="success" />,
-      stopped: <StopIcon color="disabled" />,
-      deploying: <RefreshIcon color="warning" />,
-      error: <ErrorIcon color="error" />
+      running: null,
+      stopped: null,
+      deploying: null,
+      error: null
     };
-    return icons[status as keyof typeof icons] || <WarningIcon />;
+    return icons[status as keyof typeof icons] || null;
   };
 
   // [advice from AI] 테넌시 생성
@@ -237,7 +237,7 @@ const TenantManagement: React.FC = () => {
   // [advice from AI] 테넌시 배포
   const deployTenant = async (tenantId: string) => {
     const tenant = tenants.find(t => t.id === tenantId);
-    if (!tenant) return;
+    if (!tenant) return null;
 
     setDeploymentProgress({
       tenantId,
@@ -315,7 +315,6 @@ const TenantManagement: React.FC = () => {
           </Typography>
           <Button
             variant="contained"
-            startIcon={<AddIcon />}
             onClick={() => setCreateDialogOpen(true)}
             sx={{ borderRadius: 2 }}
           >
@@ -395,7 +394,7 @@ const TenantManagement: React.FC = () => {
                         onClick={() => setSelectedTenant(tenant)}
                         color="primary"
                       >
-                        <ViewIcon fontSize="small" />
+                        null
                       </IconButton>
                       <IconButton 
                         size="small" 
@@ -403,7 +402,7 @@ const TenantManagement: React.FC = () => {
                         color="success"
                         disabled={tenant.status === 'deploying'}
                       >
-                        <DeployIcon fontSize="small" />
+                        null
                       </IconButton>
                       <IconButton 
                         size="small" 
@@ -411,7 +410,7 @@ const TenantManagement: React.FC = () => {
                         color="warning"
                         disabled={tenant.status === 'inactive'}
                       >
-                        <StopIcon fontSize="small" />
+                        null
                       </IconButton>
                       <IconButton 
                         size="small" 
@@ -484,7 +483,7 @@ const TenantManagement: React.FC = () => {
                         </TableCell>
                         <TableCell>
                           <IconButton size="small" color="primary">
-                            <SettingsIcon fontSize="small" />
+                            null
                           </IconButton>
                         </TableCell>
                       </TableRow>

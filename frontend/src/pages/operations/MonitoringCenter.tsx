@@ -15,14 +15,6 @@ import {
   IconButton,
   Tooltip
 } from '@mui/material';
-import {
-  Dashboard as DashboardIcon,
-  Notifications as NotificationsIcon,
-  Timeline as TimelineIcon,
-  Speed as SpeedIcon,
-  Refresh as RefreshIcon,
-  Settings as SettingsIcon
-} from '@mui/icons-material';
 import BackstageCard from '../../components/layout/BackstageCard';
 import MonitoringDashboard from '../../components/operations/MonitoringDashboard';
 
@@ -127,27 +119,22 @@ const MonitoringCenter: React.FC = () => {
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
         <Tabs value={activeTab} onChange={handleTabChange}>
           <Tab 
-            icon={<DashboardIcon />} 
             label="실시간 모니터링" 
             iconPosition="start"
           />
           <Tab 
-            icon={<NotificationsIcon />} 
             label="알림 관리" 
             iconPosition="start"
           />
           <Tab 
-            icon={<TimelineIcon />} 
             label="로그 분석" 
             iconPosition="start"
           />
           <Tab 
-            icon={<SpeedIcon />} 
             label="성능 분석" 
             iconPosition="start"
           />
           <Tab 
-            icon={<SettingsIcon />} 
             label="모니터링 설정" 
             iconPosition="start"
           />

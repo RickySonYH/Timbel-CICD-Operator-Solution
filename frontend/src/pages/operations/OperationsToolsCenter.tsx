@@ -15,14 +15,6 @@ import {
   IconButton,
   Tooltip
 } from '@mui/material';
-import {
-  AutoAwesome as AutoDeployIcon,
-  Settings as ServiceConfigIcon,
-  Cloud as MultiTenantIcon,
-  PlayArrow as DeployIcon,
-  Build as BuildIcon,
-  Refresh as RefreshIcon
-} from '@mui/icons-material';
 import BackstageCard from '../../components/layout/BackstageCard';
 import AutoDeployment from '../../components/operations/AutoDeployment';
 import ServiceConfiguration from '../../components/operations/ServiceConfiguration';
@@ -99,27 +91,22 @@ const OperationsToolsCenter: React.FC = () => {
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
         <Tabs value={activeTab} onChange={handleTabChange}>
           <Tab 
-            icon={<AutoDeployIcon />} 
             label="자동 배포" 
             iconPosition="start"
           />
           <Tab 
-            icon={<ServiceConfigIcon />} 
             label="서비스 설정" 
             iconPosition="start"
           />
           <Tab 
-            icon={<MultiTenantIcon />} 
             label="멀티테넌트 관리" 
             iconPosition="start"
           />
           <Tab 
-            icon={<DeployIcon />} 
             label="배포 마법사" 
             iconPosition="start"
           />
           <Tab 
-            icon={<BuildIcon />} 
             label="운영 설정" 
             iconPosition="start"
           />

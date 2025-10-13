@@ -9,19 +9,6 @@ import {
   FormControl, InputLabel, Select, MenuItem, Switch, FormControlLabel,
   IconButton, Tooltip, Badge
 } from '@mui/material';
-import {
-  Refresh as RefreshIcon,
-  PlayArrow as PlayIcon,
-  Stop as StopIcon,
-  Build as BuildIcon,
-  GitHub as GitHubIcon,
-  Warning as WarningIcon,
-  CheckCircle as CheckCircleIcon,
-  Error as ErrorIcon,
-  Schedule as ScheduleIcon,
-  Visibility as ViewIcon,
-  GetApp as DownloadIcon
-} from '@mui/icons-material';
 import { useJwtAuthStore } from '../../store/jwtAuthStore';
 
 interface TabPanelProps {
@@ -125,10 +112,10 @@ const BuildMonitoringCenter: React.FC = () => {
       }
 
       // GitHub Actions와 Jenkins Jobs는 빌드 데이터에서 추출
-      const githubBuilds = executionsData.data?.filter(build => build.pipeline_type === 'github-actions') || [];
-      const jenkinsBuilds = executionsData.data?.filter(build => build.pipeline_type === 'jenkins') || [];
+      const githubBuilds = executionsData.data?.filter((build: any) => build.pipeline_type === 'github-actions') || [];
+      const jenkinsBuilds = executionsData.data?.filter((build: any) => build.pipeline_type === 'jenkins') || [];
 
-      setGithubActions(githubBuilds.map(build => ({
+      setGithubActions(githubBuilds.map((build: any) => ({
         repo: build.repository_name,
         workflow: 'CI/CD Pipeline',
         status: build.status === 'running' ? 'active' : 'idle',
@@ -136,7 +123,7 @@ const BuildMonitoringCenter: React.FC = () => {
         success_rate: 95 // 실제로는 DB에서 계산
       })));
 
-      setJenkinsJobs(jenkinsBuilds.map(build => ({
+      setJenkinsJobs(jenkinsBuilds.map((build: any) => ({
         name: build.build_job_name || 'unknown-job',
         status: build.status,
         last_build: build.started_at,
@@ -170,10 +157,10 @@ const BuildMonitoringCenter: React.FC = () => {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'running': return <CircularProgress size={20} />;
-      case 'success': return <CheckCircleIcon color="success" />;
-      case 'failed': return <ErrorIcon color="error" />;
-      case 'pending': return <ScheduleIcon color="warning" />;
-      default: return <BuildIcon />;
+      case 'success': return null;
+      case 'failed': return null;
+      case 'pending': return null;
+      default: return null;
     }
   };
 
@@ -183,7 +170,7 @@ const BuildMonitoringCenter: React.FC = () => {
       case 'success': return 'success';
       case 'failed': return 'error';
       case 'pending': return 'warning';
-      default: return 'default';
+      default: return 'info';
     }
   };
 
@@ -222,7 +209,7 @@ const BuildMonitoringCenter: React.FC = () => {
                     오늘 총 빌드
                   </Typography>
                 </Box>
-                <BuildIcon sx={{ fontSize: 40, color: 'primary.main', opacity: 0.7 }} />
+                null
               </Box>
             </CardContent>
           </Card>
@@ -240,7 +227,7 @@ const BuildMonitoringCenter: React.FC = () => {
                     성공률
                   </Typography>
                 </Box>
-                <CheckCircleIcon sx={{ fontSize: 40, color: 'success.main', opacity: 0.7 }} />
+                null
               </Box>
             </CardContent>
           </Card>
@@ -258,7 +245,7 @@ const BuildMonitoringCenter: React.FC = () => {
                     평균 빌드 시간
                   </Typography>
                 </Box>
-                <ScheduleIcon sx={{ fontSize: 40, color: 'info.main', opacity: 0.7 }} />
+                null
               </Box>
             </CardContent>
           </Card>
@@ -276,7 +263,7 @@ const BuildMonitoringCenter: React.FC = () => {
                     실행 중인 파이프라인
                   </Typography>
                 </Box>
-                <PlayIcon sx={{ fontSize: 40, color: 'warning.main', opacity: 0.7 }} />
+                null
               </Box>
             </CardContent>
           </Card>
@@ -297,7 +284,6 @@ const BuildMonitoringCenter: React.FC = () => {
         />
         <Button
           variant="outlined"
-          startIcon={<RefreshIcon />}
           onClick={loadBuildData}
         >
           새로고침
@@ -353,13 +339,13 @@ const BuildMonitoringCenter: React.FC = () => {
                       <Box sx={{ display: 'flex', gap: 1 }}>
                         <Tooltip title="로그 보기">
                           <IconButton onClick={() => handleViewLogs(build)}>
-                            <ViewIcon />
+                            
                           </IconButton>
                         </Tooltip>
                         {build.status === 'running' && (
                           <Tooltip title="빌드 중지">
                             <IconButton color="error">
-                              <StopIcon />
+                              
                             </IconButton>
                           </Tooltip>
                         )}
@@ -419,7 +405,7 @@ const BuildMonitoringCenter: React.FC = () => {
                 <TableRow key={build.id}>
                   <TableCell>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <GitHubIcon fontSize="small" />
+                      null
                       {build.repo_name}
                     </Box>
                   </TableCell>
@@ -442,7 +428,7 @@ const BuildMonitoringCenter: React.FC = () => {
                   </TableCell>
                   <TableCell>
                     <IconButton size="small" onClick={() => handleViewLogs(build)}>
-                      <ViewIcon />
+                      
                     </IconButton>
                   </TableCell>
                 </TableRow>
@@ -461,7 +447,7 @@ const BuildMonitoringCenter: React.FC = () => {
                 <CardContent>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <GitHubIcon color="primary" />
+                      null
                       <Typography variant="h6" sx={{ fontWeight: 600 }}>
                         {action.repo}
                       </Typography>
@@ -508,7 +494,7 @@ const BuildMonitoringCenter: React.FC = () => {
                 <CardContent>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <BuildIcon color="info" />
+                      null
                       <Typography variant="h6" sx={{ fontWeight: 600 }}>
                         {job.name}
                       </Typography>
@@ -584,7 +570,7 @@ const BuildMonitoringCenter: React.FC = () => {
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button startIcon={<DownloadIcon />}>
+          <Button>
             로그 다운로드
           </Button>
           <Button onClick={() => setLogDialog(false)}>

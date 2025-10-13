@@ -24,7 +24,18 @@ const OperationsCenter: React.FC = () => {
   const [readmeContent, setReadmeContent] = useState('');
   
   // 5단계 마법사 데이터
-  const [wizardData, setWizardData] = useState({
+  const [wizardData, setWizardData] = useState<{
+    analysis: {
+      repository_info: any;
+      detected_services: Array<{ name: string; domain: string; confidence: number; type: string }>;
+      complexity: string;
+      readme_content: string;
+    };
+    resources: any;
+    deployment: any;
+    infrastructure: any;
+    final_plan: any;
+  }>({
     // STEP 0: 분석 결과
     analysis: {
       repository_info: null,
@@ -133,7 +144,7 @@ const OperationsCenter: React.FC = () => {
   const loadReadmeFromGitHub = async (repoUrl: string) => {
     try {
       const match = repoUrl.match(/github\.com\/([^\/]+)\/([^\/]+)/);
-      if (!match) return;
+      if (!match) return null;
       
       const owner = match[1];
       const repo = match[2].replace('.git', '');

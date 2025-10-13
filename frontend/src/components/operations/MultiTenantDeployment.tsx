@@ -168,7 +168,7 @@ const MultiTenantDeployment: React.FC = () => {
           description: dbTenant.description || '',
           environment: dbTenant.environment as any,
           status: dbTenant.tenant_status === 'active' ? 'running' : 
-                  dbTenant.tenant_status === 'creating' ? 'deploying' : 'stopped' as any,
+                  dbTenant.tenant_status === 'creating' ? 'deploying' : 'stopped',
           cloudProvider: dbTenant.cloud_provider.toUpperCase() as any,
           region: dbTenant.region,
           namespace: dbTenant.tenant_id,
@@ -209,7 +209,6 @@ const MultiTenantDeployment: React.FC = () => {
   useEffect(() => {
     loadTenants();
   }, []);
-
 
   // [advice from AI] 하드코딩된 샘플 데이터 (백업용)
   const [oldSampleTenants] = useState<Tenant[]>([
@@ -399,16 +398,16 @@ const MultiTenantDeployment: React.FC = () => {
   // [advice from AI] 서비스 타입별 아이콘
   const getServiceIcon = (type: string) => {
     const icons = {
-      api: <SpeedIcon />,
-      web: <CloudIcon />,
-      database: <StorageIcon />,
-      cache: <MemoryIcon />,
-      queue: <TimelineIcon />,
-      ai: <SecurityIcon />,
-      monitoring: <BugReportIcon />,
-      storage: <StorageIcon />
+      api: null,
+      web: null,
+      database: null,
+      cache: null,
+      queue: null,
+      ai: null,
+      monitoring: null,
+      storage: null
     };
-    return icons[type as keyof typeof icons] || <CloudIcon />;
+    return icons[type as keyof typeof icons] || null;
   };
 
   // [advice from AI] 리소스 사용률 계산
@@ -438,7 +437,6 @@ const MultiTenantDeployment: React.FC = () => {
           </Typography>
           <Button
             variant="contained"
-            startIcon={<WizardIcon />}
             onClick={() => navigate('/operations/deployment-wizard')}
             sx={{ 
               background: 'linear-gradient(45deg, #FE6B8B 30%, #FF8E53 90%)',
@@ -505,7 +503,6 @@ const MultiTenantDeployment: React.FC = () => {
                           key={service.id}
                           label={service.name}
                           size="small"
-                          icon={getServiceIcon(service.type)}
                           color={getStatusColor(service.status)}
                           variant="outlined"
                         />
@@ -628,10 +625,10 @@ const MultiTenantDeployment: React.FC = () => {
                               <VisibilityIcon fontSize="small" />
                             </IconButton>
                             <IconButton size="small">
-                              <SettingsIcon fontSize="small" />
+                              null
                             </IconButton>
                             <IconButton size="small">
-                              <RefreshIcon fontSize="small" />
+                              null
                             </IconButton>
                           </Box>
                         </TableCell>

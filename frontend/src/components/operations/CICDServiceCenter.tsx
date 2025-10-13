@@ -102,11 +102,11 @@ const CICDServiceCenter: React.FC = () => {
 
   // [advice from AI] 탭 구성 (등록 기능 추가)
   const tabs = [
-    { label: '서비스 목록', icon: <SettingsIcon />, component: 'services' },
-    { label: '서비스 등록', icon: <AddIcon />, component: 'register' },
-    { label: 'CI/CD 파이프라인', icon: <PipelineIcon />, component: 'cicd' },
-    { label: '자동 배포', icon: <ScheduleIcon />, component: 'autodeploy' },
-    { label: '이미지 관리', icon: <BuildIcon />, component: 'images' }
+    { label: '서비스 목록',  component: 'services' },
+    { label: '서비스 등록',  component: 'register' },
+    { label: 'CI/CD 파이프라인',  component: 'cicd' },
+    { label: '자동 배포',  component: 'autodeploy' },
+    { label: '이미지 관리',  component: 'images' }
   ];
 
   // [advice from AI] 데이터 로드
@@ -273,10 +273,10 @@ const CICDServiceCenter: React.FC = () => {
                 <Box sx={{ display: 'flex', gap: 1, justifyContent: 'space-between' }}>
                   <Box sx={{ display: 'flex', gap: 1 }}>
                     <IconButton size="small">
-                      <EditIcon />
+                      
                     </IconButton>
                     <IconButton size="small">
-                      {service.status === 'running' ? <StopIcon /> : <PlayIcon />}
+                      {service.status === 'running' ? null : null}
                     </IconButton>
                   </Box>
                   <Typography variant="caption" color="text.secondary">
@@ -298,7 +298,7 @@ const CICDServiceCenter: React.FC = () => {
         <Typography variant="h6">
           CI/CD 파이프라인 ({pipelines.length}개)
         </Typography>
-        <Button variant="contained" startIcon={<AddIcon />}>
+        <Button variant="contained">
           새 파이프라인
         </Button>
       </Box>
@@ -349,13 +349,13 @@ const CICDServiceCenter: React.FC = () => {
                 <TableCell>
                   <Box sx={{ display: 'flex', gap: 1 }}>
                     <IconButton size="small">
-                      <PlayIcon />
+                      
                     </IconButton>
                     <IconButton size="small">
-                      <EditIcon />
+                      
                     </IconButton>
                     <IconButton size="small" color="error">
-                      <DeleteIcon />
+                      
                     </IconButton>
                   </Box>
                 </TableCell>
@@ -465,9 +465,7 @@ const CICDServiceCenter: React.FC = () => {
           {tabs.map((tab, index) => (
             <Tab 
               key={index}
-              label={tab.label} 
-              icon={tab.icon}
-              iconPosition="start"
+              label={tab.label}
             />
           ))}
         </Tabs>

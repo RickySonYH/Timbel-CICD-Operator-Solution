@@ -15,14 +15,6 @@ import {
   IconButton,
   Tooltip
 } from '@mui/material';
-import {
-  Cloud as CloudIcon,
-  Calculate as CalculateIcon,
-  Security as SecurityIcon,
-  Storage as StorageIcon,
-  Settings as SettingsIcon,
-  Refresh as RefreshIcon
-} from '@mui/icons-material';
 import BackstageCard from '../../components/layout/BackstageCard';
 import InfrastructureManagement from '../../components/operations/InfrastructureManagement';
 import HardwareCalculator from '../../components/operations/HardwareCalculator';
@@ -113,27 +105,22 @@ const InfrastructureCenter: React.FC = () => {
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
         <Tabs value={activeTab} onChange={handleTabChange}>
           <Tab 
-            icon={<CloudIcon />} 
             label="인프라 관리" 
             iconPosition="start"
           />
           <Tab 
-            icon={<CalculateIcon />} 
             label="하드웨어 계산" 
             iconPosition="start"
           />
           <Tab 
-            icon={<StorageIcon />} 
             label="리소스 관리" 
             iconPosition="start"
           />
           <Tab 
-            icon={<SecurityIcon />} 
             label="보안 설정" 
             iconPosition="start"
           />
           <Tab 
-            icon={<SettingsIcon />} 
             label="인프라 설정" 
             iconPosition="start"
           />

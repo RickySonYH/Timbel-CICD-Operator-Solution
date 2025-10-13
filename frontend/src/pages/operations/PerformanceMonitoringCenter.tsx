@@ -8,21 +8,6 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions, TextField,
   FormControl, InputLabel, Select, MenuItem, Switch, FormControlLabel
 } from '@mui/material';
-import {
-  Refresh as RefreshIcon,
-  Timeline as TimelineIcon,
-  Speed as SpeedIcon,
-  Memory as MemoryIcon,
-  Storage as StorageIcon,
-  NetworkCheck as NetworkIcon,
-  Warning as WarningIcon,
-  Error as ErrorIcon,
-  CheckCircle as CheckCircleIcon,
-  Notifications as NotificationsIcon,
-  Dashboard as DashboardIcon,
-  TrendingUp as TrendingUpIcon,
-  TrendingDown as TrendingDownIcon
-} from '@mui/icons-material';
 import { useJwtAuthStore } from '../../store/jwtAuthStore';
 
 interface TabPanelProps {
@@ -237,7 +222,7 @@ const PerformanceMonitoringCenter: React.FC = () => {
       case 'healthy': return 'success';
       case 'warning': return 'warning';
       case 'critical': case 'error': return 'error';
-      default: return 'default';
+      default: return 'info';
     }
   };
 
@@ -246,7 +231,7 @@ const PerformanceMonitoringCenter: React.FC = () => {
       case 'critical': return 'error';
       case 'warning': return 'warning';
       case 'info': return 'info';
-      default: return 'default';
+      default: return 'info';
     }
   };
 
@@ -285,7 +270,7 @@ const PerformanceMonitoringCenter: React.FC = () => {
                     클러스터 CPU
                   </Typography>
                 </Box>
-                <SpeedIcon sx={{ fontSize: 40, color: 'primary.main', opacity: 0.7 }} />
+                null
               </Box>
               <LinearProgress 
                 variant="determinate" 
@@ -309,7 +294,7 @@ const PerformanceMonitoringCenter: React.FC = () => {
                     클러스터 메모리
                   </Typography>
                 </Box>
-                <MemoryIcon sx={{ fontSize: 40, color: 'success.main', opacity: 0.7 }} />
+                null
               </Box>
               <LinearProgress 
                 variant="determinate" 
@@ -333,7 +318,7 @@ const PerformanceMonitoringCenter: React.FC = () => {
                     평균 응답시간
                   </Typography>
                 </Box>
-                <TimelineIcon sx={{ fontSize: 40, color: 'info.main', opacity: 0.7 }} />
+                null
               </Box>
             </CardContent>
           </Card>
@@ -351,7 +336,7 @@ const PerformanceMonitoringCenter: React.FC = () => {
                     전체 오류율
                   </Typography>
                 </Box>
-                <ErrorIcon sx={{ fontSize: 40, color: 'warning.main', opacity: 0.7 }} />
+                null
               </Box>
             </CardContent>
           </Card>
@@ -373,7 +358,6 @@ const PerformanceMonitoringCenter: React.FC = () => {
           />
           <Button
             variant="outlined"
-            startIcon={<RefreshIcon />}
             onClick={loadMonitoringData}
           >
             새로고침
@@ -382,7 +366,6 @@ const PerformanceMonitoringCenter: React.FC = () => {
         
         <Button
           variant="contained"
-          startIcon={<DashboardIcon />}
           onClick={() => window.open('https://grafana.rdc.rickyson.com', '_blank')}
         >
           Grafana 대시보드
@@ -392,10 +375,10 @@ const PerformanceMonitoringCenter: React.FC = () => {
       {/* 탭 네비게이션 */}
       <Paper sx={{ mb: 3 }}>
         <Tabs value={tabValue} onChange={(e, newValue) => setTabValue(newValue)} variant="fullWidth">
-          <Tab label="서비스 메트릭" icon={<SpeedIcon />} />
-          <Tab label="실시간 알림" icon={<NotificationsIcon />} />
-          <Tab label="대시보드" icon={<DashboardIcon />} />
-          <Tab label="알림 규칙" icon={<WarningIcon />} />
+          <Tab label="서비스 메트릭" />
+          <Tab label="실시간 알림" />
+          <Tab label="대시보드" />
+          <Tab label="알림 규칙" />
         </Tabs>
       </Paper>
 
@@ -549,11 +532,11 @@ const PerformanceMonitoringCenter: React.FC = () => {
                         
                         <Box sx={{ textAlign: 'center' }}>
                           {service.status === 'healthy' ? (
-                            <CheckCircleIcon sx={{ fontSize: 40, color: 'success.main', mb: 1 }} />
+                            null
                           ) : service.status === 'warning' ? (
-                            <WarningIcon sx={{ fontSize: 40, color: 'warning.main', mb: 1 }} />
+                            null
                           ) : (
-                            <ErrorIcon sx={{ fontSize: 40, color: 'error.main', mb: 1 }} />
+                            null
                           )}
                           <Typography variant="body2" sx={{ textTransform: 'capitalize' }}>
                             {service.status}
@@ -638,7 +621,6 @@ const PerformanceMonitoringCenter: React.FC = () => {
                   <Button 
                     variant="contained" 
                     fullWidth
-                    startIcon={<DashboardIcon />}
                     onClick={() => window.open(dashboard.url, '_blank')}
                   >
                     대시보드 열기
@@ -657,8 +639,7 @@ const PerformanceMonitoringCenter: React.FC = () => {
             알림 규칙 관리
           </Typography>
           <Button 
-            variant="contained" 
-            startIcon={<NotificationsIcon />}
+            variant="contained"
             onClick={() => setAlertDialog(true)}
           >
             규칙 추가

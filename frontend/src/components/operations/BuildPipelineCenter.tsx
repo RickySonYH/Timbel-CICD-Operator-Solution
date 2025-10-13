@@ -153,7 +153,7 @@ const BuildPipelineCenter: React.FC = () => {
 
   // [advice from AI] 빌드 트리거
   const triggerBuild = async () => {
-    if (!selectedRepo) return;
+    if (!selectedRepo) return null;
 
     try {
       setTriggering(true);
@@ -219,11 +219,11 @@ const BuildPipelineCenter: React.FC = () => {
   // [advice from AI] 상태별 아이콘 및 색상
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'running': return <BuildIcon color="primary" />;
+      case 'running': return null;
       case 'success': return <SuccessIcon color="success" />;
-      case 'failed': return <ErrorIcon color="error" />;
+      case 'failed': return null;
       case 'pending': return <PendingIcon color="warning" />;
-      default: return <BuildIcon />;
+      default: return null;
     }
   };
 
@@ -233,7 +233,7 @@ const BuildPipelineCenter: React.FC = () => {
       case 'success': return 'success';
       case 'failed': return 'error';
       case 'pending': return 'warning';
-      default: return 'default';
+      default: return 'info';
     }
   };
 
@@ -283,7 +283,6 @@ const BuildPipelineCenter: React.FC = () => {
         <Box>
           <Button
             variant="outlined"
-            startIcon={<RefreshIcon />}
             onClick={loadBuildJobs}
             sx={{ mr: 2 }}
           >
@@ -291,7 +290,6 @@ const BuildPipelineCenter: React.FC = () => {
           </Button>
           <Button
             variant="contained"
-            startIcon={<PlayIcon />}
             onClick={() => setBuildDialog(true)}
           >
             빌드 실행
@@ -450,7 +448,7 @@ const BuildPipelineCenter: React.FC = () => {
                                   expandedJob === job.id ? null : job.id
                                 )}
                               >
-                                {expandedJob === job.id ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                                {expandedJob === job.id ? null : null}
                               </IconButton>
                             </Tooltip>
                             <Tooltip title="콘솔 로그">
@@ -458,7 +456,7 @@ const BuildPipelineCenter: React.FC = () => {
                                 size="small"
                                 onClick={() => window.open(job.console_url, '_blank')}
                               >
-                                <OpenInNewIcon />
+                                
                               </IconButton>
                             </Tooltip>
                             {job.status === 'running' && (
@@ -468,7 +466,7 @@ const BuildPipelineCenter: React.FC = () => {
                                   color="error"
                                   onClick={() => stopBuild(job.id)}
                                 >
-                                  <StopIcon />
+                                  
                                 </IconButton>
                               </Tooltip>
                             )}

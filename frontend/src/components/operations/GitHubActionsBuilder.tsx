@@ -142,7 +142,7 @@ const GitHubActionsBuilder: React.FC<GitHubActionsBuilderProps> = ({
   const generateWorkflow = async () => {
     if (!customConfig.workflowName || !customConfig.language) {
       alert('워크플로우 이름과 언어를 선택해주세요.');
-      return;
+      return null;
     }
 
     setLoading(true);

@@ -130,7 +130,7 @@ const DeploymentApprovalCenter: React.FC = () => {
 
   // [advice from AI] 승인/반려 처리
   const handleDecision = async () => {
-    if (!selectedApproval || !decision) return;
+    if (!selectedApproval || !decision) return null;
 
     try {
       setProcessing(true);
@@ -178,7 +178,7 @@ const DeploymentApprovalCenter: React.FC = () => {
       case 'high': return 'error';
       case 'normal': return 'primary';
       case 'low': return 'default';
-      default: return 'default';
+      default: return 'info';
     }
   };
 
@@ -188,7 +188,7 @@ const DeploymentApprovalCenter: React.FC = () => {
       case 'production': return 'error';
       case 'staging': return 'warning';
       case 'development': return 'info';
-      default: return 'default';
+      default: return 'info';
     }
   };
 

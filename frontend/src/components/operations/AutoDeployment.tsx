@@ -222,7 +222,7 @@ const AutoDeployment: React.FC = () => {
   // [advice from AI] 배포 시작
   const startDeployment = async (deploymentId: string) => {
     const deployment = deployments.find(d => d.id === deploymentId);
-    if (!deployment) return;
+    if (!deployment) return null;
 
     // [advice from AI] 배포 상태 업데이트
     setDeployments(deployments.map(d => 
@@ -341,7 +341,6 @@ const AutoDeployment: React.FC = () => {
           </Typography>
           <Button
             variant="contained"
-            startIcon={<DeployIcon />}
             onClick={() => setCreateDialogOpen(true)}
             sx={{ borderRadius: 2 }}
           >
@@ -426,7 +425,7 @@ const AutoDeployment: React.FC = () => {
                           onClick={() => startDeployment(deployment.id)}
                           color="success"
                         >
-                          <DeployIcon fontSize="small" />
+                          null
                         </IconButton>
                       )}
                       {deployment.status === 'running' && (
@@ -435,7 +434,7 @@ const AutoDeployment: React.FC = () => {
                           onClick={() => stopDeployment(deployment.id)}
                           color="warning"
                         >
-                          <StopIcon fontSize="small" />
+                          null
                         </IconButton>
                       )}
                       <IconButton 

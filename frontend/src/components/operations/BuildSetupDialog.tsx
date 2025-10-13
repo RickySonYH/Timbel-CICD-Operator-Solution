@@ -249,7 +249,7 @@ const BuildSetupDialog: React.FC<BuildSetupDialogProps> = ({
   const handleNext = () => {
     if (activeStep === 0 && !selectedRepo) {
       setError('레포지토리를 선택해주세요.');
-      return;
+      return null;
     }
     
     setError(null);

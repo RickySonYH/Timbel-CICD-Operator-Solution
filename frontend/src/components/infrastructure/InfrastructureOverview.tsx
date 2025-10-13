@@ -118,7 +118,7 @@ const InfrastructureOverview: React.FC = () => {
 
   const handleDelete = async (id: string) => {
     if (!window.confirm('정말로 이 인프라를 삭제하시겠습니까?')) {
-      return;
+      return null;
     }
 
     try {
@@ -162,7 +162,7 @@ const InfrastructureOverview: React.FC = () => {
       case 'inactive': return 'default';
       case 'maintenance': return 'warning';
       case 'error': return 'error';
-      default: return 'default';
+      default: return 'info';
     }
   };
 
@@ -173,7 +173,7 @@ const InfrastructureOverview: React.FC = () => {
       case 'inactive': return 'warning';
       case 'timeout': return 'warning';
       case 'error': return 'error';
-      default: return 'default';
+      default: return 'info';
     }
   };
 
@@ -204,16 +204,16 @@ const InfrastructureOverview: React.FC = () => {
               배포 인프라 관리
             </Typography>
             <Box>
-              <Tooltip title="새로고침">
-                <IconButton onClick={handleRefresh} disabled={refreshing}>
-                  {refreshing ? <CircularProgress size={20} /> : <RefreshIcon />}
-                </IconButton>
-              </Tooltip>
+              <Button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                sx={{ mr: 1 }}
+              >
+                {refreshing ? '새로고침 중...' : '새로고침'}
+              </Button>
               <Button
                 variant="contained"
-                startIcon={<AddIcon />}
                 onClick={handleAdd}
-                sx={{ ml: 1 }}
               >
                 인프라 추가
               </Button>
@@ -307,7 +307,7 @@ const InfrastructureOverview: React.FC = () => {
                       <Chip
                         label={infrastructure.status}
                         size="small"
-                        color={getStatusColor(infrastructure.status) as any}
+                        color={getStatusColor(infrastructure.status || 'unknown') as any}
                       />
                     </TableCell>
                     <TableCell>
@@ -330,7 +330,7 @@ const InfrastructureOverview: React.FC = () => {
                           size="small"
                           onClick={() => handleEdit(infrastructure)}
                         >
-                          <EditIcon />
+                          
                         </IconButton>
                       </Tooltip>
                       <Tooltip title="삭제">
@@ -339,7 +339,7 @@ const InfrastructureOverview: React.FC = () => {
                           onClick={() => handleDelete(infrastructure.id)}
                           color="error"
                         >
-                          <DeleteIcon />
+                          
                         </IconButton>
                       </Tooltip>
                     </TableCell>

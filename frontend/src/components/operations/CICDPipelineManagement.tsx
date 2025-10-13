@@ -201,7 +201,7 @@ const CICDPipelineManagement: React.FC = () => {
       case 'success': return 'success';
       case 'failed': return 'error';
       case 'running': return 'warning';
-      default: return 'default';
+      default: return 'info';
     }
   };
 
@@ -211,7 +211,7 @@ const CICDPipelineManagement: React.FC = () => {
       case 'deployed': return 'success';
       case 'failed': return 'error';
       case 'deploying': return 'info';
-      default: return 'default';
+      default: return 'info';
     }
   };
 

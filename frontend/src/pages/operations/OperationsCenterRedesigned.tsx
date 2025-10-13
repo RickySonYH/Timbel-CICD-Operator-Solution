@@ -93,7 +93,7 @@ const OperationsCenterRedesigned: React.FC = () => {
   const handleSupportRequest = async () => {
     if (!supportRequest.description.trim() || !selectedPE) {
       alert('모든 필수 정보를 입력해주세요.');
-      return;
+      return null;
     }
 
     try {

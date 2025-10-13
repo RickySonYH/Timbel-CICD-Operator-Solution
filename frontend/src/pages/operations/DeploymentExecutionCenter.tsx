@@ -9,24 +9,6 @@ import {
   FormControl, InputLabel, Select, MenuItem, Switch, FormControlLabel,
   Stepper, Step, StepLabel, StepContent, Accordion, AccordionSummary, AccordionDetails
 } from '@mui/material';
-import {
-  PlayArrow as PlayIcon,
-  Stop as StopIcon,
-  Refresh as RefreshIcon,
-  CloudUpload as DeployIcon,
-  Kubernetes as K8sIcon,
-  GitHub as GitHubIcon,
-  Storage as StorageIcon,
-  Timeline as TimelineIcon,
-  Settings as SettingsIcon,
-  Visibility as ViewIcon,
-  GetApp as DownloadIcon,
-  Rollback as RollbackIcon,
-  CheckCircle as CheckCircleIcon,
-  Error as ErrorIcon,
-  Warning as WarningIcon,
-  ExpandMore as ExpandMoreIcon
-} from '@mui/icons-material';
 import { useJwtAuthStore } from '../../store/jwtAuthStore';
 
 interface TabPanelProps {
@@ -181,10 +163,10 @@ const DeploymentExecutionCenter: React.FC = () => {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'deploying': return <CircularProgress size={20} />;
-      case 'healthy': case 'success': return <CheckCircleIcon color="success" />;
-      case 'failed': return <ErrorIcon color="error" />;
-      case 'warning': return <WarningIcon color="warning" />;
-      default: return <SettingsIcon />;
+      case 'healthy': case 'success': return null;
+      case 'failed': return null;
+      case 'warning': return null;
+      default: return null;
     }
   };
 
@@ -194,7 +176,7 @@ const DeploymentExecutionCenter: React.FC = () => {
       case 'healthy': case 'success': return 'success';
       case 'failed': return 'error';
       case 'warning': return 'warning';
-      default: return 'default';
+      default: return 'info';
     }
   };
 
@@ -232,7 +214,7 @@ const DeploymentExecutionCenter: React.FC = () => {
         <Box sx={{ display: 'flex', gap: 2 }}>
           <Button
             variant="contained"
-            startIcon={<DeployIcon />}
+           
             onClick={() => setDeployWizard(true)}
             size="large"
           >
@@ -240,7 +222,7 @@ const DeploymentExecutionCenter: React.FC = () => {
           </Button>
           <Button
             variant="outlined"
-            startIcon={<RefreshIcon />}
+           
             onClick={loadDeploymentData}
           >
             새로고침
@@ -251,10 +233,10 @@ const DeploymentExecutionCenter: React.FC = () => {
       {/* 탭 네비게이션 */}
       <Paper sx={{ mb: 3 }}>
         <Tabs value={tabValue} onChange={(e, newValue) => setTabValue(newValue)} variant="fullWidth">
-          <Tab label="실행 중인 배포" icon={<DeployIcon />} />
-          <Tab label="배포 히스토리" icon={<TimelineIcon />} />
-          <Tab label="환경 관리" icon={<K8sIcon />} />
-          <Tab label="Argo CD Apps" icon={<GitHubIcon />} />
+          <Tab label="실행 중인 배포" />
+          <Tab label="배포 히스토리" />
+          <Tab label="환경 관리" />
+          <Tab label="Argo CD Apps" />
         </Tabs>
       </Paper>
 
@@ -301,16 +283,16 @@ const DeploymentExecutionCenter: React.FC = () => {
                       </Box>
                       
                       <Box sx={{ display: 'flex', gap: 1 }}>
-                        <Button variant="outlined" size="small" startIcon={<ViewIcon />}>
+                        <Button variant="outlined" size="small">
                           로그
                         </Button>
                         {deployment.status === 'deploying' && (
-                          <Button variant="outlined" size="small" color="error" startIcon={<StopIcon />}>
+                          <Button variant="outlined" size="small" color="error">
                             중지
                           </Button>
                         )}
                         {deployment.status === 'failed' && (
-                          <Button variant="outlined" size="small" color="warning" startIcon={<RollbackIcon />}
+                          <Button variant="outlined" size="small" color="warning"
                             onClick={() => handleRollback(deployment.id)}
                           >
                             롤백
@@ -336,7 +318,7 @@ const DeploymentExecutionCenter: React.FC = () => {
 
                     {/* 리소스 정보 */}
                     <Accordion>
-                      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                      <AccordionSummary>
                         <Typography variant="body2" sx={{ fontWeight: 600 }}>
                           리소스 정보 및 상태
                         </Typography>
@@ -432,11 +414,11 @@ const DeploymentExecutionCenter: React.FC = () => {
                   <TableCell>{deployment.deployed_by}</TableCell>
                   <TableCell>
                     <Box sx={{ display: 'flex', gap: 1 }}>
-                      <Button variant="outlined" size="small" startIcon={<ViewIcon />}>
+                      <Button variant="outlined" size="small">
                         상세
                       </Button>
                       {deployment.status === 'success' && (
-                        <Button variant="outlined" size="small" startIcon={<RollbackIcon />}>
+                        <Button variant="outlined" size="small">
                           재배포
                         </Button>
                       )}
@@ -508,7 +490,7 @@ const DeploymentExecutionCenter: React.FC = () => {
                     마지막 배포: {new Date(env.last_deployment).toLocaleString()}
                   </Typography>
 
-                  <Button variant="outlined" fullWidth startIcon={<K8sIcon />}>
+                  <Button variant="outlined" fullWidth>
                     환경 관리
                   </Button>
                 </CardContent>
@@ -527,7 +509,7 @@ const DeploymentExecutionCenter: React.FC = () => {
                 <CardContent>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <GitHubIcon color="primary" />
+                      null
                       <Typography variant="h6" sx={{ fontWeight: 600 }}>
                         {app.name}
                       </Typography>
@@ -573,10 +555,10 @@ const DeploymentExecutionCenter: React.FC = () => {
                   </Box>
 
                   <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Button variant="outlined" size="small" startIcon={<RefreshIcon />}>
+                    <Button variant="outlined" size="small">
                       동기화
                     </Button>
-                    <Button variant="outlined" size="small" startIcon={<ViewIcon />}>
+                    <Button variant="outlined" size="small">
                       상세
                     </Button>
                   </Box>

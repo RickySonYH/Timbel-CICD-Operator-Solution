@@ -1,331 +1,109 @@
-// [advice from AI] 지식자원 카탈로그 대시보드 컴포넌트
-// 지식 자산의 등록, 검색, 승인, 다이어그램 관리 기능을 제공
-
+// [advice from AI] 지식자원 대시보드 - 지식 자산 현황 및 분석
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
-  Typography,
   Grid,
   Card,
   CardContent,
-  CardActions,
-  Button,
+  Typography,
+  LinearProgress,
+  Chip,
   Paper,
   List,
   ListItem,
   ListItemText,
   ListItemIcon,
   Divider,
-  IconButton,
-  CircularProgress,
   Alert
 } from '@mui/material';
-import {
-  Dashboard as DashboardIcon,
-  Palette as DesignIcon,
-  Code as CodeIcon,
-  Description as DocIcon,
-  Search as SearchIcon,
-  Approval as ApprovalIcon,
-  AccountTree as DiagramIcon,
-  TrendingUp as TrendingUpIcon,
-  Edit as EditIcon,
-  Visibility as ViewIcon,
-  Business as BusinessIcon,
-  Computer as SystemIcon,
-  Assignment as AssignmentIcon
-} from '@mui/icons-material';
+// [advice from AI] 아이콘 제거하고 텍스트만 사용
 import { useJwtAuthStore } from '../../store/jwtAuthStore';
-import KnowledgeSearch from '../../components/knowledge/KnowledgeSearch';
-import KnowledgeAssetDetail from '../../components/knowledge/KnowledgeAssetDetail';
-import { useNavigate } from 'react-router-dom';
+import { usePermissions } from '../../hooks/usePermissions';
 
-interface DashboardStats {
-  totalDomains: number;
-  totalProjects: number;
-  totalSystems: number;
-  totalDesignAssets: number;
-  totalCodeComponents: number;
-  totalDocuments: number;
+// [advice from AI] 대시보드 메트릭 타입
+interface DashboardMetrics {
+  totalAssets: number;
   pendingApprovals: number;
-  totalDiagrams: number;
-  recentUploads: number;
+  activeContributors: number;
+  monthlyGrowth: number;
+  categoryBreakdown: {
+    domains: number;
+    projects: number;
+    systems: number;
+    code: number;
+    design: number;
+    documents: number;
+  };
+  recentTrends: {
+    period: string;
+    created: number;
+    updated: number;
+    approved: number;
+  }[];
+  topContributors: {
+    name: string;
+    contributions: number;
+    category: string;
+  }[];
 }
 
 const KnowledgeDashboard: React.FC = () => {
-  const { user } = useJwtAuthStore();
   const navigate = useNavigate();
-  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const { user } = useJwtAuthStore();
+  const permissions = usePermissions();
+  
+  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  // [advice from AI] 지식 자산 통계 조회
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        setLoading(true);
-        const token = useJwtAuthStore.getState().token;
-        
-        if (!token) {
-          throw new Error('토큰이 없습니다. 다시 로그인해주세요.');
+  // [advice from AI] 대시보드 메트릭 로드
+  const loadDashboardMetrics = async () => {
+    try {
+      setLoading(true);
+      
+      // API 호출로 실제 데이터 가져오기
+      const { token } = useJwtAuthStore.getState();
+      const response = await fetch('/api/knowledge/dashboard-metrics', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
+      });
 
-        // [advice from AI] 실제 API에서 모든 데이터 조회
-        const currentHost = window.location.host;
-        const apiUrl = currentHost.includes('localhost') || currentHost.includes('127.0.0.1') 
-          ? 'http://localhost:3001/api' 
-          : `http://${currentHost.split(':')[0]}:3001/api`;
-        const [
-          designAssetsResponse, 
-          codeComponentsResponse, 
-          documentsResponse,
-          domainsResponse,
-          projectsResponse,
-          systemsResponse
-        ] = await Promise.all([
-          fetch(`${apiUrl}/design-assets`, {
-            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
-          }),
-          fetch(`${apiUrl}/code-components`, {
-            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
-          }),
-          fetch(`${apiUrl}/documents`, {
-            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
-          }),
-          fetch(`${apiUrl}/domains`, {
-            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
-          }),
-          fetch(`${apiUrl}/projects`, {
-            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
-          }),
-          fetch(`${apiUrl}/catalog/systems`, {
-            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
-          })
-        ]);
-
-        const designAssetsData = await designAssetsResponse.json();
-        const codeComponentsData = await codeComponentsResponse.json();
-        const documentsData = await documentsResponse.json();
-        const domainsData = await domainsResponse.json();
-        const projectsData = await projectsResponse.json();
-        const systemsData = await systemsResponse.json();
-
-        // [advice from AI] 실제 데이터로 통계 설정
-        setStats({
-          totalDomains: domainsData.success ? (domainsData.data?.length || 0) : 0,
-          totalProjects: projectsData.success ? (projectsData.data?.length || 0) : 0,
-          totalSystems: systemsData.success ? (systemsData.data?.systems?.length || systemsData.data?.length || 0) : 0,
-          totalDesignAssets: designAssetsData.success ? (designAssetsData.data?.length || 0) : 0,
-          totalCodeComponents: codeComponentsData.success ? (codeComponentsData.data?.length || 0) : 0,
-          totalDocuments: documentsData.success ? (documentsData.data?.length || 0) : 0,
-          pendingApprovals: 0, // 승인 대기 데이터는 별도 API 필요
-          totalDiagrams: 0, // 다이어그램 데이터는 별도 API 필요
-          recentUploads: 0 // 최근 업로드 데이터는 별도 API 필요
-        });
-
-        console.log('🔍 KnowledgeDashboard 실제 데이터:', { designAssetsData, codeComponentsData, documentsData });
-      } catch (err) {
-        console.error('❌ KnowledgeDashboard API 에러:', err);
-        setError(err instanceof Error ? err.message : 'Unknown error');
-        // [advice from AI] 에러 시에도 기본값 설정하지 않음 - 실제 에러 표시
-      } finally {
-        setLoading(false);
+      if (!response.ok) {
+        throw new Error('대시보드 메트릭 로드 실패');
       }
-    };
 
-    if (user) {
-      fetchStats();
-    }
-  }, [user]);
-
-  // [advice from AI] 지식 관리 메뉴 항목들
-  // [advice from AI] Phase 4: 순수 카탈로그 조회용 메뉴들 (등록 기능 제거)
-  // [advice from AI] 카탈로그 카드 데이터 (6개 → 3x2 배치)
-  const catalogItems = [
-    // 첫 번째 행: 도메인, 프로젝트, 시스템
-    {
-      title: '도메인 (영업처)',
-      description: '비즈니스 도메인별 지식 자산을 조회합니다',
-      icon: <BusinessIcon />,
-      path: '/knowledge/domains',
-      color: '#795548',
-      stats: stats?.totalDomains || 0
-    },
-    {
-      title: '프로젝트 (기획)',
-      description: '도메인별 프로젝트를 조회하고 관리합니다',
-      icon: <AssignmentIcon />,
-      path: '/knowledge/projects',
-      color: '#ff5722',
-      stats: stats?.totalProjects || 0,
-      badge: 'NEW'
-    },
-    {
-      title: '시스템 (솔루션)',
-      description: '승인된 시스템들을 조회하고 활용합니다',
-      icon: <SystemIcon />,
-      path: '/knowledge/systems',
-      color: '#607d8b',
-      stats: stats?.totalSystems || 0
-    },
-    // 두 번째 행: 코드 컴포넌트, 문서/가이드, 디자인
-    {
-      title: '코드 컴포넌트',
-      description: '재사용 가능한 코드와 컴포넌트를 조회하고 활용합니다',
-      icon: <CodeIcon />,
-      path: '/knowledge/code',
-      color: '#9c27b0',
-      stats: stats?.totalCodeComponents || 0
-    },
-    {
-      title: '문서/가이드',
-      description: '기술 문서와 가이드를 조회하고 활용합니다',
-      icon: <DocIcon />,
-      path: '/knowledge/docs',
-      color: '#3f51b5',
-      stats: stats?.totalDocuments || 0
-    },
-    {
-      title: '디자인 자산',
-      description: '등록된 UI/UX 디자인 자산을 조회하고 활용합니다',
-      icon: <DesignIcon />,
-      path: '/knowledge/design',
-      color: '#e91e63',
-      stats: stats?.totalDesignAssets || 0
-    }
-  ];
-
-  // [advice from AI] 최근 활동 데이터 상태
-  const [recentActivities, setRecentActivities] = useState<any[]>([]);
-
-  // [advice from AI] 최근 활동 데이터 조회
-  useEffect(() => {
-    const fetchRecentActivities = async () => {
-      try {
-        const token = useJwtAuthStore.getState().token;
-        if (!token) return;
-
-        // [advice from AI] 최근 등록된 데이터 조회
-        const currentHost = window.location.host;
-        const apiUrl = currentHost.includes('localhost') || currentHost.includes('127.0.0.1') 
-          ? 'http://localhost:3001/api' 
-          : `http://${currentHost.split(':')[0]}:3001/api`;
-        const [recentDesignAssets, recentCodeComponents, recentDocuments] = await Promise.all([
-          fetch(`${apiUrl}/design-assets?limit=5&sort=created_at:desc`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
-          }),
-          fetch(`${apiUrl}/code-components?limit=5&sort=created_at:desc`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
-          }),
-          fetch(`${apiUrl}/documents?limit=5&sort=created_at:desc`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
-          })
-        ]);
-
-        const designAssetsData = await recentDesignAssets.json();
-        const codeComponentsData = await recentCodeComponents.json();
-        const documentsData = await recentDocuments.json();
-
-        // [advice from AI] 활동 데이터 변환
-        const activities: any[] = [];
-
-        if (designAssetsData.success && designAssetsData.data) {
-          designAssetsData.data.slice(0, 2).forEach((item: any) => {
-            activities.push({
-              type: 'design',
-              title: `새 디자인 자산 등록: ${item.name}`,
-              user: item.creator_name || '시스템',
-              time: new Date(item.created_at).toLocaleString()
-            });
-          });
-        }
-
-        if (codeComponentsData.success && codeComponentsData.data) {
-          codeComponentsData.data.slice(0, 2).forEach((item: any) => {
-            activities.push({
-              type: 'code',
-              title: `새 코드 컴포넌트 등록: ${item.name}`,
-              user: item.creator_name || '시스템',
-              time: new Date(item.created_at).toLocaleString()
-            });
-          });
-        }
-
-        if (documentsData.success && documentsData.data) {
-          documentsData.data.slice(0, 2).forEach((item: any) => {
-            activities.push({
-              type: 'doc',
-              title: `새 문서 등록: ${item.title}`,
-              user: item.creator_name || '시스템',
-              time: new Date(item.created_at).toLocaleString()
-            });
-          });
-        }
-
-        // [advice from AI] 시간순 정렬
-        activities.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
-        setRecentActivities(activities.slice(0, 6)); // 최대 6개만 표시
-
-      } catch (err) {
-        console.error('최근 활동 데이터 조회 실패:', err);
-        // [advice from AI] 에러 시 기본 활동 표시
-        setRecentActivities([
-          { type: 'design', title: '데이터 로딩 중...', user: '시스템', time: '방금 전' }
-        ]);
-      }
-    };
-
-    if (user) {
-      fetchRecentActivities();
-    }
-  }, [user]);
-
-  const getActivityIcon = (type: string) => {
-    switch (type) {
-      case 'design': return <DesignIcon />;
-      case 'code': return <CodeIcon />;
-      case 'doc': return <DocIcon />;
-      case 'approval': return <ApprovalIcon />;
-      case 'diagram': return <DiagramIcon />;
-      default: return <DashboardIcon />;
+      const data = await response.json();
+      setMetrics(data);
+      
+    } catch (error) {
+      console.error('대시보드 메트릭 로드 실패:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const getActivityColor = (type: string) => {
-    switch (type) {
-      case 'design': return '#e91e63';
-      case 'code': return '#9c27b0';
-      case 'doc': return '#3f51b5';
-      case 'approval': return '#ff9800';
-      case 'diagram': return '#4caf50';
-      default: return '#666';
-    }
-  };
+  useEffect(() => {
+    loadDashboardMetrics();
+  }, []);
 
-  // [advice from AI] 로딩 상태 처리
   if (loading) {
     return (
-      <Box sx={{ p: 3, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
-        <CircularProgress size={60} />
+      <Box sx={{ p: 3 }}>
+        <Typography variant="h4" gutterBottom>
+          지식자원 대시보드
+        </Typography>
+        <LinearProgress />
       </Box>
     );
   }
 
-  // [advice from AI] 에러 상태 처리
-  if (error) {
+  if (!metrics) {
     return (
       <Box sx={{ p: 3 }}>
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
+        <Alert severity="error">
+          대시보드 데이터를 불러올 수 없습니다.
         </Alert>
       </Box>
     );
@@ -333,168 +111,301 @@ const KnowledgeDashboard: React.FC = () => {
 
   return (
     <Box sx={{ p: 3 }}>
-      {/* [advice from AI] 페이지 헤더 */}
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 600 }}>
-          지식자원 카탈로그 대시보드
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          지식 자산을 등록, 검색, 승인하고 시스템 다이어그램을 관리합니다.
-        </Typography>
-      </Box>
+      {/* [advice from AI] 헤더 */}
+      <Typography variant="h4" gutterBottom>
+        지식자원 대시보드
+      </Typography>
+      <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+        지식 자산의 현황과 활용도를 한눈에 확인하세요
+      </Typography>
 
-      {/* [advice from AI] 통합 지식 검색 섹션 */}
-      <Card sx={{ mb: 4 }}>
-        <CardContent>
-          <Typography variant="h5" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <SearchIcon />
-            통합 지식 검색
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            RickySon의 {(stats?.totalDesignAssets || 0) + (stats?.totalCodeComponents || 0) + (stats?.totalDocuments || 0)}개 지식 자산에서 검색하세요
-          </Typography>
-          <KnowledgeSearch />
-        </CardContent>
-      </Card>
-
-      {/* [advice from AI] Phase 4: 상단 작은 통계 카드들 제거 - 아래 큰 카드들로 통합 */}
-
-      {/* [advice from AI] 지식자원 카탈로그 메뉴 그리드 - 3x2 배치 */}
-      <Grid container spacing={4} sx={{ mb: 4 }}>
-        {/* 전체 6개 카드를 3x2로 배치 */}
-        {catalogItems.map((item, index) => (
-          <Grid item xs={12} sm={6} md={4} key={index}>
-            <Card 
-              sx={{ 
-                height: '200px',
-                cursor: 'pointer',
-                transition: 'transform 0.2s, box-shadow 0.2s',
-                '&:hover': {
-                  transform: 'translateY(-4px)',
-                  boxShadow: 6
-                }
-              }}
-              onClick={() => navigate(item.path)}
-            >
-              <CardContent sx={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                <Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                    <Box 
-                      sx={{ 
-                        p: 1.5, 
-                        borderRadius: 2, 
-                        bgcolor: `${item.color}20`,
-                        color: item.color,
-                        mr: 2
-                      }}
-                    >
-                      {item.icon}
-                    </Box>
-                    <Typography variant="h5" sx={{ fontWeight: 600, color: item.color }}>
-                      {item.stats || 0}
-                    </Typography>
-                  </Box>
-                  <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
-                    {item.title}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {item.description}
-                  </Typography>
-                </Box>
-                <Box sx={{ mt: 2, textAlign: 'center' }}>
-                  <Typography variant="caption" color="primary.main" sx={{ fontWeight: 600 }}>
-                    관리
-                  </Typography>
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-        ))}
-      </Grid>
-
-      {/* [advice from AI] 최근 활동 */}
       <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
-          <Card>
+        {/* [advice from AI] 주요 메트릭 카드들 */}
+        <Grid item xs={12} sm={6} md={3}>
+          <Card 
+            sx={{ 
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              '&:hover': {
+                transform: 'translateY(-2px)',
+                boxShadow: 4
+              }
+            }}
+            onClick={() => navigate('/knowledge')}
+          >
             <CardContent>
-              <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
-                최근 지식 활동
+              <Typography color="text.secondary" gutterBottom>
+                총 자산 수
               </Typography>
-              <List>
-                {recentActivities.map((activity, index) => (
-                  <React.Fragment key={index}>
-                    <ListItem disablePadding>
-                      <ListItemIcon>
-                        <Box 
-                          sx={{ 
-                            p: 0.5, 
-                            borderRadius: 1, 
-                            bgcolor: `${getActivityColor(activity.type)}20`,
-                            color: getActivityColor(activity.type)
-                          }}
-                        >
-                          {getActivityIcon(activity.type)}
-                        </Box>
-                      </ListItemIcon>
-                      <ListItemText
-                        primary={activity.title}
-                        secondary={`${activity.user} • ${activity.time}`}
-                        secondaryTypographyProps={{
-                          sx: { 
-                            display: 'flex', 
-                            justifyContent: 'space-between',
-                            alignItems: 'center'
-                          }
-                        }}
-                      />
-                    </ListItem>
-                    {index < recentActivities.length - 1 && <Divider />}
-                  </React.Fragment>
-                ))}
-              </List>
+              <Typography variant="h4" color="primary">
+                {metrics.totalAssets.toLocaleString()}
+              </Typography>
             </CardContent>
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={6}>
+        <Grid item xs={12} sm={6} md={3}>
           <Card>
             <CardContent>
-              <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
-                지식 관리 현황
+              <Typography color="text.secondary" gutterBottom>
+                승인 대기
               </Typography>
-              <List>
-                <ListItem>
-                  <ListItemText
-                    primary="전체 지식 자산"
-                    secondary={`${(stats?.totalDesignAssets || 0) + (stats?.totalCodeComponents || 0) + (stats?.totalDocuments || 0)}개`}
-                  />
-                </ListItem>
-                <Divider />
-                <ListItem>
-                  <ListItemText
-                    primary="이번 주 등록"
-                    secondary={`${stats?.recentUploads || 0}개`}
-                  />
-                </ListItem>
-                <Divider />
-                <ListItem>
-                  <ListItemText
-                    primary="승인 완료율"
-                    secondary="94.2%"
-                  />
-                </ListItem>
-                <Divider />
-                <ListItem>
-                  <ListItemText
-                    primary="평균 검토 시간"
-                    secondary="2.3일"
-                  />
-                </ListItem>
-              </List>
+              <Typography variant="h4" color="warning.main">
+                {metrics.pendingApprovals}
+              </Typography>
             </CardContent>
           </Card>
         </Grid>
+
+        <Grid item xs={12} sm={6} md={3}>
+          <Card>
+            <CardContent>
+              <Typography color="text.secondary" gutterBottom>
+                활성 기여자
+              </Typography>
+              <Typography variant="h4" color="success.main">
+                {metrics.activeContributors}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={3}>
+          <Card>
+            <CardContent>
+              <Typography color="text.secondary" gutterBottom>
+                월간 성장률
+              </Typography>
+              <Typography variant="h4" color="info.main">
+                +{metrics.monthlyGrowth}%
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* [advice from AI] 카테고리별 현황 */}
+        <Grid item xs={12} md={6}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              카테고리별 현황
+            </Typography>
+            <List dense>
+              <ListItem 
+                button 
+                onClick={() => navigate('/knowledge/domains')}
+                sx={{ 
+                  borderRadius: 1,
+                  '&:hover': { backgroundColor: 'action.hover' }
+                }}
+              >
+                <ListItemText primary="도메인" />
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <LinearProgress 
+                    variant="determinate" 
+                    value={(metrics.categoryBreakdown.domains / metrics.totalAssets) * 100}
+                    sx={{ width: 100 }}
+                  />
+                  <Typography variant="body2">
+                    {metrics.categoryBreakdown.domains}
+                  </Typography>
+                </Box>
+              </ListItem>
+              <ListItem 
+                button 
+                onClick={() => navigate('/knowledge/projects')}
+                sx={{ 
+                  borderRadius: 1,
+                  '&:hover': { backgroundColor: 'action.hover' }
+                }}
+              >
+                <ListItemText primary="프로젝트" />
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <LinearProgress 
+                    variant="determinate" 
+                    value={(metrics.categoryBreakdown.projects / metrics.totalAssets) * 100}
+                    sx={{ width: 100 }}
+                    color="secondary"
+                  />
+                  <Typography variant="body2">
+                    {metrics.categoryBreakdown.projects}
+                  </Typography>
+                </Box>
+              </ListItem>
+              <ListItem 
+                button 
+                onClick={() => navigate('/knowledge/systems')}
+                sx={{ 
+                  borderRadius: 1,
+                  '&:hover': { backgroundColor: 'action.hover' }
+                }}
+              >
+                <ListItemText primary="시스템" />
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <LinearProgress 
+                    variant="determinate" 
+                    value={(metrics.categoryBreakdown.systems / metrics.totalAssets) * 100}
+                    sx={{ width: 100 }}
+                    color="success"
+                  />
+                  <Typography variant="body2">
+                    {metrics.categoryBreakdown.systems}
+                  </Typography>
+                </Box>
+              </ListItem>
+              <ListItem 
+                button 
+                onClick={() => navigate('/knowledge/code')}
+                sx={{ 
+                  borderRadius: 1,
+                  '&:hover': { backgroundColor: 'action.hover' }
+                }}
+              >
+                <ListItemText primary="코드 컴포넌트" />
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <LinearProgress 
+                    variant="determinate" 
+                    value={(metrics.categoryBreakdown.code / metrics.totalAssets) * 100}
+                    sx={{ width: 100 }}
+                    color="info"
+                  />
+                  <Typography variant="body2">
+                    {metrics.categoryBreakdown.code}
+                  </Typography>
+                </Box>
+              </ListItem>
+              <ListItem 
+                button 
+                onClick={() => navigate('/knowledge/design')}
+                sx={{ 
+                  borderRadius: 1,
+                  '&:hover': { backgroundColor: 'action.hover' }
+                }}
+              >
+                <ListItemText primary="디자인 자산" />
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <LinearProgress 
+                    variant="determinate" 
+                    value={(metrics.categoryBreakdown.design / metrics.totalAssets) * 100}
+                    sx={{ width: 100 }}
+                    color="warning"
+                  />
+                  <Typography variant="body2">
+                    {metrics.categoryBreakdown.design}
+                  </Typography>
+                </Box>
+              </ListItem>
+              <ListItem 
+                button 
+                onClick={() => navigate('/knowledge/docs')}
+                sx={{ 
+                  borderRadius: 1,
+                  '&:hover': { backgroundColor: 'action.hover' }
+                }}
+              >
+                <ListItemText primary="문서/가이드" />
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <LinearProgress 
+                    variant="determinate" 
+                    value={(metrics.categoryBreakdown.documents / metrics.totalAssets) * 100}
+                    sx={{ width: 100 }}
+                  />
+                  <Typography variant="body2">
+                    {metrics.categoryBreakdown.documents}
+                  </Typography>
+                </Box>
+              </ListItem>
+            </List>
+          </Paper>
+        </Grid>
+
+        {/* [advice from AI] 상위 기여자 */}
+        <Grid item xs={12} md={6}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              상위 기여자
+            </Typography>
+            <List dense>
+              {metrics.topContributors.map((contributor, index) => (
+                <ListItem key={contributor.name}>
+                  <ListItemIcon>
+                    <Chip 
+                      label={index + 1} 
+                      size="small" 
+                      color={index === 0 ? 'primary' : index === 1 ? 'secondary' : 'default'}
+                      sx={{ width: 24, height: 24 }}
+                    />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={contributor.name}
+                    secondary={
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Chip 
+                          label={contributor.category} 
+                          size="small" 
+                          variant="outlined"
+                          sx={{ height: 18, fontSize: '0.7rem' }}
+                        />
+                        <Typography variant="caption">
+                          {contributor.contributions}개 기여
+                        </Typography>
+                      </Box>
+                    }
+                  />
+                </ListItem>
+              ))}
+            </List>
+          </Paper>
+        </Grid>
+
+        {/* [advice from AI] 월별 활동 트렌드 */}
+        <Grid item xs={12}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              월별 활동 트렌드
+            </Typography>
+            <Grid container spacing={2}>
+              {metrics.recentTrends.map((trend) => (
+                <Grid item xs={12} sm={6} md={2.4} key={trend.period}>
+                  <Card variant="outlined">
+                    <CardContent sx={{ textAlign: 'center' }}>
+                      <Typography variant="h6" gutterBottom>
+                        {trend.period}
+                      </Typography>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <Typography variant="body2">생성:</Typography>
+                          <Typography variant="body2" color="primary">
+                            {trend.created}
+                          </Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <Typography variant="body2">수정:</Typography>
+                          <Typography variant="body2" color="secondary">
+                            {trend.updated}
+                          </Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <Typography variant="body2">승인:</Typography>
+                          <Typography variant="body2" color="success.main">
+                            {trend.approved}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+          </Paper>
+        </Grid>
       </Grid>
+
+      {/* [advice from AI] 권한 관련 안내 */}
+      {!permissions.canViewCatalog && (
+        <Alert severity="warning" sx={{ mt: 3 }}>
+          일부 데이터에 접근할 권한이 없을 수 있습니다.
+        </Alert>
+      )}
     </Box>
   );
 };

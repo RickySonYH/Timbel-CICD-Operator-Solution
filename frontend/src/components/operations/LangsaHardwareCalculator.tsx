@@ -23,6 +23,7 @@ interface HardwareResult {
   memory_gb: number;
   storage_gb: number;
   gpu_count: number;
+  gpu_specs?: any[]; // Optional gpu_specs 필드 추가
   estimated_cost: {
     aws_monthly_usd: number;
     ncp_monthly_krw: number;

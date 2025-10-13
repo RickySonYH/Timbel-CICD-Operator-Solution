@@ -64,6 +64,7 @@ interface NotificationItem {
   content: string;
   priority: 'low' | 'medium' | 'high' | 'urgent';
   type: string;
+  message_type?: string; // Optional message_type 필드 추가
   is_read: boolean;
   created_at: string;
   metadata?: any;
@@ -111,7 +112,7 @@ const MessageCenter: React.FC = () => {
   const loadNotificationData = async () => {
     if (!user || !token) {
       console.log('❌ 사용자 또는 토큰이 없음:', { user: !!user, token: !!token });
-      return;
+      return null;
     }
 
     try {
@@ -286,7 +287,7 @@ const MessageCenter: React.FC = () => {
       const messageType = (notification as any).message_type || notification.type;
       if (messageType === 'deletion_approval') {
         // 삭제 승인 요청인 경우 - 이미 승인/거부 버튼이 있으므로 추가 처리 없음
-        return;
+        return null;
       } else if (messageType === 'project_created') {
         // 프로젝트 생성 알림인 경우 프로젝트 관리 페이지로 이동
         navigate('/admin/approvals');
@@ -343,11 +344,11 @@ const MessageCenter: React.FC = () => {
   // [advice from AI] 우선순위별 아이콘 반환
   const getPriorityIcon = (priority: string) => {
     switch (priority) {
-      case 'urgent': return <ErrorIcon />;
-      case 'high': return <WarningIcon />;
-      case 'medium': return <InfoIcon />;
-      case 'low': return <CheckIcon />;
-      default: return <NotificationsIcon />;
+      case 'urgent': return null;
+      case 'high': return null;
+      case 'medium': return null;
+      case 'low': return null;
+      default: return null;
     }
   };
 
@@ -391,7 +392,7 @@ const MessageCenter: React.FC = () => {
   const handleCreateMessage = async () => {
     if (!messageForm.title.trim() || !messageForm.message.trim() || messageForm.recipients.length === 0) {
       alert('제목, 내용, 수신자를 모두 입력해주세요.');
-      return;
+      return null;
     }
 
     try {
@@ -454,7 +455,6 @@ const MessageCenter: React.FC = () => {
           <Button
             variant="contained"
             onClick={() => navigate('/login')}
-            startIcon={<NotificationsIcon />}
           >
             로그인하기
           </Button>

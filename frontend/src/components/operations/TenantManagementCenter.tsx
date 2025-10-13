@@ -142,11 +142,11 @@ const TenantManagementCenter: React.FC = () => {
 
   // [advice from AI] 탭 구성 (하드웨어 계산기 추가)
   const tabs = [
-    { label: '대시보드', icon: <DashboardIcon />, component: 'dashboard' },
-    { label: '배포 마법사', icon: <WizardIcon />, component: 'wizard' },
-    { label: '테넌트 목록', icon: <ListIcon />, component: 'list' },
-    { label: '하드웨어 계산기', icon: <CalculateIcon />, component: 'hardware' },
-    { label: '관리 도구', icon: <SettingsIcon />, component: 'management' }
+    { label: '대시보드',  component: 'dashboard' },
+    { label: '배포 마법사',  component: 'wizard' },
+    { label: '테넌트 목록',  component: 'list' },
+    { label: '하드웨어 계산기',  component: 'hardware' },
+    { label: '관리 도구',  component: 'management' }
   ];
 
   // [advice from AI] PostgreSQL에서 테넌트 목록 및 통계 로드
@@ -179,7 +179,7 @@ const TenantManagementCenter: React.FC = () => {
       if (tenantsResponse.status === 401) {
         console.log('❌ JWT 인증 오류 (401) - 로그인 페이지로 리다이렉트');
         navigate('/login');
-        return;
+        return null;
       }
 
       if (tenantsResponse.ok) {
@@ -374,7 +374,7 @@ const TenantManagementCenter: React.FC = () => {
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <DeployIcon color="primary" sx={{ fontSize: 40 }} />
+                null
                 <Box>
                   <Typography variant="h4" sx={{ fontWeight: 600 }}>
                     {dashboardStats.totalTenants}
@@ -392,7 +392,7 @@ const TenantManagementCenter: React.FC = () => {
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <SettingsIcon color="success" sx={{ fontSize: 40 }} />
+                null
                 <Box>
                   <Typography variant="h4" sx={{ fontWeight: 600 }}>
                     {dashboardStats.totalServices}
@@ -410,7 +410,7 @@ const TenantManagementCenter: React.FC = () => {
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <SpeedIcon color="info" sx={{ fontSize: 40 }} />
+                null
                 <Box>
                   <Typography variant="h4" sx={{ fontWeight: 600 }}>
                     {dashboardStats.totalDeployments}
@@ -550,7 +550,6 @@ const TenantManagementCenter: React.FC = () => {
         <Box sx={{ display: 'flex', gap: 2 }}>
           <Button
             variant="contained"
-            startIcon={<AddIcon />}
             onClick={() => setActiveTab(1)}
             sx={{ 
               background: 'linear-gradient(45deg, #4CAF50 30%, #8BC34A 90%)',
@@ -563,7 +562,6 @@ const TenantManagementCenter: React.FC = () => {
           </Button>
           <Button
             variant="outlined"
-            startIcon={<RefreshIcon />}
             onClick={loadData}
             disabled={isLoading}
           >
@@ -632,7 +630,7 @@ const TenantManagementCenter: React.FC = () => {
                       리소스 사용률
                     </Typography>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                      <SpeedIcon fontSize="small" color="action" />
+                      null
                       <LinearProgress
                         variant="determinate"
                         value={(parseFloat(tenant.resources.usedCpu) / parseFloat(tenant.resources.totalCpu)) * 100}
@@ -643,7 +641,7 @@ const TenantManagementCenter: React.FC = () => {
                       </Typography>
                     </Box>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <MemoryIcon fontSize="small" color="action" />
+                      null
                       <LinearProgress
                         variant="determinate"
                         value={(parseFloat(tenant.resources.usedMemory) / parseFloat(tenant.resources.totalMemory)) * 100}
@@ -685,7 +683,7 @@ const TenantManagementCenter: React.FC = () => {
                           }}
                           disabled={tenant.status === 'deploying'}
                         >
-                          {tenant.status === 'running' ? <StopIcon /> : <StartIcon />}
+                          {tenant.status === 'running' ? null : null}
                         </IconButton>
                       </Tooltip>
                       
@@ -697,7 +695,7 @@ const TenantManagementCenter: React.FC = () => {
                             setSelectedTenant(tenant);
                           }}
                         >
-                          <ViewIcon />
+                          
                         </IconButton>
                       </Tooltip>
                       
@@ -710,7 +708,7 @@ const TenantManagementCenter: React.FC = () => {
                             navigate(`/operations/monitoring?tenant=${tenant.id}`);
                           }}
                         >
-                          <MonitorIcon />
+                          
                         </IconButton>
                       </Tooltip>
                     </Box>
@@ -725,7 +723,7 @@ const TenantManagementCenter: React.FC = () => {
                           setDeleteConfirmOpen(true);
                         }}
                       >
-                        <DeleteIcon />
+                        
                       </IconButton>
                     </Tooltip>
                   </Box>
@@ -788,14 +786,14 @@ const TenantManagementCenter: React.FC = () => {
                 <Grid container spacing={2}>
                   <Grid item xs={6}>
                     <Box textAlign="center" sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                      <SpeedIcon color="primary" sx={{ fontSize: 30 }} />
+                      null
                       <Typography variant="h6">{selectedTenant.resources.usedCpu}/{selectedTenant.resources.totalCpu}</Typography>
                       <Typography variant="caption">CPU Core</Typography>
                     </Box>
                   </Grid>
                   <Grid item xs={6}>
                     <Box textAlign="center" sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                      <MemoryIcon color="primary" sx={{ fontSize: 30 }} />
+                      null
                       <Typography variant="h6">{selectedTenant.resources.usedMemory}/{selectedTenant.resources.totalMemory}</Typography>
                       <Typography variant="caption">Memory GB</Typography>
                     </Box>
@@ -857,8 +855,7 @@ const TenantManagementCenter: React.FC = () => {
               </Typography>
               <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
                 <Button 
-                  variant="outlined" 
-                  startIcon={<StartIcon />}
+                  variant="outlined"
                   onClick={async () => {
                     const runningCount = tenants.filter(t => t.status === 'running').length;
                     alert(`✅ ${tenants.length - runningCount}개 테넌트 시작 완료`);
@@ -868,8 +865,7 @@ const TenantManagementCenter: React.FC = () => {
                   전체 시작
                 </Button>
                 <Button 
-                  variant="outlined" 
-                  startIcon={<StopIcon />}
+                  variant="outlined"
                   onClick={async () => {
                     const runningCount = tenants.filter(t => t.status === 'running').length;
                     alert(`⏹️ ${runningCount}개 테넌트 중지 완료`);
@@ -879,8 +875,7 @@ const TenantManagementCenter: React.FC = () => {
                   전체 중지
                 </Button>
                 <Button 
-                  variant="outlined" 
-                  startIcon={<RefreshIcon />}
+                  variant="outlined"
                   onClick={async () => {
                     alert('🔄 모든 테넌트 재시작 중...');
                     await loadData();
@@ -1095,9 +1090,7 @@ const TenantManagementCenter: React.FC = () => {
           {tabs.map((tab, index) => (
             <Tab 
               key={index}
-              label={tab.label} 
-              icon={tab.icon}
-              iconPosition="start"
+              label={tab.label}
             />
           ))}
         </Tabs>

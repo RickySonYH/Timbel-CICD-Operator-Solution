@@ -547,16 +547,16 @@ const ServiceConfiguration: React.FC = () => {
   // [advice from AI] 서비스 타입별 아이콘
   const getServiceIcon = (type: string) => {
     const icons = {
-      '콜봇': <SpeedIcon />,
-      '챗봇': <SpeedIcon />,
-      '어드바이저': <SecurityIcon />,
-      'STT': <MemoryIcon />,
-      'TTS': <MemoryIcon />,
-      'TA': <StorageIcon />,
-      'QA': <CheckIcon />,
-      '모니터링': <InfoIcon />
+      '콜봇': null,
+      '챗봇': null,
+      '어드바이저': null,
+      'STT': null,
+      'TTS': null,
+      'TA': null,
+      'QA': null,
+      '모니터링': null
     };
-    return icons[type as keyof typeof icons] || <SettingsIcon />;
+    return icons[type as keyof typeof icons] || null;
   };
 
   return (
@@ -633,7 +633,7 @@ const ServiceConfiguration: React.FC = () => {
                   <TableCell>
                     <Box sx={{ display: 'flex', gap: 0.5 }}>
                       {service.security.ssl && <CheckIcon fontSize="small" color="success" />}
-                      {service.security.authentication && <SecurityIcon fontSize="small" color="primary" />}
+                      {service.security.authentication && null}
                     </Box>
                   </TableCell>
                   <TableCell>
@@ -645,7 +645,7 @@ const ServiceConfiguration: React.FC = () => {
                           setConfigDialog(true);
                         }}
                       >
-                        <SettingsIcon fontSize="small" />
+                        null
                       </IconButton>
                       <IconButton 
                         size="small" 
@@ -858,7 +858,7 @@ const ServiceConfiguration: React.FC = () => {
           <Button onClick={() => setConfigDialog(false)}>
             닫기
           </Button>
-          <Button variant="contained" startIcon={<EditIcon />}>
+          <Button variant="contained">
             편집
           </Button>
         </DialogActions>

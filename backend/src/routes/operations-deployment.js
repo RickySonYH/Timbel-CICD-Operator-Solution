@@ -514,7 +514,7 @@ router.get('/project-info/:projectId', jwtAuth.verifyToken, jwtAuth.requireRole(
           name: project.name,
           description: project.description,
           repository_url: project.repository_url || 'https://github.com/RickySonYH/ecp-ai-k8s-orchestrator',
-          pe_name: project.pe_name || 'PE (프로젝트 엔지니어)',
+          pe_name: project.pe_name || '운영팀 처리',
           development_period: `${Math.round(project.development_days) || 15}일`,
           created_date: project.created_at,
           status: project.project_status

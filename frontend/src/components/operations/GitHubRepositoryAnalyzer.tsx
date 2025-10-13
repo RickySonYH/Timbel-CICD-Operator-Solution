@@ -120,12 +120,12 @@ const GitHubRepositoryAnalyzer: React.FC<GitHubRepositoryAnalyzerProps> = ({
   const analyzeRepository = async () => {
     if (!repositoryUrl.trim()) {
       setError('GitHub 저장소 URL을 입력해주세요.');
-      return;
+      return null;
     }
 
     if (!validateGitHubUrl(repositoryUrl)) {
       setError('올바른 GitHub 저장소 URL을 입력해주세요. (예: https://github.com/owner/repo)');
-      return;
+      return null;
     }
 
     setLoading(true);
@@ -166,7 +166,7 @@ const GitHubRepositoryAnalyzer: React.FC<GitHubRepositoryAnalyzerProps> = ({
       case 'high': return 'error';
       case 'medium': return 'warning';
       case 'low': return 'info';
-      default: return 'default';
+      default: return 'info';
     }
   };
 

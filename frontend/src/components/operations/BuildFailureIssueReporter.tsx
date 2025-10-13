@@ -334,7 +334,7 @@ ${analysis.suggestedSolution}
 
   // [advice from AI] PE 알림 전송
   const sendPENotification = async (pe: PEAssignment | undefined, report: IssueReport, failure: BuildFailure) => {
-    if (!pe) return;
+    if (!pe) return null;
 
     try {
       await fetch('/api/notifications/send', {
@@ -359,7 +359,7 @@ ${analysis.suggestedSolution}
 
   // [advice from AI] 수동 이슈 생성
   const handleCreateManualIssue = async () => {
-    if (!selectedFailure) return;
+    if (!selectedFailure) return null;
 
     try {
       setLoading(true);
@@ -416,7 +416,7 @@ ${analysis.suggestedSolution}
       case 'in_progress': return 'warning';
       case 'resolved': return 'success';
       case 'closed': return 'default';
-      default: return 'default';
+      default: return 'info';
     }
   };
 
@@ -427,7 +427,7 @@ ${analysis.suggestedSolution}
       case 'high': return 'warning';
       case 'medium': return 'info';
       case 'low': return 'success';
-      default: return 'default';
+      default: return 'info';
     }
   };
 
@@ -451,7 +451,6 @@ ${analysis.suggestedSolution}
               <Typography variant="h6">빌드 실패 목록</Typography>
               <Button
                 variant="outlined"
-                startIcon={<RefreshIcon />}
                 onClick={fetchBuildFailures}
                 disabled={loading}
               >
@@ -501,7 +500,7 @@ ${analysis.suggestedSolution}
                             onClick={() => createAutomaticIssue(failure)}
                             disabled={loading}
                           >
-                            <BugReportIcon />
+                            
                           </IconButton>
                         </Tooltip>
                         <Tooltip title="수동 이슈 생성">
@@ -521,7 +520,7 @@ ${analysis.suggestedSolution}
                               setCreateIssueDialog(true);
                             }}
                           >
-                            <AssignmentIcon />
+                            
                           </IconButton>
                         </Tooltip>
                         <Tooltip title="로그 보기">
@@ -530,7 +529,7 @@ ${analysis.suggestedSolution}
                             href={failure.logUrl}
                             target="_blank"
                           >
-                            <VisibilityIcon />
+                            
                           </IconButton>
                         </Tooltip>
                       </TableCell>

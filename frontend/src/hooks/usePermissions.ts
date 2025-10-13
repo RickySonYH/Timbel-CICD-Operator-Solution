@@ -2,19 +2,19 @@
 import { useJwtAuthStore } from '../store/jwtAuthStore';
 
 export interface UserPermissions {
-  // 개발/등록 권한 (Admin, PO, PE)
+  // 개발/등록 권한 (Admin, Operations)
   canManageDomains: boolean;
   canManageSystems: boolean;
   canManageCodeComponents: boolean;
   canManageDesignAssets: boolean;
   canManageDocuments: boolean;
   
-  // 승인 권한 (Admin, QA)
+  // 승인 권한 (Admin)
   canApprove: boolean;
   canViewApprovals: boolean;
   canManageApprovals: boolean;
   
-  // 배포/CI/CD 권한 (Admin, Ops)
+  // 배포/CI/CD 권한 (Admin, Operations)
   canManageDeployment: boolean;
   canManageCICD: boolean;
   canViewDeploymentLogs: boolean;
@@ -29,7 +29,7 @@ export interface UserPermissions {
   canViewSystemAdmin: boolean;
   canManageUsers: boolean;
   
-  // 자동 등록 권한 (Admin, PO, PE)
+  // 자동 등록 권한 (Admin, Operations)
   canUseAutoRegistration: boolean;
 }
 
@@ -42,35 +42,26 @@ export const usePermissions = (): UserPermissions => {
   // [advice from AI] 관리자 권한 (Executive, Admin)
   const isAdmin = roleType === 'admin' || roleType === 'executive' || permissionLevel === 0;
   
-  // [advice from AI] PO 권한 (프로젝트 관리)
-  const isPO = roleType === 'po' || permissionLevel === 1;
-  
-  // [advice from AI] QA 권한 (품질 관리)
-  const isQA = roleType === 'qa' || permissionLevel === 3;
-  
-  // [advice from AI] PE 권한 (개발자)
-  const isPE = roleType === 'pe' || permissionLevel === 2;
-  
   // [advice from AI] 운영팀 권한
   const isOps = roleType === 'operations' || permissionLevel === 4;
   
-  // [advice from AI] 관리 권한이 있는 역할 (Admin, PO, PE) - QA는 승인만
-  const canManage = isAdmin || isPO || isPE;
+  // [advice from AI] 관리 권한이 있는 역할 (Admin, Operations)
+  const canManage = isAdmin || isOps;
   
   return {
-    // 개발/등록 권한 - Admin, PO, PE만 가능
+    // 개발/등록 권한 - Admin, Operations만 가능
     canManageDomains: canManage,
     canManageSystems: canManage,
     canManageCodeComponents: canManage,
     canManageDesignAssets: canManage,
     canManageDocuments: canManage,
     
-    // 승인 권한 - Admin, QA만 가능 (QA는 승인 전문)
-    canApprove: isAdmin || isQA,
-    canViewApprovals: isAdmin || isPO || isQA || isPE, // PE는 자신의 승인 상태 조회 가능
-    canManageApprovals: isAdmin, // 승인 관리는 Admin만
+    // 승인 권한 - Admin만 가능
+    canApprove: isAdmin,
+    canViewApprovals: isAdmin,
+    canManageApprovals: isAdmin,
     
-    // 배포/CI/CD 권한 - Admin, Ops만 가능 (Ops는 배포 전문)
+    // 배포/CI/CD 권한 - Admin, Operations만 가능
     canManageDeployment: isAdmin || isOps,
     canManageCICD: isAdmin || isOps,
     canViewDeploymentLogs: isAdmin || isOps,
@@ -85,7 +76,7 @@ export const usePermissions = (): UserPermissions => {
     canViewSystemAdmin: isAdmin,
     canManageUsers: isAdmin,
     
-    // 자동 등록 권한 - Admin, PO, PE만 가능
+    // 자동 등록 권한 - Admin, Operations만 가능
     canUseAutoRegistration: canManage
   };
 };
@@ -110,9 +101,6 @@ export const useRoleBasedVisibility = () => {
       switch (user?.roleType) {
         case 'executive': return '최고 관리자';
         case 'admin': return '시스템 관리자';
-        case 'po': return 'PO (프로젝트 관리자)';
-        case 'qa': return 'QA (품질 관리자)';
-        case 'pe': return 'PE (개발자)';
         case 'operations': return '운영팀';
         default: return '사용자';
       }

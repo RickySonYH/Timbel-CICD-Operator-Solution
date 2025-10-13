@@ -189,7 +189,7 @@ router.get('/', jwtAuth.verifyToken, jwtAuth.requireRole(['admin', 'executive', 
 });
 
 // [advice from AI] 특정 배포 요청 상세 조회
-router.get('/:requestId', jwtAuth.verifyToken, jwtAuth.requireRole(['admin', 'executive', 'operations', 'po']), async (req, res) => {
+router.get('/:requestId', jwtAuth.verifyToken, jwtAuth.requireRole(['admin', 'executive', 'operations']), async (req, res) => {
   const client = await pool.connect();
   const { requestId } = req.params;
   

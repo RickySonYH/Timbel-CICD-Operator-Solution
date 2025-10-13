@@ -1,0 +1,94 @@
+# [advice from AI] Timbel CICD Operator Solution - Kubernetes Services
+# Docker Compose 서비스들을 Kubernetes에서 접근할 수 있도록 ExternalName Service 정의
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: default
+spec:
+  type: ExternalName
+  externalName: frontend
+  ports:
+  - port: 3000
+    targetPort: 3000
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: default
+spec:
+  type: ExternalName
+  externalName: backend
+  ports:
+  - port: 3001
+    targetPort: 3001
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jenkins
+  namespace: default
+spec:
+  type: ExternalName
+  externalName: jenkins
+  ports:
+  - port: 8080
+    targetPort: 8080
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nexus
+  namespace: default
+spec:
+  type: ExternalName
+  externalName: nexus
+  ports:
+  - port: 8081
+    targetPort: 8081
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: argocd-server
+  namespace: default
+spec:
+  type: ExternalName
+  externalName: argocd-server
+  ports:
+  - port: 8080
+    targetPort: 8080
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: default
+spec:
+  type: ExternalName
+  externalName: grafana
+  ports:
+  - port: 3000
+    targetPort: 3000
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: default
+spec:
+  type: ExternalName
+  externalName: prometheus
+  ports:
+  - port: 9090
+    targetPort: 9090
+

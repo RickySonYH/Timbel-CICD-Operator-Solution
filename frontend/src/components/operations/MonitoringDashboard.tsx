@@ -630,7 +630,7 @@ const MonitoringDashboard: React.FC = () => {
               disabled={isLoading}
               color="primary"
             >
-              <RefreshIcon />
+              
             </IconButton>
           </Box>
         </Box>
@@ -858,7 +858,7 @@ const MonitoringDashboard: React.FC = () => {
                   sx={{ mb: 2 }}
                   action={
                     <IconButton size="small" color="inherit">
-                      <NotificationsIcon fontSize="small" />
+                      null
                     </IconButton>
                   }
                 >

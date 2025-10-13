@@ -9,16 +9,6 @@ import {
   FormControl, InputLabel, Select, MenuItem, Switch, FormControlLabel,
   Stepper, Step, StepLabel, StepContent
 } from '@mui/material';
-import {
-  Add as AddIcon,
-  Build as BuildIcon,
-  GitHub as GitHubIcon,
-  Settings as SettingsIcon,
-  PlayArrow as PlayIcon,
-  CheckCircle as CheckCircleIcon,
-  Error as ErrorIcon,
-  Webhook as WebhookIcon
-} from '@mui/icons-material';
 import { useJwtAuthStore } from '../../store/jwtAuthStore';
 
 interface TabPanelProps {
@@ -73,7 +63,28 @@ const PipelineConfigCenter: React.FC = () => {
     try {
       setLoading(true);
       
-      // 샘플 데이터 (실제로는 API 호출)
+      // 실제 API 데이터 로드
+      const { token: authToken } = useJwtAuthStore.getState();
+      const [templatesRes, jobsRes] = await Promise.all([
+        fetch('http://localhost:3001/api/pipeline-templates/applications', {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        }),
+        fetch('http://localhost:3001/api/jenkins/jobs', {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        })
+      ]);
+
+      if (templatesRes.ok) {
+        const templatesData = await templatesRes.json();
+        setPipelines(templatesData.applications || []);
+      }
+
+      if (jobsRes.ok) {
+        const jobsData = await jobsRes.json();
+        setJenkinsJobs(jobsData.jobs || []);
+      }
+
+      // 백업 샘플 데이터
       setPipelines([
         {
           id: '1',
@@ -237,7 +248,6 @@ const PipelineConfigCenter: React.FC = () => {
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 3 }}>
         <Button
           variant="contained"
-          startIcon={<AddIcon />}
           onClick={() => setWizardOpen(true)}
           size="large"
         >
@@ -267,7 +277,7 @@ const PipelineConfigCenter: React.FC = () => {
                         {pipeline.project_name}
                       </Typography>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                        <GitHubIcon fontSize="small" />
+                        null
                         <Typography variant="body2" color="text.secondary">
                           {pipeline.repository_url}
                         </Typography>
@@ -300,13 +310,13 @@ const PipelineConfigCenter: React.FC = () => {
                   />
 
                   <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Button variant="outlined" size="small" startIcon={<PlayIcon />}>
+                    <Button variant="outlined" size="small">
                       빌드 실행
                     </Button>
-                    <Button variant="outlined" size="small" startIcon={<SettingsIcon />}>
+                    <Button variant="outlined" size="small">
                       설정
                     </Button>
-                    <Button variant="outlined" size="small" startIcon={<WebhookIcon />}>
+                    <Button variant="outlined" size="small">
                       Webhook 확인
                     </Button>
                   </Box>
@@ -336,7 +346,7 @@ const PipelineConfigCenter: React.FC = () => {
                 <TableRow key={index}>
                   <TableCell>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <BuildIcon fontSize="small" />
+                      null
                       {job.name}
                     </Box>
                   </TableCell>
@@ -351,7 +361,7 @@ const PipelineConfigCenter: React.FC = () => {
                   <TableCell>{job.duration}</TableCell>
                   <TableCell>{new Date(job.last_build).toLocaleString()}</TableCell>
                   <TableCell>
-                    <Button variant="outlined" size="small" startIcon={<PlayIcon />}>
+                    <Button variant="outlined" size="small">
                       실행
                     </Button>
                   </TableCell>
@@ -371,7 +381,7 @@ const PipelineConfigCenter: React.FC = () => {
                 <CardContent>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <WebhookIcon color="primary" />
+                      null
                       <Typography variant="h6" sx={{ fontWeight: 600 }}>
                         {webhook.repository}
                       </Typography>

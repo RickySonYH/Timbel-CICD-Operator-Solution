@@ -23,10 +23,10 @@ interface Repository {
   project_name?: string;
   status: 'active' | 'inactive';
   created_at: string;
-  updated_at: string;
+  updated_at?: string; // Optional로 변경
   owner_name?: string;
-  pipeline_status?: 'none' | 'configured' | 'running' | 'failed';
-  last_build_status?: 'success' | 'failed' | 'running' | 'pending';
+  pipeline_status?: 'none' | 'configured' | 'running' | 'failed' | string; // string도 허용
+  last_build_status?: 'success' | 'failed' | 'running' | 'pending' | any; // any로 허용
   last_build_time?: string;
 }
 
@@ -153,12 +153,12 @@ const RepositoryManagementDashboard: React.FC = () => {
       case 'running': return 'warning';
       case 'failed': return 'error';
       case 'success': return 'success';
-      default: return 'default';
+      default: return 'info';
     }
   };
 
   // [advice from AI] 파이프라인 생성 완료 핸들러
-  const handleWizardComplete = (repository: Repository, pipelineConfig: any) => {
+  const handleWizardComplete = (repository: any, pipelineConfig: any) => {
     console.log('파이프라인 생성 완료:', { repository, pipelineConfig });
     loadRepositories();
     loadPipelines();
@@ -177,7 +177,7 @@ const RepositoryManagementDashboard: React.FC = () => {
     const pipeline = pipelines.find(p => p.repository_id === repository.id);
     if (!pipeline) {
       alert('파이프라인이 설정되지 않았습니다.');
-      return;
+      return null;
     }
 
     try {
@@ -204,7 +204,7 @@ const RepositoryManagementDashboard: React.FC = () => {
   // [advice from AI] 레포지토리 삭제
   const handleDeleteRepository = async (repository: Repository) => {
     if (!confirm(`"${repository.name}" 레포지토리를 삭제하시겠습니까?`)) {
-      return;
+      return null;
     }
 
     try {

@@ -381,13 +381,13 @@ const InfrastructureManagement: React.FC = () => {
   // [advice from AI] 서비스 타입별 아이콘
   const getServiceIcon = (type: string) => {
     const icons = {
-      ingress: <NetworkIcon />,
-      'load-balancer': <NetworkIcon />,
-      storage: <StorageIcon />,
-      monitoring: <MonitorIcon />,
-      security: <ShieldIcon />
+      ingress: null,
+      'load-balancer': null,
+      storage: null,
+      monitoring: null,
+      security: null
     };
-    return icons[type as keyof typeof icons] || <SettingsIcon />;
+    return icons[type as keyof typeof icons] || null;
   };
 
   // [advice from AI] 알림 심각도별 색상
@@ -460,7 +460,6 @@ const InfrastructureManagement: React.FC = () => {
           </Typography>
           <Button
             variant="contained"
-            startIcon={<AddIcon />}
             onClick={() => setCreateDialogOpen(true)}
             sx={{ borderRadius: 2 }}
           >
@@ -499,7 +498,6 @@ const InfrastructureManagement: React.FC = () => {
                       label={infra.type || 'unknown'} 
                       color="primary"
                       size="small"
-                      icon={<CloudIcon />}
                     />
                   </TableCell>
                   <TableCell>
@@ -541,13 +539,13 @@ const InfrastructureManagement: React.FC = () => {
                         onClick={() => toggleInfrastructure(infra.id)}
                         color={infra.status === 'active' ? 'warning' : 'success'}
                       >
-                        {infra.status === 'active' ? <StopIcon fontSize="small" /> : <PlayIcon fontSize="small" />}
+                        {infra.status === 'active' ? null : null}
                       </IconButton>
                       <IconButton 
                         size="small" 
                         color="primary"
                       >
-                        <SettingsIcon fontSize="small" />
+                        null
                       </IconButton>
                       <IconButton 
                         size="small" 
@@ -763,15 +761,15 @@ const InfrastructureManagement: React.FC = () => {
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                         <Typography variant="body2">RBAC</Typography>
-                        <CheckCircleIcon color="success" />
+                        null
                       </Box>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                         <Typography variant="body2">Network Policy</Typography>
-                        <CheckCircleIcon color="success" />
+                        null
                       </Box>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                         <Typography variant="body2">Pod Security</Typography>
-                        <CheckCircleIcon color="success" />
+                        null
                       </Box>
                     </Box>
                   </Paper>

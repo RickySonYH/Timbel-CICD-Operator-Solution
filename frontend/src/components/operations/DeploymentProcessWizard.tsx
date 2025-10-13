@@ -175,7 +175,18 @@ const DeploymentProcessWizard: React.FC<WizardProps> = ({ open, onClose, selecte
   const [error, setError] = useState<string | null>(null);
   
   // [advice from AI] 서버 목록 상태
-  const [availableServers, setAvailableServers] = useState({
+  interface ServerInfo {
+    id: string;
+    server_name: string;
+    server_url: string;
+    server_type: string;
+  }
+
+  const [availableServers, setAvailableServers] = useState<{
+    jenkins: ServerInfo[];
+    nexus: ServerInfo[];
+    argocd: ServerInfo[];
+  }>({
     jenkins: [],
     nexus: [],
     argocd: []
@@ -188,7 +199,14 @@ const DeploymentProcessWizard: React.FC<WizardProps> = ({ open, onClose, selecte
     estimated_time: ''
   });
   
-  const [resourceData, setResourceData] = useState({
+  const [resourceData, setResourceData] = useState<{
+    cpu_cores: number;
+    memory_gb: number;
+    storage_gb: number;
+    gpu_specs: Array<GPUSpec & { quantity: number }>;
+    auto_scaling: boolean;
+    load_balancer: boolean;
+  }>({
     cpu_cores: 2,
     memory_gb: 4,
     storage_gb: 20,
@@ -274,9 +292,9 @@ const DeploymentProcessWizard: React.FC<WizardProps> = ({ open, onClose, selecte
         const servers = data.data || [];
         
         const groupedServers = {
-          jenkins: servers.filter(s => s.server_type === 'jenkins'),
-          nexus: servers.filter(s => s.server_type === 'nexus'),
-          argocd: servers.filter(s => s.server_type === 'argocd')
+          jenkins: servers.filter((s: any) => s.server_type === 'jenkins'),
+          nexus: servers.filter((s: any) => s.server_type === 'nexus'),
+          argocd: servers.filter((s: any) => s.server_type === 'argocd')
         };
         
         setAvailableServers(groupedServers);
@@ -311,7 +329,7 @@ const DeploymentProcessWizard: React.FC<WizardProps> = ({ open, onClose, selecte
   const handleReset = () => {
     setActiveStep(0);
     setReviewData({ approved: false, notes: '', estimated_time: '' });
-    setResourceData({ cpu_cores: 2, memory_gb: 4, storage_gb: 20, auto_scaling: false, load_balancer: false });
+    setResourceData({ cpu_cores: 2, memory_gb: 4, storage_gb: 20, gpu_specs: [], auto_scaling: false, load_balancer: false });
     setPipelineData({ 
       jenkins_server_id: '',
       jenkins_job_name: '', 
@@ -330,7 +348,7 @@ const DeploymentProcessWizard: React.FC<WizardProps> = ({ open, onClose, selecte
   // [advice from AI] GPU 관리 함수들
   const addGPU = (gpuId: string, quantity: number = 1) => {
     const gpuSpec = GPU_SPECS.find(gpu => gpu.id === gpuId);
-    if (!gpuSpec) return;
+    if (!gpuSpec) return null;
 
     setResourceData(prev => ({
       ...prev,
@@ -483,9 +501,9 @@ const DeploymentProcessWizard: React.FC<WizardProps> = ({ open, onClose, selecte
       // await saveDeploymentConfig(deploymentConfig);
       
       handleNext();
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ 배포 실행 실패:', error);
-      setError(`배포 실행 중 오류가 발생했습니다: ${error.message}`);
+      setError(`배포 실행 중 오류가 발생했습니다: ${error?.message || '알 수 없는 오류'}`);
     } finally {
       setLoading(false);
     }

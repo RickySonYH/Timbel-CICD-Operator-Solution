@@ -565,11 +565,6 @@ const HardwareCalculator: React.FC = () => {
                 result.status === 'calculating' ? 'warning' :
                 result.status === 'completed' ? 'success' : 'error'
               }
-              icon={
-                result.status === 'waiting' ? <InfoIcon /> :
-                result.status === 'calculating' ? <RefreshIcon /> :
-                result.status === 'completed' ? <CheckCircleIcon /> : <ErrorIcon />
-              }
             />
           </Box>
 
@@ -648,7 +643,7 @@ const HardwareCalculator: React.FC = () => {
           <Grid container spacing={2}>
             <Grid item xs={6}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <MemoryIcon color="primary" />
+                null
                 <Box>
                   <Typography variant="body2" color="text.secondary">
                     메모리
@@ -661,7 +656,7 @@ const HardwareCalculator: React.FC = () => {
             </Grid>
             <Grid item xs={6}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <StorageIcon color="secondary" />
+                null
                 <Box>
                   <Typography variant="body2" color="text.secondary">
                     스토리지
@@ -680,7 +675,7 @@ const HardwareCalculator: React.FC = () => {
               <Button
                 variant="contained"
                 onClick={() => setShowDetails(!showDetails)}
-                startIcon={showDetails ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                startIcon={showDetails ? null : null}
                 sx={{ minWidth: 200 }}
               >
                 {showDetails ? '상세보기 닫기' : '상세 하드웨어 구성 보기'}

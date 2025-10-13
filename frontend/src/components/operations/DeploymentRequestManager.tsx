@@ -55,6 +55,8 @@ interface DeploymentRequest {
 interface RequestStats {
   total_requests: number;
   pending_requests: number;
+  approved_requests?: number; // Optional 필드로 추가
+  rejected_requests?: number; // Optional 필드로 추가
   in_progress_requests: number;
   completed_requests: number;
   avg_processing_time: number;
@@ -134,6 +136,8 @@ const DeploymentRequestManager: React.FC = () => {
             pending_requests: data.data.statistics.pending_operations,
             approved_requests: data.data.statistics.completed,
             rejected_requests: data.data.statistics.rejected,
+            in_progress_requests: 0, // 기본값 추가
+            completed_requests: data.data.statistics.completed, // 추가
             avg_processing_time: data.data.statistics.avg_processing_days,
             success_rate: data.data.statistics.completed > 0 ? 
               (data.data.statistics.completed / (data.data.statistics.completed + data.data.statistics.rejected)) * 100 : 0
@@ -266,7 +270,7 @@ const DeploymentRequestManager: React.FC = () => {
       case 'in_progress': case 'approved': return 'primary';
       case 'pending': return 'warning';
       case 'rejected': return 'error';
-      default: return 'default';
+      default: return 'info';
     }
   };
 
@@ -276,7 +280,7 @@ const DeploymentRequestManager: React.FC = () => {
       case 'high': return 'error';
       case 'medium': return 'warning';
       case 'low': return 'info';
-      default: return 'default';
+      default: return 'info';
     }
   };
 

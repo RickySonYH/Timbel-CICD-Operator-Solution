@@ -296,7 +296,7 @@ const CICDMonitoringDashboard: React.FC = () => {
       case 'FAILURE': return 'error';
       case 'UNSTABLE': return 'warning';
       case 'ABORTED': return 'default';
-      default: return 'default';
+      default: return 'info';
     }
   };
 
@@ -369,7 +369,7 @@ const CICDMonitoringDashboard: React.FC = () => {
       <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Button
           variant={autoRefresh ? 'contained' : 'outlined'}
-          color={autoRefresh ? 'success' : 'default'}
+          color={autoRefresh ? 'success' : 'primary'}
           onClick={() => setAutoRefresh(!autoRefresh)}
         >
           {autoRefresh ? '자동 새로고침 ON' : '자동 새로고침 OFF'}

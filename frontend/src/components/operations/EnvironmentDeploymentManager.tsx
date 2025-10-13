@@ -184,7 +184,7 @@ const EnvironmentDeploymentManager: React.FC = () => {
       case 'development': return 'info';
       case 'staging': return 'warning';
       case 'production': return 'error';
-      default: return 'default';
+      default: return 'info';
     }
   };
 
@@ -195,7 +195,7 @@ const EnvironmentDeploymentManager: React.FC = () => {
       case 'deploying': return 'warning';
       case 'stopped': case 'inactive': return 'default';
       case 'failed': case 'unhealthy': return 'error';
-      default: return 'default';
+      default: return 'info';
     }
   };
 
@@ -229,7 +229,7 @@ const EnvironmentDeploymentManager: React.FC = () => {
 
   // [advice from AI] 애플리케이션 중지
   const handleStop = async (app: Application, envId: string) => {
-    if (!confirm(`${app.name} 애플리케이션을 중지하시겠습니까?`)) return;
+    if (!confirm(`${app.name} 애플리케이션을 중지하시겠습니까?`)) return null;
 
     try {
       const response = await fetch('/api/operations/stop', {

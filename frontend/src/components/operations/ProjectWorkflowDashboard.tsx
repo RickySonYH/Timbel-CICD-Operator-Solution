@@ -240,7 +240,7 @@ const ProjectWorkflowDashboard: React.FC = () => {
       case 'blocked': return 'error';
       case 'pending': return 'default';
       case 'cancelled': return 'secondary';
-      default: return 'default';
+      default: return 'info';
     }
   };
 
@@ -250,7 +250,7 @@ const ProjectWorkflowDashboard: React.FC = () => {
       case 'high': return 'error';
       case 'medium': return 'warning';
       case 'low': return 'info';
-      default: return 'default';
+      default: return 'info';
     }
   };
 

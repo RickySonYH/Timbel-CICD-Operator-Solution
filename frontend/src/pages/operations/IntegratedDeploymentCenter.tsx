@@ -9,24 +9,6 @@ import {
   FormControl, InputLabel, Select, MenuItem, Tabs, Tab, Divider,
   Accordion, AccordionSummary, AccordionDetails, IconButton, Tooltip
 } from '@mui/material';
-import {
-  PlayArrow as StartIcon,
-  Settings as SettingsIcon,
-  CheckCircle as CheckIcon,
-  Error as ErrorIcon,
-  Warning as WarningIcon,
-  Info as InfoIcon,
-  Edit as EditIcon,
-  Refresh as RefreshIcon,
-  GitHub as GitHubIcon,
-  Build as BuildIcon,
-  Storage as StorageIcon,
-  CloudUpload as DeployIcon,
-  Visibility as MonitorIcon,
-  ExpandMore as ExpandMoreIcon,
-  Speed as SpeedIcon,
-  Memory as MemoryIcon
-} from '@mui/icons-material';
 import { useJwtAuthStore } from '../../store/jwtAuthStore';
 
 interface TabPanelProps {
@@ -400,7 +382,7 @@ const IntegratedDeploymentCenter: React.FC = () => {
       case 1: await calculateResources(); break;
       case 2: await generateDeploymentConfig(); break;
       case 3: await verifyInfrastructure(); break;
-      case 4: await executeDeployment(); return; // 마지막 단계
+      case 4: await executeDeployment(); return null; // 마지막 단계
     }
     setCurrentStep(currentStep + 1);
   };
@@ -408,28 +390,23 @@ const IntegratedDeploymentCenter: React.FC = () => {
   const wizardSteps = [
     {
       label: '레포지토리 분석',
-      description: 'GitHub 레포지토리를 분석하여 서비스 구조와 의존성을 파악합니다',
-      icon: <GitHubIcon />
+      description: 'GitHub 레포지토리를 분석하여 서비스 구조와 의존성을 파악합니다'
     },
     {
       label: '리소스 계산',
-      description: '하드웨어 계산기를 통해 필요한 CPU, 메모리, 스토리지를 계산합니다',
-      icon: <SpeedIcon />
+      description: '하드웨어 계산기를 통해 필요한 CPU, 메모리, 스토리지를 계산합니다'
     },
     {
       label: '배포 설정',
-      description: 'Kubernetes 배포 설정과 도메인, SSL 등을 구성합니다',
-      icon: <SettingsIcon />
+      description: 'Kubernetes 배포 설정과 도메인, SSL 등을 구성합니다'
     },
     {
       label: '인프라 검증',
-      description: 'Jenkins, Nexus, Argo CD 등 필요한 인프라가 준비되었는지 확인합니다',
-      icon: <CheckIcon />
+      description: 'Jenkins, Nexus, Argo CD 등 필요한 인프라가 준비되었는지 확인합니다'
     },
     {
       label: '배포 실행',
-      description: '최종 검토 후 자동 배포 파이프라인을 실행합니다',
-      icon: <DeployIcon />
+      description: '최종 검토 후 자동 배포 파이프라인을 실행합니다'
     }
   ];
 
@@ -496,7 +473,6 @@ const IntegratedDeploymentCenter: React.FC = () => {
                       <Button
                         variant="contained"
                         size="large"
-                        startIcon={<StartIcon />}
                         onClick={() => startDeploymentWizard(request)}
                       >
                         배포 시작
@@ -569,7 +545,7 @@ const IntegratedDeploymentCenter: React.FC = () => {
       <Dialog open={wizardOpen} onClose={() => setWizardOpen(false)} maxWidth="lg" fullWidth>
         <DialogTitle>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <DeployIcon color="primary" />
+            null
             <Typography variant="h6">
               통합 배포 마법사 - {wizardData.project.name}
             </Typography>
@@ -582,7 +558,6 @@ const IntegratedDeploymentCenter: React.FC = () => {
               {wizardSteps.map((step, index) => (
                 <Step key={step.label}>
                   <StepLabel 
-                    icon={step.icon}
                     optional={
                       <Typography variant="caption" color="text.secondary">
                         {step.description}
@@ -609,7 +584,7 @@ const IntegratedDeploymentCenter: React.FC = () => {
                 <Card variant="outlined" sx={{ mb: 3 }}>
                   <CardContent>
                     <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <GitHubIcon /> 프로젝트 정보
+                       프로젝트 정보
                     </Typography>
                     <Grid container spacing={2}>
                       <Grid item xs={12} md={6}>
@@ -654,7 +629,7 @@ const IntegratedDeploymentCenter: React.FC = () => {
 
                 {wizardData.analysis.detected_services.length > 0 && (
                   <Accordion>
-                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                    <AccordionSummary>
                       <Typography variant="h6">🔍 분석 결과</Typography>
                     </AccordionSummary>
                     <AccordionDetails>
@@ -1014,7 +989,7 @@ const IntegratedDeploymentCenter: React.FC = () => {
             onClick={handleNextStep}
             disabled={isProcessing}
             startIcon={isProcessing ? <CircularProgress size={20} /> : 
-              currentStep === 4 ? <DeployIcon /> : <RefreshIcon />}
+              currentStep === 4 ? null : null}
           >
             {isProcessing ? '처리 중...' : 
              currentStep === 4 ? '배포 실행' : '다음 단계'}

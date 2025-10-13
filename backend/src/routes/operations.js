@@ -3195,33 +3195,7 @@ router.delete('/instructions/:id', jwtAuth.verifyToken, async (req, res) => {
   }
 });
 
-// [advice from AI] PO 업무 분배 관리 API
-// PE 목록 조회
-router.get('/pes', jwtAuth.verifyToken, async (req, res) => {
-  try {
-    const result = await pool.query(`
-      SELECT 
-        id,
-        username,
-        email,
-        full_name,
-        work_permissions,
-        created_at
-      FROM timbel_users 
-      WHERE work_permissions->>'role' = 'pe' OR work_permissions->>'role' = 'PE'
-      ORDER BY full_name
-    `);
-    
-    res.json(result.rows);
-  } catch (error) {
-    console.error('PE 목록 조회 오류:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: 'PE 목록 조회 중 오류가 발생했습니다.',
-      message: error.message 
-    });
-  }
-});
+// [advice from AI] PO, PE 관련 API 삭제됨
 
 // [advice from AI] 업무 할당 생성
 router.post('/assignments', jwtAuth.verifyToken, async (req, res) => {
@@ -3522,64 +3496,7 @@ router.get('/workflows', jwtAuth.verifyToken, async (req, res) => {
   }
 });
 
-// [advice from AI] PE 업무 지원 API
-// PE에게 할당된 업무 목록 조회
-router.get('/pe/tasks', jwtAuth.verifyToken, async (req, res) => {
-  try {
-    // JWT에서 사용자 ID 추출
-    const userIdMapping = {
-      'po-001': '1a71adf6-daa1-4267-98f7-b99098945630', // pouser
-      'pe-001': 'cb45aae6-4b47-4238-af31-5bbbeaa3d18c', // peuser
-      'qa-001': 'a3cdd9a5-6dd0-465f-9160-7638464840fb', // qauser
-      'op-001': '8d451115-5cbe-4093-b92e-5d44c21d2a92', // opuser
-      'admin-001': 'e512d6df-0396-4806-9c86-ff16ce312993' // admin
-    };
-    const peId = userIdMapping[req.user?.id] || 'cb45aae6-4b47-4238-af31-5bbbeaa3d18c';
-
-    const result = await pool.query(`
-      SELECT 
-        di.id,
-        di.title,
-        di.content,
-        di.template_type,
-        di.status,
-        di.priority,
-        di.work_percentage,
-        di.estimated_hours,
-        di.actual_hours,
-        di.dependencies,
-        di.attachments,
-        di.created_at as assigned_at,
-        di.updated_at,
-        p.name as project_name,
-        p.customer_company,
-        tu.full_name as created_by_name,
-        dp.progress_percentage,
-        dp.commit_count,
-        dp.lines_added,
-        dp.lines_removed,
-        dp.files_changed,
-        dp.last_commit_hash,
-        dp.last_commit_message,
-        dp.last_activity_at
-      FROM development_instructions di
-      LEFT JOIN projects p ON di.project_id = p.id
-      LEFT JOIN timbel_users tu ON di.created_by = tu.id
-      LEFT JOIN development_progress dp ON di.id = dp.instruction_id AND dp.user_id = $1
-      WHERE di.assigned_pe = $1
-      ORDER BY di.created_at DESC
-    `, [peId]);
-    
-    res.json(result.rows);
-  } catch (error) {
-    console.error('PE 업무 목록 조회 오류:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: 'PE 업무 목록 조회 중 오류가 발생했습니다.',
-      message: error.message 
-    });
-  }
-});
+// [advice from AI] PE 관련 API 삭제됨
 
 // [advice from AI] 개발 진행 상황 업데이트
 router.post('/pe/progress', jwtAuth.verifyToken, async (req, res) => {

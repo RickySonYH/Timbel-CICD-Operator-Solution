@@ -301,19 +301,19 @@ const CICDPipeline: React.FC = () => {
   // [advice from AI] 스테이지 타입별 아이콘
   const getStageIcon = (type: string) => {
     const icons = {
-      build: <BuildIcon />,
-      test: <TestIcon />,
-      security: <SecurityIcon />,
-      deploy: <DeployIcon />,
-      notification: <InfoIcon />
+      build: null,
+      test: null,
+      security: null,
+      deploy: null,
+      notification: null
     };
-    return icons[type as keyof typeof icons] || <CodeIcon />;
+    return icons[type as keyof typeof icons] || null;
   };
 
   // [advice from AI] 파이프라인 실행
   const runPipeline = async (pipelineId: string) => {
     const pipeline = pipelines.find(p => p.id === pipelineId);
-    if (!pipeline) return;
+    if (!pipeline) return null;
 
     // [advice from AI] 파이프라인 상태 업데이트
     setPipelines(pipelines.map(p => 
@@ -452,7 +452,6 @@ const CICDPipeline: React.FC = () => {
           </Typography>
           <Button
             variant="contained"
-            startIcon={<CodeIcon />}
             onClick={() => setCreateDialogOpen(true)}
             sx={{ borderRadius: 2 }}
           >
@@ -491,7 +490,6 @@ const CICDPipeline: React.FC = () => {
                       label={pipeline.type} 
                       color="primary"
                       size="small"
-                      icon={pipeline.type === 'jenkins' ? <BuildIcon /> : <GitHubIcon />}
                     />
                   </TableCell>
                   <TableCell>
@@ -536,7 +534,7 @@ const CICDPipeline: React.FC = () => {
                           onClick={() => runPipeline(pipeline.id)}
                           color="success"
                         >
-                          <PlayIcon fontSize="small" />
+                          null
                         </IconButton>
                       )}
                       {pipeline.status === 'running' && (
@@ -545,14 +543,14 @@ const CICDPipeline: React.FC = () => {
                           onClick={() => stopPipeline(pipeline.id)}
                           color="warning"
                         >
-                          <StopIcon fontSize="small" />
+                          null
                         </IconButton>
                       )}
                       <IconButton 
                         size="small" 
                         color="primary"
                       >
-                        <SettingsIcon fontSize="small" />
+                        null
                       </IconButton>
                     </Box>
                   </TableCell>

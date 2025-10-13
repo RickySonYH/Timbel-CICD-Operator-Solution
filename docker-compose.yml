@@ -1,5 +1,5 @@
-# [advice from AI] Timbel 지식자원 플랫폼 Docker 개발 환경
-# 개발계획서의 기술 스택을 기반으로 구성된 통합 개발 환경
+# [advice from AI] Timbel CICD Operator Solution - 운영센터 전용 Docker 환경
+# 배포 자동화 및 워크플로우 관리에 집중
 
 version: '3.8'
 
@@ -74,7 +74,7 @@ services:
       - DB_PORT=5432
       - DB_USER=timbel_user
       - DB_PASSWORD=timbel_password
-      - DB_NAME=timbel_knowledge
+      - DB_NAME=timbel_cicd_operator
       - REDIS_URL=redis://redis:6379
       - ELASTICSEARCH_URL=http://elasticsearch:9200
       - MINIO_ENDPOINT=minio:9000

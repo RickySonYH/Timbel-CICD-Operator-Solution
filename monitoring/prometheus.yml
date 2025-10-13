@@ -1,69 +1,24 @@
-# [advice from AI] Prometheus 모니터링 설정
-# Timbel 플랫폼 성능 및 비즈니스 메트릭 수집
-
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
-# Alertmanager 설정 (향후 확장)
-alerting:
-  alertmanagers:
-    - static_configs:
-        - targets: []
-
-# 규칙 파일 (향후 확장)
-rule_files: []
-
-# 스크래핑 대상 설정
 scrape_configs:
-  # Prometheus 자체 모니터링
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
 
-  # Timbel Backend API 메트릭
-  - job_name: 'timbel-backend'
+  - job_name: 'backend'
     static_configs:
       - targets: ['backend:3001']
-    metrics_path: '/metrics'
-    scrape_interval: 10s
-    scrape_timeout: 5s
 
-  # PostgreSQL 메트릭 (postgres_exporter 사용 시)
-  - job_name: 'postgres'
+  - job_name: 'jenkins'
     static_configs:
-      - targets: ['postgres:5432']
-    scrape_interval: 30s
+      - targets: ['jenkins:8080']
 
-  # Redis 메트릭 (redis_exporter 사용 시)  
-  - job_name: 'redis'
+  - job_name: 'nexus'
     static_configs:
-      - targets: ['redis:6379']
-    scrape_interval: 30s
+      - targets: ['nexus:8081']
 
-  # Elasticsearch 메트릭
-  - job_name: 'elasticsearch'
+  - job_name: 'argocd'
     static_configs:
-      - targets: ['elasticsearch:9200']
-    scrape_interval: 30s
-
-  # Node.js 애플리케이션 메트릭
-  - job_name: 'node-metrics'
-    static_configs:
-      - targets: ['backend:3001']
-    metrics_path: '/metrics/nodejs'
-    scrape_interval: 15s
-
-  # 비즈니스 메트릭 (ROI, 재사용률 등)
-  - job_name: 'business-metrics'
-    static_configs:
-      - targets: ['backend:3001']  
-    metrics_path: '/metrics/business'
-    scrape_interval: 60s
-
-  # AI 서비스 메트릭 (API 호출, 응답시간 등)
-  - job_name: 'ai-metrics'
-    static_configs:
-      - targets: ['backend:3001']
-    metrics_path: '/metrics/ai'
-    scrape_interval: 30s
+      - targets: ['argocd-server:8080']

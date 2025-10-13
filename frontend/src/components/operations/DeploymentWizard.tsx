@@ -601,31 +601,31 @@ const DeploymentWizard: React.FC<DeploymentWizardProps> = ({ onDeploymentComplet
     {
       label: '기본 설정',
       description: '테넌시 ID, 서비스 요구사항 입력',
-      icon: <SettingsIcon />,
+      
       component: 'BasicSettings'
     },
     {
       label: 'CI/CD 이미지',
       description: '컨테이너 이미지 선택 및 레지스트리 연동',
-      icon: <CloudIcon />,
+      
       component: 'CICDImages'
     },
     {
       label: '고급 설정',
       description: '서비스별 개별 설정 (8개 서비스)',
-      icon: <BuildIcon />,
+      
       component: 'AdvancedSettings'
     },
     {
       label: '매니페스트 생성',
       description: '클라우드 제공업체별 최적화 매니페스트',
-      icon: <TimelineIcon />,
+      
       component: 'ManifestGeneration'
     },
     {
       label: '배포 실행',
       description: '상세 프로그레스로 실시간 배포 모니터링',
-      icon: <RocketIcon />,
+      
       component: 'DeploymentExecution'
     }
   ];
@@ -1032,7 +1032,6 @@ const DeploymentWizard: React.FC<DeploymentWizardProps> = ({ onDeploymentComplet
               </Typography>
               <Button
                 variant="outlined"
-                startIcon={<AddIcon />}
                 onClick={addCustomServer}
                 size="small"
               >
@@ -1053,7 +1052,6 @@ const DeploymentWizard: React.FC<DeploymentWizardProps> = ({ onDeploymentComplet
                     variant="text"
                     color="error"
                     size="small"
-                    startIcon={<DeleteIcon />}
                     onClick={() => removeCustomServer(index)}
                     disabled={tenantConfig.customServerSpecs.length <= 1}
                   >
@@ -1134,7 +1132,7 @@ const DeploymentWizard: React.FC<DeploymentWizardProps> = ({ onDeploymentComplet
                 <Grid container spacing={2}>
                   <Grid item xs={3}>
                     <Box textAlign="center">
-                      <SpeedIcon color="primary" sx={{ fontSize: 30 }} />
+                      null
                       <Typography variant="h6">
                         {tenantConfig.customServerSpecs.reduce((sum, server) => sum + server.cpu, 0)} Core
                       </Typography>
@@ -1143,7 +1141,7 @@ const DeploymentWizard: React.FC<DeploymentWizardProps> = ({ onDeploymentComplet
                   </Grid>
                   <Grid item xs={3}>
                     <Box textAlign="center">
-                      <MemoryIcon color="primary" sx={{ fontSize: 30 }} />
+                      null
                       <Typography variant="h6">
                         {tenantConfig.customServerSpecs.reduce((sum, server) => sum + server.memory, 0)} GB
                       </Typography>
@@ -1152,7 +1150,7 @@ const DeploymentWizard: React.FC<DeploymentWizardProps> = ({ onDeploymentComplet
                   </Grid>
                   <Grid item xs={3}>
                     <Box textAlign="center">
-                      <SecurityIcon color="primary" sx={{ fontSize: 30 }} />
+                      null
                       <Typography variant="h6">
                         {tenantConfig.customServerSpecs.reduce((sum, server) => sum + server.gpu, 0)}
                       </Typography>
@@ -1161,7 +1159,7 @@ const DeploymentWizard: React.FC<DeploymentWizardProps> = ({ onDeploymentComplet
                   </Grid>
                   <Grid item xs={3}>
                     <Box textAlign="center">
-                      <StorageIcon color="primary" sx={{ fontSize: 30 }} />
+                      null
                       <Typography variant="h6">
                         {tenantConfig.customServerSpecs.reduce((sum, server) => sum + server.storage, 0)} GB
                       </Typography>
@@ -1196,28 +1194,28 @@ const DeploymentWizard: React.FC<DeploymentWizardProps> = ({ onDeploymentComplet
                 <Grid container spacing={2}>
                   <Grid item xs={3}>
                     <Box textAlign="center">
-                      <SpeedIcon color="primary" sx={{ fontSize: 40 }} />
+                      null
                       <Typography variant="h6">{hardwareResult.totalCpu} Core</Typography>
                       <Typography variant="caption">CPU</Typography>
                     </Box>
                   </Grid>
                   <Grid item xs={3}>
                     <Box textAlign="center">
-                      <MemoryIcon color="primary" sx={{ fontSize: 40 }} />
+                      null
                       <Typography variant="h6">{hardwareResult.totalMemory} GB</Typography>
                       <Typography variant="caption">Memory</Typography>
                     </Box>
                   </Grid>
                   <Grid item xs={3}>
                     <Box textAlign="center">
-                      <SecurityIcon color="primary" sx={{ fontSize: 40 }} />
+                      null
                       <Typography variant="h6">{hardwareResult.totalGpu}</Typography>
                       <Typography variant="caption">GPU</Typography>
                     </Box>
                   </Grid>
                   <Grid item xs={3}>
                     <Box textAlign="center">
-                      <StorageIcon color="primary" sx={{ fontSize: 40 }} />
+                      null
                       <Typography variant="h6">{hardwareResult.totalStorage} GB</Typography>
                       <Typography variant="caption">Storage</Typography>
                     </Box>
@@ -1281,7 +1279,7 @@ const DeploymentWizard: React.FC<DeploymentWizardProps> = ({ onDeploymentComplet
               <Grid container spacing={2}>
                 <Grid item xs={3}>
                   <Box textAlign="center">
-                    <SpeedIcon color="secondary" sx={{ fontSize: 40 }} />
+                    null
                     <Typography variant="h6">
                       {tenantConfig.customServerSpecs.reduce((sum, server) => sum + server.cpu, 0)} Core
                     </Typography>
@@ -1290,7 +1288,7 @@ const DeploymentWizard: React.FC<DeploymentWizardProps> = ({ onDeploymentComplet
                 </Grid>
                 <Grid item xs={3}>
                   <Box textAlign="center">
-                    <MemoryIcon color="secondary" sx={{ fontSize: 40 }} />
+                    null
                     <Typography variant="h6">
                       {tenantConfig.customServerSpecs.reduce((sum, server) => sum + server.memory, 0)} GB
                     </Typography>
@@ -1299,7 +1297,7 @@ const DeploymentWizard: React.FC<DeploymentWizardProps> = ({ onDeploymentComplet
                 </Grid>
                 <Grid item xs={3}>
                   <Box textAlign="center">
-                    <SecurityIcon color="secondary" sx={{ fontSize: 40 }} />
+                    null
                     <Typography variant="h6">
                       {tenantConfig.customServerSpecs.reduce((sum, server) => sum + server.gpu, 0)}
                     </Typography>
@@ -1308,7 +1306,7 @@ const DeploymentWizard: React.FC<DeploymentWizardProps> = ({ onDeploymentComplet
                 </Grid>
                 <Grid item xs={3}>
                   <Box textAlign="center">
-                    <StorageIcon color="secondary" sx={{ fontSize: 40 }} />
+                    null
                     <Typography variant="h6">
                       {tenantConfig.customServerSpecs.reduce((sum, server) => sum + server.storage, 0)} GB
                     </Typography>
@@ -1502,7 +1500,6 @@ const DeploymentWizard: React.FC<DeploymentWizardProps> = ({ onDeploymentComplet
 
         <Button
           variant="outlined"
-          startIcon={<AddIcon />}
           onClick={() => {
             setTenantConfig({
               ...tenantConfig,
@@ -1914,14 +1911,14 @@ const DeploymentWizard: React.FC<DeploymentWizardProps> = ({ onDeploymentComplet
 
     // [advice from AI] 자동 계산 모드인 경우 ECP-AI 스타일 8개 서비스별 탭 시스템
     const serviceTabs = [
-      { label: '🏢 공통 설정', key: 'common', icon: <SettingsIcon /> },
-      { label: '📞 콜봇', key: 'callbot', icon: <CloudIcon /> },
-      { label: '💬 챗봇', key: 'chatbot', icon: <CloudIcon /> },
-      { label: '👨‍💼 어드바이저', key: 'advisor', icon: <CloudIcon /> },
-      { label: '🎤 STT', key: 'stt', icon: <CloudIcon /> },
-      { label: '🔊 TTS', key: 'tts', icon: <CloudIcon /> },
-      { label: '📊 TA', key: 'ta', icon: <CloudIcon /> },
-      { label: '✅ QA', key: 'qa', icon: <CloudIcon /> }
+      { label: '🏢 공통 설정', key: 'common' },
+      { label: '📞 콜봇', key: 'callbot' },
+      { label: '💬 챗봇', key: 'chatbot' },
+      { label: '👨‍💼 어드바이저', key: 'advisor' },
+      { label: '🎤 STT', key: 'stt' },
+      { label: '🔊 TTS', key: 'tts' },
+      { label: '📊 TA', key: 'ta' },
+      { label: '✅ QA', key: 'qa' }
     ];
 
     return (
@@ -1941,9 +1938,7 @@ const DeploymentWizard: React.FC<DeploymentWizardProps> = ({ onDeploymentComplet
           {serviceTabs.map((tab, index) => (
             <Tab 
               key={tab.key}
-              label={tab.label} 
-              icon={tab.icon}
-              iconPosition="start"
+              label={tab.label}
             />
           ))}
         </Tabs>
@@ -2698,25 +2693,25 @@ const DeploymentWizard: React.FC<DeploymentWizardProps> = ({ onDeploymentComplet
                   <Grid container spacing={2}>
                     <Grid item xs={6}>
                       <Box textAlign="center" sx={{ p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                        <SpeedIcon color="primary" />
+                        null
                         <Typography variant="body2">{manifestData.hardware_specs.total_cpu} Core</Typography>
                       </Box>
                     </Grid>
                     <Grid item xs={6}>
                       <Box textAlign="center" sx={{ p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                        <MemoryIcon color="primary" />
+                        null
                         <Typography variant="body2">{manifestData.hardware_specs.total_memory} GB</Typography>
                       </Box>
                     </Grid>
                     <Grid item xs={6}>
                       <Box textAlign="center" sx={{ p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                        <SecurityIcon color="primary" />
+                        null
                         <Typography variant="body2">{manifestData.hardware_specs.total_gpu} GPU</Typography>
                       </Box>
                     </Grid>
                     <Grid item xs={6}>
                       <Box textAlign="center" sx={{ p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                        <StorageIcon color="primary" />
+                        null
                         <Typography variant="body2">{manifestData.hardware_specs.total_storage} GB</Typography>
                       </Box>
                     </Grid>
@@ -2727,25 +2722,25 @@ const DeploymentWizard: React.FC<DeploymentWizardProps> = ({ onDeploymentComplet
                   <Grid container spacing={2}>
                     <Grid item xs={6}>
                       <Box textAlign="center" sx={{ p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                        <SpeedIcon color="secondary" />
+                        null
                         <Typography variant="body2">{manifestData.total_resources.cpu} Core</Typography>
                       </Box>
                     </Grid>
                     <Grid item xs={6}>
                       <Box textAlign="center" sx={{ p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                        <MemoryIcon color="secondary" />
+                        null
                         <Typography variant="body2">{manifestData.total_resources.memory} GB</Typography>
                       </Box>
                     </Grid>
                     <Grid item xs={6}>
                       <Box textAlign="center" sx={{ p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                        <SecurityIcon color="secondary" />
+                        null
                         <Typography variant="body2">{manifestData.total_resources.gpu} GPU</Typography>
                       </Box>
                     </Grid>
                     <Grid item xs={6}>
                       <Box textAlign="center" sx={{ p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                        <StorageIcon color="secondary" />
+                        null
                         <Typography variant="body2">{manifestData.total_resources.storage} GB</Typography>
                       </Box>
                     </Grid>
@@ -2799,7 +2794,7 @@ const DeploymentWizard: React.FC<DeploymentWizardProps> = ({ onDeploymentComplet
                         <ListItemIcon>
                           {fileName.includes('server') || fileName.includes('cpu') || fileName.includes('gpu') ? 
                             <ComputerIcon fontSize="small" /> : 
-                            <SettingsIcon fontSize="small" />
+                            null
                           }
                         </ListItemIcon>
                         <ListItemText
@@ -2997,7 +2992,7 @@ const DeploymentWizard: React.FC<DeploymentWizardProps> = ({ onDeploymentComplet
     const selectedInfra = availableInfrastructures.find(infra => infra.id === selectedInfrastructure);
     if (!selectedInfra) {
       alert('인프라를 선택해주세요');
-      return;
+      return null;
     }
 
     const manifestData = generateManifest();
@@ -3253,25 +3248,25 @@ const DeploymentWizard: React.FC<DeploymentWizardProps> = ({ onDeploymentComplet
                     <Grid container spacing={1} sx={{ mb: 2 }}>
                       <Grid item xs={3}>
                         <Box textAlign="center">
-                          <SpeedIcon fontSize="small" color="action" />
+                          null
                           <Typography variant="caption" display="block">{infrastructure.resources.cpu}C</Typography>
                         </Box>
                       </Grid>
                       <Grid item xs={3}>
                         <Box textAlign="center">
-                          <MemoryIcon fontSize="small" color="action" />
+                          null
                           <Typography variant="caption" display="block">{infrastructure.resources.memory}GB</Typography>
                         </Box>
                       </Grid>
                       <Grid item xs={3}>
                         <Box textAlign="center">
-                          <SecurityIcon fontSize="small" color="action" />
+                          null
                           <Typography variant="caption" display="block">{infrastructure.resources.gpu}GPU</Typography>
                         </Box>
                       </Grid>
                       <Grid item xs={3}>
                         <Box textAlign="center">
-                          <StorageIcon fontSize="small" color="action" />
+                          null
                           <Typography variant="caption" display="block">{infrastructure.resources.storage}GB</Typography>
                         </Box>
                       </Grid>
@@ -3288,7 +3283,7 @@ const DeploymentWizard: React.FC<DeploymentWizardProps> = ({ onDeploymentComplet
                         </>
                       ) : (
                         <>
-                          <ErrorIcon color="error" fontSize="small" />
+                          null
                           <Typography variant="caption" color="error.main">
                             {compatibility.issues.join(', ')}
                           </Typography>
@@ -3434,7 +3429,6 @@ const DeploymentWizard: React.FC<DeploymentWizardProps> = ({ onDeploymentComplet
             variant="contained"
             color="primary"
             size="large"
-            startIcon={<RocketIcon />}
             onClick={executeDeployment}
             disabled={
               !selectedInfrastructure || 
@@ -3536,7 +3530,7 @@ const DeploymentWizard: React.FC<DeploymentWizardProps> = ({ onDeploymentComplet
                   transition: 'all 0.3s ease'
                 }}
               >
-                {step.icon}
+                
               </Box>
               {index < steps.length - 1 && (
                 <Box

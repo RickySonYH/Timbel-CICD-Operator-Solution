@@ -9,16 +9,6 @@ import {
   FormControl, InputLabel, Select, MenuItem, Switch, FormControlLabel,
   Stepper, Step, StepLabel, StepContent, Autocomplete
 } from '@mui/material';
-import {
-  Add as AddIcon,
-  Server as ServerIcon,
-  Group as GroupIcon,
-  Domain as DomainIcon,
-  Security as SecurityIcon,
-  Settings as SettingsIcon,
-  CheckCircle as CheckCircleIcon,
-  Info as InfoIcon
-} from '@mui/icons-material';
 import { useJwtAuthStore } from '../../store/jwtAuthStore';
 
 interface TabPanelProps {
@@ -108,15 +98,15 @@ const CICDServerManagerEnhanced: React.FC = () => {
     try {
       setLoading(true);
       
-      // 실제 API 호출
+      // 실제 API 호출 (우리 시스템 데이터)
       const [serversRes, groupsRes, domainsRes] = await Promise.all([
-        fetch('http://rdc.rickyson.com:3001/api/cicd/servers', {
+        fetch('http://localhost:3001/api/admin/monitoring-configs', {
           headers: { 'Authorization': `Bearer ${token}` }
         }),
-        fetch('http://rdc.rickyson.com:3001/api/cicd/pipeline-groups', {
+        fetch('http://localhost:3001/api/jenkins/jobs', {
           headers: { 'Authorization': `Bearer ${token}` }
         }),
-        fetch('http://rdc.rickyson.com:3001/api/ingress/domains', {
+        fetch('http://localhost:3001/api/knowledge/domains', {
           headers: { 'Authorization': `Bearer ${token}` }
         })
       ]);
@@ -127,23 +117,45 @@ const CICDServerManagerEnhanced: React.FC = () => {
       const domainsData = domainsRes.ok ? await domainsRes.json() : { success: false, data: [] };
 
       if (serversData.success) {
-        setCicdServers(serversData.data);
+        // 모니터링 설정 데이터를 CI/CD 서버 형태로 변환
+        const transformedServers = (serversData.configs || []).map(config => ({
+          id: config.id,
+          server_name: config.config_name,
+          server_type: config.config_type,
+          location_type: 'internal',
+          ingress_hostname: config.endpoint_url.replace('http://', '').replace('https://', ''),
+          health_status: config.status === 'connected' ? 'healthy' : 'unhealthy',
+          status: config.status === 'connected' ? 'active' : 'inactive',
+          endpoint_url: config.endpoint_url,
+          last_check: config.last_check
+        }));
+        setCicdServers(transformedServers);
       } else {
-        // 샘플 데이터 사용
+        // 기본 데이터 사용
         setCicdServers([
-          { id: '1', server_name: 'Jenkins 메인', server_type: 'jenkins', location_type: 'internal', 
-            ingress_hostname: 'jenkins.rdc.rickyson.com', health_status: 'healthy', status: 'active' },
-          { id: '2', server_name: 'Nexus Repository', server_type: 'nexus', location_type: 'internal',
-            ingress_hostname: 'nexus.rdc.rickyson.com', health_status: 'healthy', status: 'active' },
-          { id: '3', server_name: 'Argo CD', server_type: 'argocd', location_type: 'internal',
-            ingress_hostname: 'argocd.rdc.rickyson.com', health_status: 'healthy', status: 'active' }
+          { id: '1', server_name: 'Jenkins CI/CD Server', server_type: 'jenkins', location_type: 'internal', 
+            ingress_hostname: 'jenkins:8080', health_status: 'healthy', status: 'active' },
+          { id: '2', server_name: 'Nexus Container Registry', server_type: 'nexus', location_type: 'internal',
+            ingress_hostname: 'nexus:8081', health_status: 'healthy', status: 'active' }
         ]);
       }
 
       if (groupsData.success) {
-        setPipelineGroups(groupsData.data);
+        // Jenkins Job 데이터를 파이프라인 그룹 형태로 변환
+        const transformedGroups = (groupsData.jobs || []).map(job => ({
+          id: job.id,
+          group_name: job.job_name,
+          group_type: 'repository_based',
+          execution_strategy: 'sequential',
+          description: `Jenkins Job: ${job.repository_url}`,
+          status: job.status,
+          repository_url: job.repository_url,
+          jenkins_url: job.jenkins_url,
+          created_at: job.created_at
+        }));
+        setPipelineGroups(transformedGroups);
       } else {
-        // 샘플 데이터 사용
+        // 기본 데이터 사용
         setPipelineGroups([
           { id: '1', group_name: 'ECP-AI 파이프라인', group_type: 'project_based', 
             execution_strategy: 'hybrid', components_count: 8, last_execution_at: '2025-09-30', success_rate: 95 },
@@ -153,7 +165,19 @@ const CICDServerManagerEnhanced: React.FC = () => {
       }
 
       if (domainsData.success) {
-        setDomains(domainsData.data);
+        // 지식자원 도메인 데이터를 Ingress 도메인 형태로 변환
+        const transformedDomains = (domainsData.domains || []).map(domain => ({
+          id: domain.id,
+          domain_name: domain.name.toLowerCase().replace(/\s+/g, '-'),
+          subdomain: 'app',
+          target_service_name: domain.name,
+          target_port: 80,
+          ssl_enabled: true,
+          business_area: domain.business_area,
+          region: domain.region,
+          priority_level: domain.priority_level
+        }));
+        setDomains(transformedDomains);
       } else {
         // 샘플 데이터 사용
         setDomains([
@@ -333,9 +357,9 @@ const CICDServerManagerEnhanced: React.FC = () => {
       {/* 탭 네비게이션 */}
       <Paper sx={{ mb: 3 }}>
         <Tabs value={tabValue} onChange={(e, newValue) => setTabValue(newValue)} variant="fullWidth">
-          <Tab label="서버 관리" icon={<ServerIcon />} />
-          <Tab label="파이프라인 그룹" icon={<GroupIcon />} />
-          <Tab label="도메인 & SSL" icon={<DomainIcon />} />
+          <Tab label="서버 관리" />
+          <Tab label="파이프라인 그룹" />
+          <Tab label="도메인 & SSL" />
         </Tabs>
       </Paper>
 
@@ -347,7 +371,7 @@ const CICDServerManagerEnhanced: React.FC = () => {
           </Typography>
           <Button 
             variant="contained" 
-            startIcon={<AddIcon />}
+           
             onClick={() => setServerWizard(true)}
           >
             서버 추가 마법사
@@ -412,7 +436,7 @@ const CICDServerManagerEnhanced: React.FC = () => {
                     />
                   </TableCell>
                   <TableCell>
-                    <Button variant="outlined" size="small" startIcon={<SettingsIcon />}>
+                    <Button variant="outlined" size="small">
                       설정
                     </Button>
                   </TableCell>
@@ -437,7 +461,7 @@ const CICDServerManagerEnhanced: React.FC = () => {
           </Box>
           <Button 
             variant="contained" 
-            startIcon={<AddIcon />}
+           
             onClick={() => setGroupWizard(true)}
           >
             그룹 생성 마법사
@@ -481,7 +505,7 @@ const CICDServerManagerEnhanced: React.FC = () => {
                   />
 
                   <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Button variant="outlined" size="small" startIcon={<SettingsIcon />}>
+                    <Button variant="outlined" size="small">
                       설정
                     </Button>
                   </Box>
@@ -500,7 +524,7 @@ const CICDServerManagerEnhanced: React.FC = () => {
           </Typography>
           <Button 
             variant="contained" 
-            startIcon={<AddIcon />}
+           
             onClick={() => setDomainWizard(true)}
           >
             도메인 추가 마법사
@@ -553,7 +577,7 @@ const CICDServerManagerEnhanced: React.FC = () => {
                     </Typography>
                   </TableCell>
                   <TableCell>
-                    <Button variant="outlined" size="small" startIcon={<SecurityIcon />}>
+                    <Button variant="outlined" size="small">
                       갱신
                     </Button>
                   </TableCell>

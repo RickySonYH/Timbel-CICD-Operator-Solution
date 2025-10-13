@@ -171,7 +171,7 @@ const CICDServerManager: React.FC = () => {
       case 'healthy': return 'success';
       case 'unhealthy': return 'error';
       case 'warning': return 'warning';
-      default: return 'default';
+      default: return 'info';
     }
   };
 

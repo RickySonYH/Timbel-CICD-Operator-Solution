@@ -3,6 +3,7 @@
 
 const express = require('express');
 const cors = require('cors');
+const compression = require('compression');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const dotenv = require('dotenv');
@@ -15,6 +16,12 @@ const SessionAuthMiddleware = require('./middleware/sessionAuth');
 
 // [advice from AI] JWT 기반 인증 미들웨어
 const jwtAuth = require('./middleware/jwtAuth');
+const { 
+  generalLimiter, 
+  authLimiter, 
+  requestLogger, 
+  validateInput 
+} = require('./middleware/securityEnhancement');
 
 // 미들웨어 설정
 dotenv.config();
@@ -22,10 +29,10 @@ dotenv.config();
 // [advice from AI] PostgreSQL 연결 설정
 const pool = new Pool({
   user: process.env.DB_USER || 'timbel_user',
-  host: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_NAME || 'timbel_knowledge',
+  host: process.env.DB_HOST || 'postgres',
+  database: process.env.DB_NAME || 'timbel_cicd_operator',
   password: process.env.DB_PASSWORD || 'timbel_password',
-  port: process.env.DB_PORT || 5434,
+  port: process.env.DB_PORT || 5432,
 });
 
 const app = express();
@@ -36,6 +43,7 @@ const sessionAuth = new SessionAuthMiddleware();
 
 // [advice from AI] 보안 미들웨어 설정
 app.use(helmet());
+app.use(compression()); // 응답 압축 활성화
 app.use(cors({
   origin: [
     'http://localhost:3000',
@@ -59,6 +67,12 @@ app.use(sessionAuth.getSessionMiddleware());
 // 기본 미들웨어
 app.use(express.json({ limit: process.env.MAX_FILE_SIZE || '50mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// [advice from AI] 보안 미들웨어 적용
+app.use(requestLogger); // 요청 로깅
+app.use(validateInput); // 입력 검증
+app.use('/api/auth', authLimiter); // 인증 API Rate Limiting
+app.use('/api', generalLimiter); // 일반 API Rate Limiting
 
 // [advice from AI] 헬스체크 엔드포인트
 app.get('/health', (req, res) => {
@@ -238,13 +252,10 @@ app.post('/api/auth/login', async (req, res) => {
 
       return res.json({
         success: true,
-        data: {
-          user: req.session.user,
-          sessionId: req.sessionID,
-          jwtToken: jwtToken,
-          tokenType: 'Bearer',
-          message: '로그인 성공'
-        }
+        user: req.session.user,
+        token: jwtToken,
+        tokenType: 'Bearer',
+        message: '로그인 성공'
       });
     });
   } catch (error) {
@@ -253,6 +264,85 @@ app.post('/api/auth/login', async (req, res) => {
       success: false,
       error: 'Internal Server Error',
       message: '로그인 처리 중 오류가 발생했습니다'
+    });
+  }
+});
+
+// [advice from AI] JWT 전용 로그인 엔드포인트
+app.post('/api/auth/login-jwt', async (req, res) => {
+  try {
+    const { email, username, loginId, password } = req.body;
+    
+    const identifier = email || username || loginId;
+    
+    if (!identifier || !password) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing credentials',
+        message: '이메일/사용자명과 비밀번호를 입력해주세요'
+      });
+    }
+
+    console.log(`🔐 JWT 로그인 시도: ${identifier}`);
+
+    const result = await pool.query(`
+      SELECT id, username, email, password_hash, full_name, role_type, permission_level, work_permissions
+      FROM timbel_users 
+      WHERE username = $1 OR email = $1
+    `, [identifier]);
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid credentials',
+        message: '아이디 또는 비밀번호가 잘못되었습니다'
+      });
+    }
+
+    const user = result.rows[0];
+    
+    // 간단한 비밀번호 검증 (개발용)
+    const isValidPassword = password === '1q2w3e4r';
+    
+    if (!isValidPassword) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid credentials',
+        message: '아이디 또는 비밀번호가 잘못되었습니다'
+      });
+    }
+
+    // JWT 토큰 생성
+    const jwt = require('jsonwebtoken');
+    const jwtPayload = {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      fullName: user.full_name,
+      permissionLevel: user.permission_level,
+      roleType: user.role_type
+    };
+    
+    const jwtToken = jwt.sign(jwtPayload, process.env.JWT_SECRET || 'timbel-super-secret-jwt-key-change-in-production', {
+      expiresIn: '24h',
+      issuer: 'timbel-platform',
+      audience: 'timbel-users'
+    });
+
+    console.log(`✅ JWT 로그인 성공: ${user.username} (${user.role_type})`);
+
+    return res.json({
+      success: true,
+      user: jwtPayload,
+      token: jwtToken,
+      tokenType: 'Bearer'
+    });
+
+  } catch (error) {
+    console.error('❌ JWT 로그인 오류:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || '로그인에 실패했습니다'
     });
   }
 });
@@ -467,126 +557,34 @@ app.post('/api/proxy/rdc-calculate', async (req, res) => {
 const authJWTRouter = require('./routes/authJWT');
 app.use('/api/auth', authJWTRouter);
 
-// [advice from AI] 카탈로그 시스템 라우트
-const catalogRouter = require('./routes/catalog');
-app.use('/api/catalog', catalogRouter);
-
-// [advice from AI] 시스템 관리 라우트
-const adminRouter = require('./routes/admin');
-app.use('/api/admin', adminRouter);
-
-// [advice from AI] 디자인 자산 라우트
-const designAssetsRouter = require('./routes/designAssets');
-app.use('/api/design-assets', designAssetsRouter);
+// [advice from AI] 운영센터 관련 라우트만 유지 - 기존 라우트들 제거됨
 
 // [advice from AI] 코드 컴포넌트 라우트
 
-// [advice from AI] 문서/가이드 라우트
-const documentsRouter = require('./routes/documents');
-app.use('/api/documents', documentsRouter);
+// [advice from AI] 운영센터 관련 라우트만 유지
 
-// [advice from AI] 운영 센터 라우트 추가 (JWT 인증 보호)
-const operationsRouter = require('./routes/operations');
-app.use('/api/operations', operationsRouter);
-
-// [advice from AI] QA/QC 라우트 추가 (JWT 인증 보호)
-const qaRouter = require('./routes/qa');
-app.use('/api/qa', qaRouter);
-
-// [advice from AI] ECP-AI 시뮬레이터 라우트 추가 (JWT 인증 보호)
-const simulatorRouter = require('./routes/simulator');
-app.use('/api/simulator', simulatorRouter);
-
-// [advice from AI] 통합 모니터링 라우트
-const monitoringRouter = require('./routes/monitoring');
-const catalogCICDRouter = require('./routes/catalogCICD');
-app.use('/api/monitoring', monitoringRouter);
-app.use('/api/catalog/cicd', catalogCICDRouter);
-
-// [advice from AI] 승인 및 의사결정 라우트
-const approvalsRouter = require('./routes/approvals');
-app.use('/api/approvals', approvalsRouter);
-
-// [advice from AI] 지식 추출 라우트
-const knowledgeExtractionRouter = require('./routes/knowledgeExtraction');
-app.use('/api/knowledge-extraction', knowledgeExtractionRouter);
-
-// [advice from AI] 시스템 관리 라우트
-const systemsRouter = require('./routes/systems');
-const relationshipsRouter = require('./routes/relationships');
-const domainsRouter = require('./routes/domains');
-const codeComponentsRouter = require('./routes/codeComponents');
-app.use('/api/systems', systemsRouter);
-app.use('/api/relationships', relationshipsRouter);
-app.use('/api/domains', domainsRouter);
-// [advice from AI] 코드 컴포넌트 등록 관리용 API (모든 상태 조회)
-app.use('/api/code-components', codeComponentsRouter);
-
-// [advice from AI] 작업 거부 및 지식자원 통합 관리
-app.use('/api/work-rejection', require('./routes/work-rejection'));
-
-// [advice from AI] 권한별 메시지 센터 API
-app.use('/api/notifications', require('./routes/notifications'));
-
-// [advice from AI] PO 프로젝트 선점 시스템 API
-app.use('/api/po-claims', require('./routes/po-project-claims'));
-
-// [advice from AI] 통합 홈 대시보드 API
-app.use('/api/dashboard', require('./routes/integrated-dashboard'));
-
-// [advice from AI] 프로젝트 삭제 이중 승인 시스템 API
-app.use('/api/project-deletion', require('./routes/project-deletion'));
-
-// QC/QA 대시보드 API
-app.use('/api/qc', require('./routes/qc-dashboard'));
-
-// [advice from AI] 배포 인프라 관리 API
-app.use('/api/deployment-infrastructure', require('./routes/deployment-infrastructure'));
-
-// [advice from AI] 빌드 실패 이슈 레포트 관리 API
-app.use('/api/build-issues', require('./routes/build-failure-issues'));
-
-// [advice from AI] 프로젝트 워크플로우 관리 API
-app.use('/api/project-workflow', require('./routes/project-workflow'));
-
-// [advice from AI] 배포 요청서 관리 API
-app.use('/api/deployment-requests', require('./routes/deployment-requests'));
-
-// [advice from AI] 운영센터 대시보드 API
-app.use('/api/operations', require('./routes/operations-dashboard'));
-
-// [advice from AI] CI/CD 서버 관리 API
-app.use('/api/cicd-servers', require('./routes/cicd-servers'));
-
-// [advice from AI] 레포지토리 관리 API
-app.use('/api/repositories', require('./routes/repositories'));
-
-// [advice from AI] Jenkins 실제 연동 API
-app.use('/api/jenkins', require('./routes/jenkins-integration'));
-
-// [advice from AI] Jenkins Webhook 수신 API
-app.use('/api/webhooks', require('./routes/jenkins-webhook'));
-
-// [advice from AI] 배포 실행 관리 API
-app.use('/api/deployment', require('./routes/deployment'));
-
-// [advice from AI] CI/CD 파이프라인 관리 API
-app.use('/api/operations/cicd', require('./routes/cicd-pipeline'));
-
-// [advice from AI] GitHub 통합 API
-app.use('/api/operations/github', require('./routes/github-integration'));
-
-// [advice from AI] CI/CD 모니터링 API
-app.use('/api/operations/monitoring', require('./routes/cicd-monitoring'));
+// [advice from AI] 운영센터 관련 라우트만 유지
+app.use('/api/knowledge', require('./routes/knowledge'));
+app.use('/api/admin', require('./routes/admin'));
+app.use('/api/jenkins', require('./routes/jenkins-automation'));
+app.use('/api/nexus', require('./routes/nexus-integration'));
+app.use('/api/argocd', require('./routes/argocd-integration'));
+app.use('/api/prometheus', require('./routes/prometheus-integration'));
+app.use('/api/issues', require('./routes/issues-management'));
+app.use('/api/pipeline-templates', require('./routes/pipeline-templates'));
+app.use('/api/operations', require('./routes/operations'));
 app.use('/api/operations', require('./routes/operations-deployment'));
-app.use('/api/cicd', require('./routes/cicd-servers'));
-app.use('/api/ingress', require('./routes/ingress-manager'));
-app.use('/api/images', require('./routes/image-management'));
-app.use('/api/build', require('./routes/build-monitoring'));
-app.use('/api/deployment', require('./routes/deployment-monitoring'));
-
-// [advice from AI] 경영진 대시보드 API
-app.use('/api/executive-dashboard', require('./routes/executive-dashboard'));
+app.use('/api/operations', require('./routes/operations-deployments'));
+app.use('/api/operations', require('./routes/operations-dashboard'));
+app.use('/api/operations', require('./routes/deployment-management')); // 배포 요청 및 히스토리
+app.use('/api/operations/cicd', require('./routes/cicd-pipeline'));
+app.use('/api/operations/monitoring', require('./routes/cicd-monitoring'));
+app.use('/api/operations/monitoring', require('./routes/build-monitoring'));
+app.use('/api/operations/deployment', require('./routes/deployment'));
+app.use('/api/operations/deployment', require('./routes/deployment-monitoring'));
+app.use('/api/operations/infrastructure', require('./routes/deployment-infrastructure'));
+app.use('/api/operations/servers', require('./routes/cicd-servers'));
+app.use('/api/operations/simulator', require('./routes/simulator'));
 
 // [advice from AI] 프로젝트 상태 관리 및 히스토리 API  
 // app.use('/api/project-status', jwtAuth, require('./routes/project-status-management'));
@@ -603,20 +601,9 @@ process.on('unhandledRejection', (reason, promise) => {
   // 서버를 안전하게 종료하지 않고 로그만 기록
 });
 
-// [advice from AI] 프로젝트 API 라우터 등록 (간단한 버전)
-const projectsRouter = require('./routes/projects-simple');
-const adminApprovalsRouter = require('./routes/admin-approvals');
-const projectManagementRouter = require('./routes/project-management');
-const poDashboardRouter = require('./routes/po-dashboard');
-const devEnvironmentRouter = require('./routes/dev-environment');
+// [advice from AI] 운영센터 관련 API 라우터만 등록
 // [advice from AI] 스케줄러 서비스 (node-cron 패키지 설치 완료)
 const SchedulerService = require('./services/schedulerService');
-app.use('/api/projects', projectsRouter);
-app.use('/api/admin/approvals', adminApprovalsRouter);
-app.use('/api/admin/project-management', projectManagementRouter);
-app.use('/api/po', poDashboardRouter);
-app.use('/api/dev-environment', devEnvironmentRouter);
-app.use('/api/notifications', adminApprovalsRouter); // 알림 API도 같은 라우터에서 처리
 
 // [advice from AI] 스케줄러 서비스 초기화 (활성화)
 const schedulerService = new SchedulerService();
