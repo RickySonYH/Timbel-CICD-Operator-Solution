@@ -8,14 +8,7 @@ import {
   Avatar, Divider, Alert, CircularProgress,
   Table, TableBody, TableCell, TableContainer, TableRow, Paper
 } from '@mui/material';
-import {
-  Domain as DomainIcon,
-  Add as AddIcon,
-  Edit as EditIcon,
-  Delete as DeleteIcon,
-  Visibility as ViewIcon,
-  Business as BusinessIcon
-} from '@mui/icons-material';
+// [advice from AI] 아이콘 import 제거 (텍스트 기반 UI로 변경)
 import { useJwtAuthStore } from '../../store/jwtAuthStore';
 import { usePermissions } from '../../hooks/usePermissions';
 

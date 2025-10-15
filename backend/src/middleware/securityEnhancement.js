@@ -18,18 +18,18 @@ const createRateLimiter = (windowMs, max, message) => {
   });
 };
 
-// [advice from AI] 일반 API Rate Limiter
+// [advice from AI] 일반 API Rate Limiter (실사용 모드 - 완화)
 const generalLimiter = createRateLimiter(
-  15 * 60 * 1000, // 15분
-  100, // 최대 100회 요청
+  1 * 60 * 1000, // 1분
+  500, // 최대 500회 요청 (대폭 완화)
   '너무 많은 요청입니다. 잠시 후 다시 시도해주세요.'
 );
 
-// [advice from AI] 인증 API Rate Limiter (더 엄격)
+// [advice from AI] 인증 API Rate Limiter (실사용 모드 - 완화)
 const authLimiter = createRateLimiter(
-  15 * 60 * 1000, // 15분
-  5, // 최대 5회 로그인 시도
-  '로그인 시도가 너무 많습니다. 15분 후 다시 시도해주세요.'
+  5 * 60 * 1000, // 5분 (단축)
+  50, // 최대 50회 로그인 시도 (대폭 완화)
+  '로그인 시도가 너무 많습니다. 5분 후 다시 시도해주세요.'
 );
 
 // [advice from AI] 민감한 작업 Rate Limiter

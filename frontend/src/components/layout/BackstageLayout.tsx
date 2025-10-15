@@ -36,13 +36,12 @@ import { useJwtAuthStore } from '../../store/jwtAuthStore';
 // [advice from AI] 백스테이지IO 스타일의 사이드바 너비
 const DRAWER_WIDTH = 240;
 
-// [advice from AI] 통합된 네비게이션 메뉴 (모든 메뉴를 같은 레벨로 배치)
+// [advice from AI] 통합된 네비게이션 메뉴 (승인 관리 제거)
 const navigationItems = [
   { text: '홈', path: '/' },
-  { text: '지식자원 카탈로그', path: '/knowledge', hasSubMenu: true },
   { text: '최고 관리자', path: '/executive', hasSubMenu: false },
+  { text: '지식자원 카탈로그', path: '/knowledge', hasSubMenu: true },
   { text: '운영 센터', path: '/operations', hasSubMenu: true },
-  { text: '승인 관리', path: '/admin/approvals', hasSubMenu: true },
   { text: '시스템 관리', path: '/admin', hasSubMenu: true },
 ];
 
@@ -57,13 +56,7 @@ const knowledgeSubMenus = [
   { text: '문서/가이드', path: '/knowledge/docs' }
 ];
 
-// [advice from AI] 승인 관리 하위 메뉴 (지식자원 카탈로그 하위로 이동)
-const adminApprovalSubMenus = [
-  { text: '시스템 승인 대기', path: '/admin/approvals/systems-pending', badge: 'NEW' },
-  { text: '지식 자산 승인 대기', path: '/admin/approvals/assets-pending', badge: 'NEW' },
-  { text: '승인된 자산 관리', path: '/admin/approvals/approved-assets' },
-  { text: '승인 히스토리', path: '/admin/approvals/history' }
-];
+// [advice from AI] 승인 관리 메뉴 제거 (지식자원에서 직접 생성 구조로 변경)
 
 
 // [advice from AI] 업무 영역 메뉴 삭제됨 - 지식자원 카탈로그로 통합
@@ -89,6 +82,10 @@ const operationsSubMenus = [
   { text: '종합 모니터링', path: '/operations/comprehensive-monitoring', highlight: true, description: 'Prometheus + SLA + 실시간 알림' },
   { text: '이슈 관리', path: '/operations/issues', highlight: false, description: '빌드/배포/성능 이슈 추적' },
   
+  // === 클러스터 관리 ===
+  { text: '클러스터 대시보드', path: '/operations/cluster-dashboard', highlight: true, description: '멀티 클러스터 현황 모니터링' },
+  { text: '클러스터 관리', path: '/operations/cluster-management', highlight: false, description: 'Kubernetes 클러스터 등록 및 설정' },
+  
   // === AI 지원 도구 ===
   { text: 'AI 하드웨어 계산기', path: '/operations/hardware-calculator', highlight: false, description: 'ECP-AI 리소스 자동 계산' }
 ];
@@ -98,7 +95,7 @@ const adminSubMenus = [
   { text: '대시보드', path: '/admin' },
   { text: '회원 리스트', path: '/admin/members' },
   { text: '권한 설정', path: '/admin/permissions', hasSubMenu: true },
-  { text: '시스템 설정', path: '/admin/settings' },
+  { text: '시스템 설정', path: '/admin/system-config', description: 'CI/CD, 클러스터, 보안 설정' },
   { text: '보안 설정', path: '/admin/security' },
   { text: 'API 키 관리', path: '/admin/api-keys' },
   { text: '알림 설정', path: '/admin/notifications' },

@@ -1,16 +1,22 @@
-# Timbel CICD Operator Solution v0.8
+# Timbel CICD Operator Solution v0.85
 
 ## 🚀 개요
 
-**Timbel CICD Operator Solution**은 엔터프라이즈급 CI/CD 파이프라인 관리 및 운영 자동화 플랫폼입니다. Jenkins, Nexus, Argo CD를 통합하여 GitHub 레포지토리부터 Kubernetes 배포까지 전체 프로세스를 자동화합니다.
+**Timbel CICD Operator Solution**은 엔터프라이즈급 CI/CD 파이프라인 관리 및 운영 자동화 플랫폼입니다. Jenkins, Nexus, Argo CD를 통합하여 GitHub 레포지토리부터 Kubernetes 배포까지 전체 프로세스를 자동화하며, 멀티 클러스터 환경을 지원합니다.
 
-## ✨ v0.8 주요 기능
+## ✨ v0.85 주요 기능
 
 ### 📦 배포 관리 (Deployment Management)
 
 - **배포 요청 처리**: 관리자 요청 승인/거부 및 5단계 자동 진행
 - **레포지토리 직접 배포**: GitHub URL 입력으로 즉시 배포 (운영팀 전용)
 - **배포 히스토리**: 전체 배포 기록 조회 및 롤백 관리
+
+### ☸️ 클러스터 관리 (Cluster Management) ⭐ NEW
+- **멀티 클러스터 지원**: AWS EKS, GCP GKE, Azure AKS, NCP, On-Premise, Kind 클러스터 통합 관리
+- **프로바이더별 최적화**: 클라우드 프로바이더별 자동 설정 및 배포 매니페스트 생성
+- **클러스터 대시보드**: 실시간 리소스 모니터링, 배포 밀집도, 환경별 분포
+- **헬스 체크**: 클러스터 연결 상태 실시간 확인 및 알림
 
 ### 🔧 CI/CD 파이프라인 (Pipeline Management)
 
@@ -27,12 +33,15 @@
 
 - **AI 하드웨어 계산기**: ECP-AI 75채널 기반 리소스 자동 계산 및 비용 추정
 
-### 📚 지식자원 카탈로그 (Knowledge Catalog)
+### 📚 지식자원 카탈로그 (Knowledge Catalog) ⭐ 직접 생성 방식
 
 - **도메인 관리**: 영업처(도메인) 기반 프로젝트 관리
 - **프로젝트 관리**: VoC, 요구사양서 포함 완전한 프로젝트 생성
-- **시스템 관리**: 레포지토리 중심 시스템 등록 및 배포 준비도 추적
-- **코드/디자인/문서**: 자동 추출 및 카탈로그 등록
+- **시스템 관리**: GitHub URL 입력 시 즉시 등록, 자동 분석 및 배포 준비
+- **코드 컴포넌트**: GitHub/파일 업로드로 즉시 등록, 버전 관리
+- **디자인 자산**: Figma/Sketch 드래그 앤 드롭 즉시 업로드
+- **문서/가이드**: Markdown 실시간 작성 및 공유
+- **승인 절차 제거**: 모든 지식자원을 바로 생성/수정 가능
 
 ### 🔒 보안 & 성능
 
@@ -257,6 +266,32 @@ Timbel-CICD-Operator-Solution/
 - `POST /api/knowledge/systems/:id/update-repo-info` - 레포지토리 정보 업데이트
 
 ## 🏷️ 버전 히스토리
+
+### v0.85 (2025-10-15) - 클러스터 관리 및 승인 체계 개선
+
+#### 🎯 주요 변경사항
+- **멀티 클러스터 관리 시스템 추가**: AWS, GCP, Azure, NCP, On-Premise 지원
+- **클러스터 대시보드**: 실시간 리소스 모니터링 및 배포 밀집도 계산
+- **프로바이더별 최적화**: 클라우드별 자동 설정 및 매니페스트 생성
+- **최고관리자 대시보드 개선**: 클러스터 현황 통합, 운영 중심 지표
+- **승인 관리 제거**: 지식자원 카탈로그에서 직접 생성 방식으로 변경
+- **시스템 설정 센터**: 완전한 설정 관리 (CI/CD, 클러스터, 보안, 성능)
+- **데이터베이스 구조 문서화**: 향후 개발 가이드라인 정립
+- **인증 시스템 정리**: DB 분리에 따른 인증 로직 최적화
+- **실사용 모드**: 아이콘 최소화, 텍스트 기반 UI, 프로덕션 레벨 에러 핸들링
+
+#### 🗂️ 새로 추가된 파일
+- `frontend/src/pages/operations/ClusterManagement.tsx`
+- `frontend/src/pages/operations/ClusterDashboard.tsx`
+- `frontend/src/pages/admin/SystemConfigurationCenter.tsx`
+- `backend/src/routes/cluster-management.js`
+- `backend/src/routes/system-config.js`
+- `backend/src/utils/cluster-provider-config.js`
+- `DATABASE_STRUCTURE.md`
+
+#### 🗑️ 제거된 파일
+- `frontend/src/pages/admin/ApprovalManagement.tsx`
+- `backend/src/routes/approval-management.js`
 
 ### v0.8 (2025-10-13) - 운영센터 메뉴 재구성 및 프로세스 최적화
 

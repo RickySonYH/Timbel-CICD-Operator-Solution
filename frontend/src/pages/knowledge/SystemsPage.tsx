@@ -397,9 +397,18 @@ const SystemsPage: React.FC = () => {
         <Typography variant="h4" gutterBottom>
           시스템 관리
         </Typography>
-        <Typography variant="body1" color="text.secondary">
+        <Typography variant="body1" color="text.secondary" paragraph>
           완성된 GitHub 레포지토리 기반 시스템을 관리합니다. 개발/스테이징/프로덕션 단계별로 진행 상황을 추적합니다.
         </Typography>
+        <Alert severity="success" sx={{ mb: 3 }}>
+          <Typography variant="body2">
+            <strong>직접 등록 방식:</strong> 승인 절차 없이 완성된 시스템을 바로 등록하고 배포할 수 있습니다.<br/>
+            • <strong>GitHub 연동</strong>: 레포지토리 URL 입력 시 자동 분석 및 등록<br/>
+            • <strong>배포 준비도 체크</strong>: Dockerfile, K8s 매니페스트 자동 감지<br/>
+            • <strong>즉시 배포</strong>: 등록 완료 시 운영센터에서 바로 배포 가능<br/>
+            • <strong>단계별 관리</strong>: 개발 → 스테이징 → 프로덕션 자동 진행
+          </Typography>
+        </Alert>
       </Box>
 
       {/* [advice from AI] 메트릭 대시보드 */}

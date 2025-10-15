@@ -300,9 +300,18 @@ const CodeComponentsPage: React.FC = () => {
         <Typography variant="h4" gutterBottom>
           코드 컴포넌트
         </Typography>
-        <Typography variant="body1" color="text.secondary">
+        <Typography variant="body1" color="text.secondary" paragraph>
           재사용 가능한 코드 라이브러리와 컴포넌트를 관리합니다
         </Typography>
+        <Alert severity="success" sx={{ mb: 3 }}>
+          <Typography variant="body2">
+            <strong>직접 생성 방식 적용:</strong> 승인 절차 없이 바로 코드 컴포넌트를 등록하고 관리할 수 있습니다.<br/>
+            • <strong>즉시 등록</strong>: GitHub 레포지토리 URL 또는 파일 업로드로 즉시 등록<br/>
+            • <strong>자동 분석</strong>: 코드 구조, 의존성, 사용법 자동 분석<br/>
+            • <strong>버전 관리</strong>: Git 태그 기반 자동 버전 추적<br/>
+            • <strong>사용 통계</strong>: 실시간 다운로드 및 사용 현황 추적
+          </Typography>
+        </Alert>
       </Box>
 
       {/* [advice from AI] 메트릭 대시보드 */}

@@ -96,8 +96,12 @@ const ArgoCDManagement: React.FC = () => {
     gitops_repo_url: 'https://github.com/timbel-ops/ecp-ai-gitops',
     target_namespace: '',
     manifest_path: 'dev',
-    image_tag: 'latest'
+    image_tag: 'latest',
+    cluster_id: '' // [advice from AI] 클러스터 선택 추가
   });
+
+  // [advice from AI] 클러스터 목록
+  const [clusters, setClusters] = useState<any[]>([]);
 
   const [promoteForm, setPromoteForm] = useState({
     target_environment: 'staging',
@@ -253,8 +257,36 @@ const ArgoCDManagement: React.FC = () => {
     }
   };
 
+  // [advice from AI] 클러스터 목록 로드
+  const loadClusters = async () => {
+    try {
+      const { token: authToken } = useJwtAuthStore.getState();
+      
+      const response = await fetch('http://localhost:3001/api/clusters/clusters', {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setClusters(data.clusters || []);
+        
+        // 기본 클러스터 자동 선택
+        const defaultCluster = data.clusters?.find((c: any) => c.is_default);
+        if (defaultCluster && !createForm.cluster_id) {
+          setCreateForm(prev => ({ ...prev, cluster_id: defaultCluster.id }));
+        }
+      }
+    } catch (error) {
+      console.error('클러스터 목록 로드 실패:', error);
+    }
+  };
+
   useEffect(() => {
     loadData();
+    loadClusters();
   }, []);
 
   if (loading) {

@@ -256,9 +256,18 @@ const DocumentsPage: React.FC = () => {
         <Typography variant="h4" gutterBottom>
           문서/가이드
         </Typography>
-        <Typography variant="body1" color="text.secondary">
+        <Typography variant="body1" color="text.secondary" paragraph>
           개발 가이드, 매뉴얼, 기술 문서를 체계적으로 관리합니다
         </Typography>
+        <Alert severity="success" sx={{ mb: 3 }}>
+          <Typography variant="body2">
+            <strong>직접 작성 방식:</strong> 승인 절차 없이 바로 문서를 작성하고 공유할 수 있습니다.<br/>
+            • <strong>즉시 작성</strong>: Markdown 에디터로 실시간 작성 및 미리보기<br/>
+            • <strong>자동 분류</strong>: API 가이드, 사용자 매뉴얼, 기술 스펙 자동 분류<br/>
+            • <strong>검색 최적화</strong>: 전문 검색 및 태그 기반 분류<br/>
+            • <strong>협업 기능</strong>: 실시간 공동 편집 및 댓글 시스템
+          </Typography>
+        </Alert>
       </Box>
 
       {/* [advice from AI] 메트릭 대시보드 */}

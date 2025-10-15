@@ -263,9 +263,18 @@ const DesignAssetsPage: React.FC = () => {
         <Typography variant="h4" gutterBottom>
           디자인 자산
         </Typography>
-        <Typography variant="body1" color="text.secondary">
+        <Typography variant="body1" color="text.secondary" paragraph>
           UI/UX 디자인 리소스를 체계적으로 관리합니다
         </Typography>
+        <Alert severity="success" sx={{ mb: 3 }}>
+          <Typography variant="body2">
+            <strong>직접 업로드 방식:</strong> 승인 절차 없이 바로 디자인 자산을 업로드하고 공유할 수 있습니다.<br/>
+            • <strong>즉시 업로드</strong>: Figma, Sketch, Adobe XD 파일 드래그 앤 드롭 업로드<br/>
+            • <strong>자동 변환</strong>: SVG, PNG, JPG 자동 변환 및 최적화<br/>
+            • <strong>버전 관리</strong>: 디자인 변경 이력 자동 추적<br/>
+            • <strong>개발자 연동</strong>: CSS, React 컴포넌트 자동 생성
+          </Typography>
+        </Alert>
       </Box>
 
       {/* [advice from AI] 메트릭 대시보드 */}

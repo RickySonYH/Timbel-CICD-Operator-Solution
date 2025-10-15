@@ -29,7 +29,7 @@ import DocumentsPage from './pages/knowledge/DocumentsPage';
 // [advice from AI] 관리자 및 최고관리자 페이지들 import
 import ExecutiveDashboard from './pages/executive/ExecutiveDashboard';
 import SystemManagement from './pages/admin/SystemManagement';
-import ApprovalManagement from './pages/admin/ApprovalManagement';
+// [advice from AI] ApprovalManagement import 제거 (승인 관리 메뉴 삭제)
 import SLAManagement from './pages/operations/SLAManagement';
 import RepositoryDeployment from './pages/operations/RepositoryDeployment';
 import NexusManagement from './pages/operations/NexusManagement';
@@ -38,6 +38,9 @@ import ComprehensiveMonitoring from './pages/operations/ComprehensiveMonitoring'
 import ComprehensiveIssuesManagement from './pages/operations/ComprehensiveIssuesManagement';
 import ProcessOptimizedOperationsCenter from './pages/operations/ProcessOptimizedOperationsCenter';
 import AIHardwareCalculator from './pages/operations/AIHardwareCalculator';
+import ClusterManagement from './pages/operations/ClusterManagement';
+import ClusterDashboard from './pages/operations/ClusterDashboard';
+import SystemConfigurationCenter from './pages/admin/SystemConfigurationCenter';
 import OperationsCenter from './pages/operations/OperationsCenter';
 import CICDServerManagerEnhanced from './pages/operations/CICDServerManagerEnhanced';
 import PipelineConfigCenter from './pages/operations/PipelineConfigCenter';
@@ -129,14 +132,10 @@ function AppContent() {
           <Route path="/knowledge/design" element={<DesignAssetsPage />} />
           <Route path="/knowledge/docs" element={<DocumentsPage />} />
           
-          {/* [advice from AI] 최고관리자 및 시스템관리 라우트 */}
+          {/* [advice from AI] 최고관리자 및 시스템관리 라우트 (승인 관리 제거) */}
           <Route path="/executive" element={<ExecutiveDashboard />} />
           <Route path="/admin" element={<SystemManagement />} />
-          <Route path="/admin/approvals" element={<ApprovalManagement />} />
-          <Route path="/admin/approvals/systems-pending" element={<ApprovalManagement />} />
-          <Route path="/admin/approvals/assets-pending" element={<ApprovalManagement />} />
-          <Route path="/admin/approvals/approved-assets" element={<ApprovalManagement />} />
-          <Route path="/admin/approvals/history" element={<ApprovalManagement />} />
+          <Route path="/admin/system-config" element={<SystemConfigurationCenter />} />
           
           {/* [advice from AI] 운영센터 핵심 라우트 */}
           {/* [advice from AI] 운영센터 - 재구성된 프로세스 기반 메뉴 */}
@@ -160,6 +159,10 @@ function AppContent() {
           
           {/* AI 지원 도구 */}
           <Route path="/operations/hardware-calculator" element={<AIHardwareCalculator />} />
+          
+          {/* 클러스터 관리 */}
+          <Route path="/operations/cluster-dashboard" element={<ClusterDashboard />} />
+          <Route path="/operations/cluster-management" element={<ClusterManagement />} />
           
           {/* [advice from AI] 백워드 호환성을 위한 기존 경로 유지 */}
           <Route path="/operations/deployment-center" element={<DeploymentRequestManagement />} />

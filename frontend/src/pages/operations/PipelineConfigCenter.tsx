@@ -84,63 +84,13 @@ const PipelineConfigCenter: React.FC = () => {
         setJenkinsJobs(jobsData.jobs || []);
       }
 
-      // 백업 샘플 데이터
-      setPipelines([
-        {
-          id: '1',
-          project_name: 'ECP-AI K8s Orchestrator',
-          repository_url: 'https://github.com/RickySonYH/ecp-ai-k8s-orchestrator',
-          branch: 'main',
-          status: 'active',
-          jenkins_job: 'ecp-ai-orchestrator-build',
-          last_build: '2025-09-30T10:30:00Z',
-          success_rate: 95
-        },
-        {
-          id: '2', 
-          project_name: 'User Service',
-          repository_url: 'https://github.com/company/user-service',
-          branch: 'develop',
-          status: 'active',
-          jenkins_job: 'user-service-pipeline',
-          last_build: '2025-09-30T09:45:00Z',
-          success_rate: 88
-        }
-      ]);
+      // [advice from AI] 실제 데이터가 없을 때만 안내 메시지 표시 (목업 데이터 제거)
+      if (!templatesRes.ok && !jobsRes.ok) {
+        console.log('⚠️ 파이프라인 데이터를 불러올 수 없습니다. API 서버 연결을 확인하세요.');
+      }
 
-      setJenkinsJobs([
-        {
-          name: 'ecp-ai-orchestrator-build',
-          status: 'success',
-          last_build: '2025-09-30T10:30:00Z',
-          build_number: 42,
-          duration: '4m 32s'
-        },
-        {
-          name: 'user-service-pipeline', 
-          status: 'running',
-          last_build: '2025-09-30T10:25:00Z',
-          build_number: 15,
-          duration: '2m 18s'
-        }
-      ]);
-
-      setWebhooks([
-        {
-          repository: 'RickySonYH/ecp-ai-k8s-orchestrator',
-          url: 'http://rdc.rickyson.com:8080/github-webhook/',
-          events: ['push', 'pull_request'],
-          status: 'active',
-          last_delivery: '2025-09-30T10:30:00Z'
-        },
-        {
-          repository: 'company/user-service',
-          url: 'http://rdc.rickyson.com:8080/github-webhook/',
-          events: ['push'],
-          status: 'active', 
-          last_delivery: '2025-09-30T09:45:00Z'
-        }
-      ]);
+      // [advice from AI] 실사용 모드 - 목업 데이터 제거, API 데이터만 사용
+      console.log('✅ 파이프라인 설정 데이터 로드 완료');
 
     } catch (error) {
       console.error('파이프라인 데이터 로드 실패:', error);
