@@ -504,7 +504,7 @@ const ClusterDashboard: React.FC = () => {
                   </Box>
                   <LinearProgress 
                     variant="determinate" 
-                    value={statistics?.total_clusters ? (statistics.active_clusters || 0) / statistics.total_clusters * 100 : 0} 
+                    value={Math.max(0, Math.min(100, statistics?.total_clusters ? (statistics.active_clusters || 0) / statistics.total_clusters * 100 : 0))} 
                     color="success"
                   />
                 </Box>
@@ -515,7 +515,7 @@ const ClusterDashboard: React.FC = () => {
                   </Box>
                   <LinearProgress 
                     variant="determinate" 
-                    value={statistics?.total_clusters ? (statistics.connected_clusters || 0) / statistics.total_clusters * 100 : 0} 
+                    value={Math.max(0, Math.min(100, statistics?.total_clusters ? (statistics.connected_clusters || 0) / statistics.total_clusters * 100 : 0))} 
                     color="primary"
                   />
                 </Box>

@@ -1079,7 +1079,7 @@ router.get('/monitoring/tenants/:tenantId/status', async (req, res) => {
 
     console.log('실시간 모니터링 상태 조회:', tenantId);
 
-    const result = await monitoringService.getRealTimeStatus(tenantId);
+    const result = await monitoringService.getRealTimeSystemStatus(tenantId);
     
     res.json({
       success: true,
@@ -2401,6 +2401,39 @@ router.get('/monitoring/dashboard/overview', jwtAuth.verifyToken, jwtAuth.requir
 
   } catch (error) {
     console.error('모니터링 대시보드 API 오류:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal Server Error',
+      message: error.message
+    });
+  }
+});
+
+// [advice from AI] ECP-AI 시뮬레이터 직접 테스트 API
+router.get('/simulator/test/:tenantId', async (req, res) => {
+  try {
+    const { tenantId } = req.params;
+    
+    console.log('🧪 ECP-AI 시뮬레이터 직접 테스트:', tenantId);
+    
+    // ECP-AI 시뮬레이터 인스턴스 가져오기
+    const { getECPAISimulator } = require('../services/ecpAISimulator');
+    const simulator = getECPAISimulator();
+    
+    // 실시간 메트릭 조회 (실제 시스템 메트릭 사용)
+    const realtimeData = await simulator.getRealtimeMetrics(tenantId);
+    
+    res.json({
+      success: true,
+      data: {
+        tenantId: tenantId,
+        realtimeData: realtimeData,
+        message: 'ECP-AI 시뮬레이터 실제 메트릭 테스트 완료'
+      }
+    });
+    
+  } catch (error) {
+    console.error('ECP-AI 시뮬레이터 테스트 오류:', error);
     res.status(500).json({
       success: false,
       error: 'Internal Server Error',
@@ -4171,6 +4204,362 @@ router.get('/images/push-activities', jwtAuth.verifyToken, async (req, res) => {
       success: false,
       message: '푸시 활동을 불러올 수 없습니다',
       error: error.message
+    });
+  }
+});
+
+// [advice from AI] Phase 2: 통합 CI/CD 파이프라인 API - 확장 가능한 아키텍처
+const PipelineOrchestrator = require('../services/pipelineOrchestrator');
+const pipelineOrchestrator = new PipelineOrchestrator();
+
+// [advice from AI] 사용 가능한 CI/CD 제공자 목록 조회
+router.get('/pipeline/providers', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    console.log('📋 사용 가능한 CI/CD 제공자 목록 조회');
+    
+    const providers = pipelineOrchestrator.getAvailableProviders();
+    
+    res.json({
+      success: true,
+      data: providers.providers,
+      message: 'CI/CD 제공자 목록 조회 성공'
+    });
+    
+  } catch (error) {
+    console.error('CI/CD 제공자 목록 조회 오류:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal Server Error',
+      message: error.message
+    });
+  }
+});
+
+// [advice from AI] 파이프라인 템플릿 생성
+router.post('/pipeline/templates', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    console.log('📝 파이프라인 템플릿 생성');
+    
+    const templateConfig = req.body;
+    templateConfig.createdBy = req.user?.username || 'unknown';
+    
+    const result = pipelineOrchestrator.createPipelineTemplate(templateConfig);
+    
+    res.json({
+      success: true,
+      data: result,
+      message: '파이프라인 템플릿 생성 완료'
+    });
+    
+  } catch (error) {
+    console.error('파이프라인 템플릿 생성 오류:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal Server Error',
+      message: error.message
+    });
+  }
+});
+
+// [advice from AI] 통합 파이프라인 실행
+router.post('/pipeline/execute', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    console.log('🚀 통합 파이프라인 실행');
+    
+    const pipelineConfig = req.body;
+    pipelineConfig.createdBy = req.user?.username || 'unknown';
+    
+    const result = await pipelineOrchestrator.executePipeline(pipelineConfig);
+    
+    res.json({
+      success: true,
+      data: result,
+      message: '파이프라인 실행 시작 완료'
+    });
+    
+  } catch (error) {
+    console.error('파이프라인 실행 오류:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal Server Error',
+      message: error.message
+    });
+  }
+});
+
+// [advice from AI] 파이프라인 상태 조회
+router.get('/pipeline/status/:pipelineId', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    const { pipelineId } = req.params;
+    console.log(`📊 파이프라인 상태 조회: ${pipelineId}`);
+    
+    const result = pipelineOrchestrator.getPipelineStatus(pipelineId);
+    
+    res.json({
+      success: true,
+      data: result,
+      message: '파이프라인 상태 조회 완료'
+    });
+    
+  } catch (error) {
+    console.error('파이프라인 상태 조회 오류:', error);
+    res.status(404).json({
+      success: false,
+      error: 'Not Found',
+      message: error.message
+    });
+  }
+});
+
+// [advice from AI] 파이프라인 통계 조회
+router.get('/pipeline/stats', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    console.log('📈 파이프라인 통계 조회');
+    
+    const stats = pipelineOrchestrator.getPipelineStats();
+    
+    res.json({
+      success: true,
+      data: stats.stats,
+      message: '파이프라인 통계 조회 완료'
+    });
+    
+  } catch (error) {
+    console.error('파이프라인 통계 조회 오류:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal Server Error',
+      message: error.message
+    });
+  }
+});
+
+// [advice from AI] 파이프라인 제공자별 연결 테스트
+router.post('/pipeline/test-connection', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    const { providers } = req.body;
+    console.log('🔍 파이프라인 제공자 연결 테스트:', providers);
+    
+    const testResults = {};
+    
+    // Jenkins 연결 테스트
+    if (providers?.ci === 'jenkins') {
+      const JenkinsIntegration = require('../services/jenkinsIntegration');
+      const jenkins = new JenkinsIntegration();
+      testResults.jenkins = await jenkins.testConnection();
+    }
+    
+    // ArgoCD 연결 테스트
+    if (providers?.cd === 'argocd') {
+      const ArgoCDIntegration = require('../services/argoCDIntegration');
+      const argocd = new ArgoCDIntegration();
+      testResults.argocd = await argocd.testConnection();
+    }
+    
+    // Nexus 연결 테스트
+    if (providers?.registry === 'nexus') {
+      const NexusIntegration = require('../services/nexusIntegration');
+      const nexus = new NexusIntegration();
+      testResults.nexus = await nexus.testConnection();
+    }
+    
+    const allSuccess = Object.values(testResults).every(result => result.success);
+    
+    res.json({
+      success: allSuccess,
+      data: {
+        providers: providers,
+        testResults: testResults,
+        allConnected: allSuccess
+      },
+      message: allSuccess ? '모든 제공자 연결 성공' : '일부 제공자 연결 실패'
+    });
+    
+  } catch (error) {
+    console.error('파이프라인 제공자 연결 테스트 오류:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal Server Error',
+      message: error.message
+    });
+  }
+});
+
+// [advice from AI] 파이프라인 실시간 이벤트 스트림 (SSE)
+router.get('/pipeline/events/:pipelineId', jwtAuth.verifyToken, (req, res) => {
+  const { pipelineId } = req.params;
+  
+  // SSE 헤더 설정
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Cache-Control'
+  });
+  
+  console.log(`📡 파이프라인 실시간 이벤트 스트림 시작: ${pipelineId}`);
+  
+  // 초기 연결 확인 이벤트
+  res.write(`data: ${JSON.stringify({
+    type: 'connected',
+    pipelineId: pipelineId,
+    timestamp: new Date().toISOString()
+  })}\n\n`);
+  
+  // 파이프라인 이벤트 리스너 등록
+  const onPipelineProgress = (pipeline) => {
+    if (pipeline.id === pipelineId) {
+      res.write(`data: ${JSON.stringify({
+        type: 'progress',
+        pipeline: pipeline,
+        timestamp: new Date().toISOString()
+      })}\n\n`);
+    }
+  };
+  
+  const onStageCompleted = (data) => {
+    if (data.pipelineId === pipelineId) {
+      res.write(`data: ${JSON.stringify({
+        type: 'stage-completed',
+        stage: data.stage,
+        timestamp: new Date().toISOString()
+      })}\n\n`);
+    }
+  };
+  
+  const onPipelineCompleted = (pipeline) => {
+    if (pipeline.id === pipelineId) {
+      res.write(`data: ${JSON.stringify({
+        type: 'completed',
+        pipeline: pipeline,
+        timestamp: new Date().toISOString()
+      })}\n\n`);
+      res.end();
+    }
+  };
+  
+  const onPipelineError = (data) => {
+    if (data.pipelineId === pipelineId) {
+      res.write(`data: ${JSON.stringify({
+        type: 'error',
+        error: data.error,
+        pipeline: data.pipeline,
+        timestamp: new Date().toISOString()
+      })}\n\n`);
+      res.end();
+    }
+  };
+  
+  // 이벤트 리스너 등록
+  pipelineOrchestrator.on('pipelineProgress', onPipelineProgress);
+  pipelineOrchestrator.on('stageCompleted', onStageCompleted);
+  pipelineOrchestrator.on('pipelineCompleted', onPipelineCompleted);
+  pipelineOrchestrator.on('pipelineError', onPipelineError);
+  
+  // 클라이언트 연결 종료시 리스너 제거
+  req.on('close', () => {
+    console.log(`📡 파이프라인 실시간 이벤트 스트림 종료: ${pipelineId}`);
+    pipelineOrchestrator.removeListener('pipelineProgress', onPipelineProgress);
+    pipelineOrchestrator.removeListener('stageCompleted', onStageCompleted);
+    pipelineOrchestrator.removeListener('pipelineCompleted', onPipelineCompleted);
+    pipelineOrchestrator.removeListener('pipelineError', onPipelineError);
+  });
+});
+
+// [advice from AI] 파이프라인 템플릿 목록 조회
+router.get('/pipeline/templates', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    console.log('📋 파이프라인 템플릿 목록 조회');
+    
+    const templates = Array.from(pipelineOrchestrator.pipelineTemplates.values());
+    
+    res.json({
+      success: true,
+      data: {
+        templates: templates,
+        count: templates.length
+      },
+      message: '파이프라인 템플릿 목록 조회 완료'
+    });
+    
+  } catch (error) {
+    console.error('파이프라인 템플릿 목록 조회 오류:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal Server Error',
+      message: error.message
+    });
+  }
+});
+
+// [advice from AI] 활성 파이프라인 목록 조회
+router.get('/pipeline/active', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    console.log('🔄 활성 파이프라인 목록 조회');
+    
+    const activePipelines = Array.from(pipelineOrchestrator.activePipelines.values());
+    
+    res.json({
+      success: true,
+      data: {
+        pipelines: activePipelines,
+        count: activePipelines.length
+      },
+      message: '활성 파이프라인 목록 조회 완료'
+    });
+    
+  } catch (error) {
+    console.error('활성 파이프라인 목록 조회 오류:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal Server Error',
+      message: error.message
+    });
+  }
+});
+
+// [advice from AI] 파이프라인 히스토리 조회
+router.get('/pipeline/history', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    const { page = 1, limit = 10, status } = req.query;
+    console.log('📚 파이프라인 히스토리 조회');
+    
+    let pipelines = Array.from(pipelineOrchestrator.pipelineHistory.values());
+    
+    // 상태별 필터링
+    if (status) {
+      pipelines = pipelines.filter(pipeline => pipeline.status === status);
+    }
+    
+    // 최신 순으로 정렬
+    pipelines.sort((a, b) => new Date(b.startTime) - new Date(a.startTime));
+    
+    // 페이지네이션
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + parseInt(limit);
+    const paginatedPipelines = pipelines.slice(startIndex, endIndex);
+    
+    res.json({
+      success: true,
+      data: {
+        pipelines: paginatedPipelines,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: pipelines.length,
+          pages: Math.ceil(pipelines.length / limit)
+        }
+      },
+      message: '파이프라인 히스토리 조회 완료'
+    });
+    
+  } catch (error) {
+    console.error('파이프라인 히스토리 조회 오류:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal Server Error',
+      message: error.message
     });
   }
 });

@@ -75,21 +75,72 @@ const KnowledgeCatalog: React.FC = () => {
       
       // API 호출로 실제 데이터 가져오기
       const { token } = useJwtAuthStore.getState();
-      const response = await fetch('/api/knowledge/catalog-stats', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      
+      // 카탈로그 통계와 코드 컴포넌트 수, 디자인 자산 수, 문서 수를 병렬로 가져오기
+      const [catalogResponse, componentsResponse, designAssetsResponse, documentsResponse] = await Promise.all([
+        fetch('/api/knowledge/catalog-stats', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }),
+        fetch('/api/knowledge/code-components', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }),
+        fetch('/api/knowledge/design-assets', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }),
+        fetch('/api/knowledge/documents', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        })
+      ]);
 
-      if (!response.ok) {
+      if (!catalogResponse.ok) {
         throw new Error('카탈로그 데이터 로드 실패');
       }
 
-      const data = await response.json();
-      setStats(data.stats);
-      setRecentActivities(data.recentActivities);
-      setPopularResources(data.popularResources);
+      const catalogData = await catalogResponse.json();
+      let stats = catalogData.stats;
+
+      // 코드 컴포넌트 수를 직접 계산
+      if (componentsResponse.ok) {
+        const componentsData = await componentsResponse.json();
+        stats = {
+          ...stats,
+          codeComponents: componentsData.components?.length || 0
+        };
+      }
+
+      // 디자인 자산 수를 직접 계산
+      if (designAssetsResponse.ok) {
+        const designAssetsData = await designAssetsResponse.json();
+        stats = {
+          ...stats,
+          designAssets: designAssetsData.assets?.length || 0
+        };
+      }
+
+      // 문서 수를 직접 계산
+      if (documentsResponse.ok) {
+        const documentsData = await documentsResponse.json();
+        stats = {
+          ...stats,
+          documents: documentsData.documents?.length || 0
+        };
+      }
+
+      setStats(stats);
+      setRecentActivities(catalogData.recentActivities);
+      setPopularResources(catalogData.popularResources);
       
     } catch (error) {
       console.error('카탈로그 데이터 로드 실패:', error);

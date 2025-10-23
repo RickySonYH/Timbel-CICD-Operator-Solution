@@ -269,25 +269,33 @@ const LoginForm: React.FC = () => {
                       </MenuItem>
                       {sampleAccounts.map((account) => {
                         // 역할별 색상 결정
-                        const getRoleColor = (roleType: string) => {
+                        const getRoleColor = (roleType: string | null | undefined) => {
+                          if (!roleType) return 'default';
                           switch (roleType) {
                             case 'admin': return 'error';
+                            case 'operations': return 'secondary';
+                            case 'deployer': return 'primary';
                             case 'executive': return 'error';
                             case 'po': return 'warning';
                             case 'pe': return 'info';
                             case 'qa': return 'success';
+                            case 'user': return 'default';
                             default: return 'default';
                           }
                         };
 
                         // 역할별 한국어 이름
-                        const getRoleName = (roleType: string) => {
+                        const getRoleName = (roleType: string | null | undefined) => {
+                          if (!roleType) return '사용자';
                           switch (roleType) {
                             case 'admin': return '시스템 관리자';
+                            case 'operations': return '운영팀';
+                            case 'deployer': return '배포담당자';
                             case 'executive': return '최고 관리자';
                             case 'po': return 'PO (Project Owner)';
                             case 'pe': return 'PE (Project Engineer)';
                             case 'qa': return 'QA (Quality Assurance)';
+                            case 'user': return '일반 사용자';
                             default: return roleType.toUpperCase();
                           }
                         };

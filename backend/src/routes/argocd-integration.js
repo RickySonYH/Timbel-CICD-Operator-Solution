@@ -151,17 +151,24 @@ class ArgoCDAPI {
 // [advice from AI] Argo CD 설정 조회 및 API 인스턴스 생성
 async function getArgoCDAPI() {
   const result = await pool.query(`
-    SELECT endpoint_url, username, password 
-    FROM monitoring_configurations 
-    WHERE config_type = 'argocd' 
-    LIMIT 1
+    SELECT config_value 
+    FROM system_configurations 
+    WHERE category = 'argocd' AND config_key IN ('argocd_url', 'argocd_username', 'argocd_password')
   `);
 
-  const config = result.rows[0] || {
-    endpoint_url: 'http://argocd-server:8080',
-    username: 'admin',
-    password: 'admin'
-  };
+  const config = {};
+  result.rows.forEach(row => {
+    if (row.config_key === 'argocd_url') config.endpoint_url = row.config_value;
+    if (row.config_key === 'argocd_username') config.username = row.config_value;
+    if (row.config_key === 'argocd_password') config.password = row.config_value;
+  });
+
+  // 기본값 설정
+  if (!config.endpoint_url) {
+    config.endpoint_url = 'https://localhost:8081';
+    config.username = 'admin';
+    config.password = 'admin';
+  }
 
   return new ArgoCDAPI(config.endpoint_url, 'fake-token');
 }
@@ -269,7 +276,8 @@ router.get('/applications', jwtAuth.verifyToken, async (req, res) => {
 
     res.json({
       success: true,
-      applications: applicationsWithStatus
+      applications: applicationsWithStatus,
+      total: applicationsWithStatus.length
     });
 
   } catch (error) {

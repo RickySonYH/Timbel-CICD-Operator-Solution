@@ -13,6 +13,24 @@
     <meta name="keywords" content="팀벨, Timbel, AI, 지식자원, 개발생산성, 바이브코딩" />
     <meta name="author" content="(주)팀벨 Timeless Label" />
     <title>Timbel 지식자원 플랫폼 | (주)팀벨</title>
+    
+    <!-- [advice from AI] WebSocket 완전 차단 스크립트 -->
+    <script>
+      if (typeof WebSocket !== 'undefined') {
+        const originalWebSocket = WebSocket;
+        window.WebSocket = function(url, protocols) {
+          console.log('🚫 WebSocket 연결 차단됨:', url);
+          // WebSocket 연결을 차단하고 더미 객체 반환
+          return {
+            readyState: 3, // CLOSED
+            close: function() {},
+            send: function() {},
+            addEventListener: function() {},
+            removeEventListener: function() {}
+          };
+        };
+      }
+    </script>
   </head>
   <body>
     <noscript>JavaScript를 활성화해야 이 앱을 사용할 수 있습니다.</noscript>

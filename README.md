@@ -1,10 +1,14 @@
-# Timbel CICD Operator Solution v0.85
+# Timbel CICD Operator Solution v0.60.0 (Beta)
 
 ## 🚀 개요
 
 **Timbel CICD Operator Solution**은 엔터프라이즈급 CI/CD 파이프라인 관리 및 운영 자동화 플랫폼입니다. Jenkins, Nexus, Argo CD를 통합하여 GitHub 레포지토리부터 Kubernetes 배포까지 전체 프로세스를 자동화하며, 멀티 클러스터 환경을 지원합니다.
 
-## ✨ v0.85 주요 기능
+![Version](https://img.shields.io/badge/version-0.60.0-blue)
+![License](https://img.shields.io/badge/license-RickySon-green)
+![Status](https://img.shields.io/badge/status-Beta-yellow)
+
+## ✨ v0.60.0 주요 기능
 
 ### 📦 배포 관리 (Deployment Management)
 
@@ -18,11 +22,16 @@
 - **클러스터 대시보드**: 실시간 리소스 모니터링, 배포 밀집도, 환경별 분포
 - **헬스 체크**: 클러스터 연결 상태 실시간 확인 및 알림
 
-### 🔧 CI/CD 파이프라인 (Pipeline Management)
+### 🔧 CI/CD 파이프라인 (Pipeline Management) ⭐ NEW
 
-- **파이프라인 현황**: Jenkins + Nexus + Argo CD 통합 대시보드
-- **파이프라인 구성**: Job 템플릿, 빌드/배포 설정
-- **인프라 서버 관리**: CI/CD 서버 설정 및 모니터링
+- **파이프라인 템플릿 라이브러리**: 데이터베이스 기반 10개 실용 템플릿
+  - React TypeScript, Vue 3, Next.js (프론트엔드)
+  - Node.js Express, Python FastAPI, Java Spring Boot, Go Gin, NestJS (백엔드)
+  - Django (풀스택), 정적 사이트 생성기
+- **파이프라인 관리**: 실제 배포된 파이프라인 인스턴스 관리
+- **인증 및 보안**: 솔루션 인스턴스 연결 정보 관리 (Jenkins, ArgoCD, Nexus 등)
+- **템플릿 기반 생성**: 검증된 템플릿으로 빠른 파이프라인 생성
+- **인프라 서버 관리**: 16가지 CI/CD 도구 통합 지원
 
 ### 📊 모니터링 & 이슈 (Monitoring & Issues)
 

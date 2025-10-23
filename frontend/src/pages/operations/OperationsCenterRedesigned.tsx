@@ -63,7 +63,7 @@ const OperationsCenterRedesigned: React.FC = () => {
       setError('');
 
       // 시스템 등록 요청 직접 조회 (deployment-requests API 대신)
-      const response = await fetch('http://rdc.rickyson.com:3001/api/po/dashboard-stats', {
+      const response = await fetch('http://localhost:3001/api/po/dashboard-stats', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -110,7 +110,7 @@ const OperationsCenterRedesigned: React.FC = () => {
         formData.append('screenshot', supportRequest.screenshot_data);
       }
 
-      const response = await fetch('http://rdc.rickyson.com:3001/api/operations/create-pe-support-issue', {
+      const response = await fetch('http://localhost:3001/api/operations/create-pe-support-issue', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -179,11 +179,16 @@ const OperationsCenterRedesigned: React.FC = () => {
               📋 배포 요청 접수 및 검토
             </Typography>
             
-            {/* ECP-AI 샘플 배포 요청 */}
-            <Alert severity="info" sx={{ mb: 3 }}>
-              🚀 <strong>ECP-AI K8s Orchestrator v2.0</strong> 배포 요청이 접수되었습니다.
-              QA 검증 완료 (92점), PO 최종 승인 완료 상태입니다.
-            </Alert>
+            {/* [advice from AI] 실제 배포 요청 데이터 기반 표시 */}
+            {deploymentRequests.length === 0 ? (
+              <Alert severity="info" sx={{ mb: 3 }}>
+                현재 처리할 배포 요청이 없습니다. 새로운 배포 요청을 생성해보세요.
+              </Alert>
+            ) : (
+              <Alert severity="success" sx={{ mb: 3 }}>
+                {deploymentRequests.length}개의 배포 요청이 대기 중입니다.
+              </Alert>
+            )}
 
             <TableContainer component={Paper} variant="outlined">
               <Table>
@@ -199,87 +204,101 @@ const OperationsCenterRedesigned: React.FC = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  <TableRow>
-                    <TableCell>
-                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                        ECP-AI K8s Orchestrator v2.0
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        Multi-tenant AI Service Deployment System
-                      </Typography>
-                    </TableCell>
-                    <TableCell>PO (프로덕트 오너)</TableCell>
-                    <TableCell>
-                      <Chip label="Production" color="error" size="small" />
-                    </TableCell>
-                    <TableCell>
-                      <Chip label="높음" color="error" size="small" />
-                    </TableCell>
-                    <TableCell>
-                      <Chip label="92점" color="success" size="small" />
-                    </TableCell>
-                    <TableCell>
-                      <Chip label="검토 대기" color="warning" size="small" />
-                    </TableCell>
-                    <TableCell>
-                      <Box sx={{ display: 'flex', gap: 1 }}>
-                        <Button
-                          variant="contained"
-                          size="small"
-                          onClick={() => {
-                            setSelectedRequest({
-                              id: 'ecp-ai-sample',
-                              name: 'ECP-AI K8s Orchestrator v2.0',
-                              description: 'Multi-tenant AI Service Deployment System',
-                              repo_url: 'https://github.com/RickySonYH/ecp-ai-k8s-orchestrator'
-                            });
-                            setApprovalAction('approve');
-                            setApprovalDialog(true);
-                          }}
-                        >
-                          승인
-                        </Button>
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          color="error"
-                          onClick={() => {
-                            setSelectedRequest({
-                              id: 'ecp-ai-sample',
-                              name: 'ECP-AI K8s Orchestrator v2.0'
-                            });
-                            setApprovalAction('reject');
-                            setApprovalDialog(true);
-                          }}
-                        >
-                          반려
-                        </Button>
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          onClick={() => {
-                            alert('📋 상세 정보:\n\n• 레포지토리: https://github.com/RickySonYH/ecp-ai-k8s-orchestrator\n• QA 점수: 92점\n• 8개 AI 서비스 지원\n• 4개 클라우드 플랫폼 호환');
-                          }}
-                        >
-                          상세보기
-                        </Button>
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          color="warning"
-                          onClick={() => {
-                            setSupportRequest({
-                              ...supportRequest,
-                              project_name: 'ECP-AI K8s Orchestrator v2.0'
-                            });
-                            setSupportDialog(true);
-                          }}
-                        >
-                          PE 지원요청
-                        </Button>
-                      </Box>
-                    </TableCell>
-                  </TableRow>
+                  {deploymentRequests.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} align="center">
+                        <Typography variant="body2" color="text.secondary">
+                          등록된 배포 요청이 없습니다.
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    deploymentRequests.map((request) => (
+                      <TableRow key={request.id}>
+                        <TableCell>
+                          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                            {request.project_name}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {request.description || 'No description'}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>{request.requested_by || 'Unknown'}</TableCell>
+                        <TableCell>
+                          <Chip label={request.environment} color="error" size="small" />
+                        </TableCell>
+                        <TableCell>
+                          <Chip label={request.priority} color="error" size="small" />
+                        </TableCell>
+                        <TableCell>
+                          <Chip label={request.qa_score ? `${request.qa_score}점` : 'N/A'} color="success" size="small" />
+                        </TableCell>
+                        <TableCell>
+                          <Chip 
+                            label={request.status} 
+                            color={
+                              request.status === 'approved' ? 'success' :
+                              request.status === 'pending' ? 'warning' :
+                              request.status === 'rejected' ? 'error' : 'default'
+                            } 
+                            size="small" 
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Box sx={{ display: 'flex', gap: 1 }}>
+                            <Button
+                              variant="contained"
+                              size="small"
+                              onClick={() => {
+                                setSelectedRequest(request);
+                                setApprovalAction('approve');
+                                setApprovalDialog(true);
+                              }}
+                              disabled={request.status !== 'pending'}
+                            >
+                              승인
+                            </Button>
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              color="error"
+                              onClick={() => {
+                                setSelectedRequest(request);
+                                setApprovalAction('reject');
+                                setApprovalDialog(true);
+                              }}
+                              disabled={request.status !== 'pending'}
+                            >
+                              반려
+                            </Button>
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              onClick={() => {
+                                alert(`📋 상세 정보:\n\n• 프로젝트: ${request.project_name}\n• 환경: ${request.environment}\n• 우선순위: ${request.priority}\n• QA 점수: ${request.qa_score || 'N/A'}`);
+                              }}
+                            >
+                              상세보기
+                            </Button>
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              color="warning"
+                              onClick={() => {
+                                setSupportRequest({
+                                  ...supportRequest,
+                                  project_name: request.project_name
+                                });
+                                setSupportDialog(true);
+                              }}
+                            >
+                              PE 지원요청
+                            </Button>
+                          </Box>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </TableContainer>
@@ -436,7 +455,7 @@ const OperationsCenterRedesigned: React.FC = () => {
       </TabPanel>
 
       {/* 승인/반려 다이얼로그 */}
-      <Dialog open={approvalDialog} onClose={() => setApprovalDialog(false)} maxWidth="sm" fullWidth>
+      <Dialog open={approvalDialog} onClose={() => setApprovalDialog(false)} maxWidth="sm" fullWidth disableEnforceFocus>
         <DialogTitle>
           배포 요청 {approvalAction === 'approve' ? '승인' : '반려'}
         </DialogTitle>

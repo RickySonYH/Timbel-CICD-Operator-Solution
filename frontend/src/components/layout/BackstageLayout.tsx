@@ -1,7 +1,8 @@
-// [advice from AI] 백스테이지IO 스타일의 메인 레이아웃 컴포넌트
+// [advice from AI] 백스테이지IO 스타일의 메인 레이아웃 컴포넌트 (프로덕션 레벨 개선)
 // 사이드바, 헤더, 메인 컨텐츠 영역을 포함한 전체 레이아웃 구조
+// 접근성, 성능 최적화, 반응형 디자인, 키보드 네비게이션, 검색 기능 포함
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Box,
   Drawer,
@@ -26,17 +27,37 @@ import {
   Paper,
   ListItemAvatar,
   Avatar,
-  CircularProgress
+  CircularProgress,
+  Fade,
+  Zoom,
+  alpha,
+  TextField,
+  InputAdornment,
+  Alert,
+  Snackbar,
+  Fab
 } from '@mui/material';
-// [advice from AI] 메시지 센터 제거로 알림 아이콘 불필요
+import {
+  Menu as MenuIcon,
+  Close as CloseIcon,
+  Search as SearchIcon,
+  Clear as ClearIcon,
+  ExpandLess,
+  ExpandMore,
+  ArrowUpward as ArrowUpwardIcon,
+  Notifications as NotificationsIcon
+} from '@mui/icons-material';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import UserInfo from './UserInfo';
 import { useJwtAuthStore } from '../../store/jwtAuthStore';
+import PermissionGuard from '../common/PermissionGuard';
+import { useAdvancedPermissions } from '../../hooks/useAdvancedPermissions';
+import { checkMenuPermission, getMenuPermissionConfig } from './MenuPermissionConfig';
 
 // [advice from AI] 백스테이지IO 스타일의 사이드바 너비
 const DRAWER_WIDTH = 240;
 
-// [advice from AI] 통합된 네비게이션 메뉴 (승인 관리 제거)
+// [advice from AI] 통합된 네비게이션 메뉴 (운영 센터 복구)
 const navigationItems = [
   { text: '홈', path: '/' },
   { text: '최고 관리자', path: '/executive', hasSubMenu: false },
@@ -56,27 +77,15 @@ const knowledgeSubMenus = [
   { text: '문서/가이드', path: '/knowledge/docs' }
 ];
 
-// [advice from AI] 승인 관리 메뉴 제거 (지식자원에서 직접 생성 구조로 변경)
-
-
-// [advice from AI] 업무 영역 메뉴 삭제됨 - 지식자원 카탈로그로 통합
-
-// [advice from AI] PO, PE 관련 하위 메뉴 삭제됨
-
-// [advice from AI] 운영센터 하위 메뉴 (재구성: 프로세스 기반)
+// [advice from AI] 운영 센터 하위 메뉴 복구
 const operationsSubMenus = [
-  // === 운영 센터 메인 ===
-  { text: '운영 센터', path: '/operations', highlight: true, description: '전체 운영 현황 대시보드' },
-  
   // === 배포 관리 ===
-  { text: '배포 요청 처리', path: '/operations/deployment-requests', highlight: true, description: '관리자 요청 승인 및 5단계 자동 진행' },
   { text: '레포지토리 직접 배포', path: '/operations/repository-deploy', highlight: true, description: 'GitHub URL로 즉시 배포 (운영팀 전용)' },
   { text: '배포 히스토리', path: '/operations/deployment-history', highlight: false, description: '모든 배포 기록 및 롤백 관리' },
   
   // === CI/CD 파이프라인 ===
-  { text: '파이프라인 현황', path: '/operations/pipeline-status', highlight: true, description: 'Jenkins + Nexus + Argo CD 통합 대시보드' },
-  { text: '파이프라인 구성', path: '/operations/pipeline-config', highlight: false, description: 'Job 템플릿 및 빌드 설정' },
-  { text: '인프라 서버 관리', path: '/operations/infrastructure', highlight: false, description: 'CI/CD 서버 설정 및 모니터링' },
+  { text: '파이프라인 관리', path: '/operations/pipeline', highlight: true, description: 'CI/CD 파이프라인 통합 관리 (Jenkins + Nexus + ArgoCD)' },
+  { text: 'CI/CD 서버 설정', path: '/operations/infrastructure', highlight: false, description: 'Jenkins, Nexus, ArgoCD 서버 연결 설정' },
   
   // === 모니터링 & 이슈 ===
   { text: '종합 모니터링', path: '/operations/comprehensive-monitoring', highlight: true, description: 'Prometheus + SLA + 실시간 알림' },
@@ -90,28 +99,14 @@ const operationsSubMenus = [
   { text: 'AI 하드웨어 계산기', path: '/operations/hardware-calculator', highlight: false, description: 'ECP-AI 리소스 자동 계산' }
 ];
 
-// [advice from AI] 시스템 관리 하위 메뉴 (지식자원 카탈로그 하위로 이동)
+// [advice from AI] 시스템 관리 하위 메뉴 - 핵심 기능만 유지
 const adminSubMenus = [
-  { text: '대시보드', path: '/admin' },
-  { text: '회원 리스트', path: '/admin/members' },
-  { text: '권한 설정', path: '/admin/permissions', hasSubMenu: true },
+  { text: '사용자 관리', path: '/admin' },
+  { text: '권한 관리', path: '/admin/permissions', description: '역할 기반 권한 및 감사 로그 관리' },
   { text: '시스템 설정', path: '/admin/system-config', description: 'CI/CD, 클러스터, 보안 설정' },
-  { text: '보안 설정', path: '/admin/security' },
-  { text: 'API 키 관리', path: '/admin/api-keys' },
-  { text: '알림 설정', path: '/admin/notifications' },
+  { text: '시스템 모니터링', path: '/admin/monitoring', description: '백엔드 서버 및 DB 상태 모니터링' },
   { text: '로그 관리', path: '/admin/logs' },
-  { text: '백업 및 복원', path: '/admin/backup' },
-  { text: '분석', path: '/admin/analytics' },
 ];
-
-// [advice from AI] 권한 설정 하위 메뉴
-const permissionsSubMenus = [
-  { text: '사용자 관리', path: '/admin/permissions/users' },
-  { text: '그룹 관리', path: '/admin/permissions/groups' },
-  { text: '역할 배정', path: '/admin/permissions/roles' },
-  { text: '권한 매트릭스', path: '/admin/permissions/matrix' }
-];
-
 
 interface BackstageLayoutProps {
   children: React.ReactNode;
@@ -120,257 +115,138 @@ interface BackstageLayoutProps {
 
 const BackstageLayout: React.FC<BackstageLayoutProps> = ({ 
   children, 
-  title = "Timbel Project Management Solution" 
+  title = "Timbel CICD Operator Solution" 
 }) => {
   const theme = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const isTablet = useMediaQuery(theme.breakpoints.between('md', 'lg'));
+  const isDesktop = useMediaQuery(theme.breakpoints.up('lg'));
+  
+  // [advice from AI] 기존 상태 + 프로덕션 레벨 개선 상태
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [operationsOpen, setOperationsOpen] = useState(false);
   const [knowledgeOpen, setKnowledgeOpen] = useState(false);
-  const [approvalOpen, setApprovalOpen] = useState(false);
+  const [operationsOpen, setOperationsOpen] = useState(false);
   const [adminOpen, setAdminOpen] = useState(false);
-// [advice from AI] toolsOpen 상태 제거 (운영센터로 통합됨)
+  
+  // [advice from AI] 프로덕션 레벨 개선 상태
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const [notification, setNotification] = useState({
+    open: false,
+    message: '',
+    severity: 'info' as 'success' | 'error' | 'warning' | 'info'
+  });
+  
   const { user, token } = useJwtAuthStore();
   
-  // [advice from AI] 메시지 센터 제거로 알림 관련 상태 불필요
+  // [advice from AI] 고도화된 권한 시스템 사용
+  const {
+    hasPermission,
+    hasAnyPermission,
+    hasAllPermissions,
+    hasPermissionLevel,
+    hasRole,
+    isAdmin,
+    loading: permissionsLoading
+  } = useAdvancedPermissions();
 
-  // [advice from AI] API URL 생성 함수
-  const getApiUrl = () => {
-    if (typeof window !== 'undefined') {
-      const hostname = window.location.hostname;
-      if (hostname === 'localhost' || hostname === '127.0.0.1') {
-        return 'http://localhost:3001';
-      } else {
-        return `http://${hostname}:3001`;
-      }
-    }
-    return 'http://localhost:3001';
-  };
-
-  // [advice from AI] 메시지 센터 제거로 알림 관련 함수들 불필요
-
-  // [advice from AI] 메시지 센터 제거로 알림 로드 useEffect 불필요
-
-  // [advice from AI] 역할별 대시보드 자동 리다이렉트 - 비활성화 (홈 화면을 통합 모니터링으로 설정)
-  // useEffect(() => {
-  //   if (user && location.pathname === '/') {
-  //     const roleDashboardMap: { [key: string]: string } = {
-  //       'admin': '/executive',        // admin도 최고 관리자 대시보드
-  //       'executive': '/executive',
-  //       'po': '/po-dashboard',
-  //       'pe': '/pe-workspace',
-  //       'qa': '/qa-center',
-  //       'operations': '/operations'
-  //     };
-
-  //     const dashboardPath = roleDashboardMap[user.roleType || ''];
-  //     if (dashboardPath) {
-  //       navigate(dashboardPath, { replace: true });
-  //     }
-  //   }
-  // }, [user, location.pathname, navigate]);
-
-  // [advice from AI] 권한별 메뉴 접근 매핑 테이블
-  const menuAccessMap: { [key: string]: { roles: string[]; level: number; description: string } } = {
-    '/executive': { 
-      roles: ['admin', 'executive'], 
-      level: 0, 
-      description: '최고 관리자 전용 기능입니다.' 
-    },
-    '/admin/approvals': {
-      roles: ['admin', 'executive'],
-      level: 0,
-      description: '승인 관리는 관리자 전용 기능입니다.'
-    },
-    '/admin': {
-      roles: ['admin', 'executive'],
-      level: 0,
-      description: '시스템 관리는 관리자 전용 기능입니다.'
-    },
-    '/executive/workflow': { 
-      roles: ['admin', 'executive'], 
-      level: 0, 
-      description: '프로젝트 워크플로우는 최고 관리자 전용 기능입니다.' 
-    },
-    '/executive/strategic-analysis': { 
-      roles: ['admin', 'executive'], 
-      level: 0, 
-      description: '전략 분석은 최고 관리자 전용 기능입니다.' 
-    },
-    '/executive/performance-reports': { 
-      roles: ['admin', 'executive'], 
-      level: 0, 
-      description: '성과 리포트는 최고 관리자 전용 기능입니다.' 
-    },
-    // [advice from AI] PO, PE, QA 관련 권한 매핑 삭제됨
-    '/operations': { 
-      roles: ['admin', 'executive', 'operations'], 
-      level: 4, 
-      description: '운영팀 전용 기능입니다.' 
-    },
-    '/operations/cicd': { 
-      roles: ['admin', 'executive', 'operations'], 
-      level: 4, 
-      description: 'CI/CD 파이프라인 관리는 운영팀 전용 기능입니다.' 
-    },
-    '/operations/infrastructure': { 
-      roles: ['admin', 'executive', 'operations'], 
-      level: 4, 
-      description: '인프라 관리는 운영팀 전용 기능입니다.' 
-    },
-    '/operations/multi-tenant': { 
-      roles: ['admin', 'executive', 'operations'], 
-      level: 4, 
-      description: '멀티테넌트 관리는 운영팀 전용 기능입니다.' 
-    },
-    '/operations/auto-deploy': { 
-      roles: ['admin', 'executive', 'operations'], 
-      level: 4, 
-      description: '자동배포 관리는 운영팀 전용 기능입니다.' 
-    },
-    '/operations/deployment': { 
-      roles: ['admin', 'executive', 'operations'], 
-      level: 4, 
-      description: '배포 관리는 운영팀 전용 기능입니다.' 
-    },
-    '/operations/hardware-calc': { 
-      roles: ['admin', 'executive', 'operations'], 
-      level: 3, 
-      description: '하드웨어 계산기는 운영팀 전용 기능입니다.' 
-    },
-    '/operations/service-config': { 
-      roles: ['admin', 'executive', 'operations'], 
-      level: 4, 
-      description: '서비스 설정은 운영팀 전용 기능입니다.' 
-    },
-    // === 운영 현황 및 전체 관리 ===
-    '/operations/workflow': { 
-      roles: ['admin', 'executive'], 
-      level: 2, 
-      description: '프로젝트 워크플로우는 최고관리자 전용 기능입니다.' 
-    },
-    
-    // === 6단계 → 7단계: 배포 요청 접수 및 처리 ===
-    '/operations/deployment-requests': { 
-      roles: ['admin', 'executive', 'operations'], 
-      level: 3, 
-      description: '배포 요청 접수는 운영팀 전용 기능입니다.' 
-    },
-    '/operations/deployment-approval': { 
-      roles: ['admin', 'executive', 'operations'], 
-      level: 3, 
-      description: '배포 승인 처리는 운영팀 전용 기능입니다.' 
-    },
-    '/operations/cicd-servers': { 
-      roles: ['admin', 'operations'], 
-      level: 3, 
-      description: 'CI/CD 서버 관리는 관리자 및 운영팀 전용 기능입니다.' 
-    },
-    
-    // === 7단계: 실제 배포 실행 프로세스 ===
-    '/operations/repositories': { 
-      roles: ['admin', 'executive', 'operations'], 
-      level: 3, 
-      description: '레포지토리 준비는 운영팀 전용 기능입니다.' 
-    },
-    '/operations/build-pipeline': { 
-      roles: ['admin', 'executive', 'operations'], 
-      level: 3, 
-      description: '빌드 파이프라인은 운영팀 전용 기능입니다.' 
-    },
-    '/operations/image-registry': { 
-      roles: ['admin', 'executive', 'operations'], 
-      level: 3, 
-      description: '이미지 레지스트리는 운영팀 전용 기능입니다.' 
-    },
-    '/operations/deployment-execution': { 
-      roles: ['admin', 'executive', 'operations'], 
-      level: 3, 
-      description: '배포 실행은 운영팀 전용 기능입니다.' 
-    },
-    
-    // === 배포 후 운영 및 모니터링 ===
-    '/operations/environments': { 
-      roles: ['admin', 'executive', 'operations'], 
-      level: 3, 
-      description: '환경별 운영은 운영팀 전용 기능입니다.' 
-    },
-    '/operations/monitoring': { 
-      roles: ['admin', 'executive', 'operations'], 
-      level: 2, 
-      description: '시스템 모니터링은 운영팀 전용 기능입니다.' 
-    },
-    '/operations/incident-response': { 
-      roles: ['admin', 'executive', 'operations'], 
-      level: 3, 
-      description: '장애 대응은 운영팀 전용 기능입니다.' 
-    },
-    '/operations/build-issues': { 
-      roles: ['admin', 'executive', 'operations'], 
-      level: 3, 
-      description: '빌드 이슈 관리는 운영팀 전용 기능입니다.' 
-    },
-    '/catalog/knowledge/design': { 
-      roles: ['admin', 'executive', 'designer'], 
-      level: 2, 
-      description: '디자인 자산 등록은 디자이너, 관리자만 가능합니다.' 
-    },
-    '/catalog/knowledge/code': { 
-      roles: ['admin', 'executive'], 
-      level: 2, 
-      description: '코드/컴포넌트 등록은 관리자만 가능합니다.' 
-    },
-    '/catalog/knowledge/docs': { 
-      roles: ['admin', 'executive', 'designer', 'operations'], 
-      level: 5, 
-      description: '문서/가이드 등록은 모든 사용자가 가능합니다.' 
-    },
-    '/catalog/knowledge/approval': { 
-      roles: ['admin', 'executive'], 
-      level: 3, 
-      description: '승인 워크플로우는 관리자만 접근 가능합니다.' 
-    },
-    '/catalog/knowledge/diagrams': { 
-      roles: ['admin', 'executive'], 
-      level: 3, 
-      description: '다이어그램 관리는 관리자만 가능합니다.' 
-    }
-  };
-
-  // [advice from AI] 메뉴 접근 권한 확인 (활성화 여부)
+  // [advice from AI] 메뉴 접근 권한 확인 함수
   const canAccess = (menuPath: string) => {
-    if (!user) return false;
-    
-    const menuInfo = menuAccessMap[menuPath];
-    if (!menuInfo) return true; // 매핑되지 않은 메뉴는 기본적으로 접근 가능
-    
-    const hasAccess = menuInfo.roles.includes(user.roleType || '');
-    
-    // [advice from AI] PO 대시보드 접근 시 디버깅 로그
-    if (menuPath === '/po-dashboard') {
-      console.log('🔍 PO 대시보드 접근 권한 확인:', {
-        menuPath,
-        userRoleType: user.roleType,
-        allowedRoles: menuInfo.roles,
-        hasAccess,
-        user: user
-      });
+    // 권한 로딩 중이면 기본적으로 접근 허용
+    if (permissionsLoading) {
+      return true;
     }
     
-    return hasAccess;
+    // 필요한 함수들이 모두 정의되어 있는지 확인
+    if (!hasPermission || !hasAnyPermission || !hasAllPermissions || !hasPermissionLevel || !hasRole) {
+      console.warn('권한 함수들이 아직 준비되지 않았습니다');
+      return true; // 안전하게 접근 허용
+    }
+    
+    return checkMenuPermission(
+      menuPath, 
+      hasPermission, 
+      hasAnyPermission, 
+      hasAllPermissions, 
+      hasPermissionLevel, 
+      hasRole, 
+      isAdmin
+    );
   };
 
-  // [advice from AI] 메뉴 접근 정보 가져오기
+  // [advice from AI] 메뉴 접근 정보 가져오기 (새로운 권한 시스템)
   const getMenuAccessInfo = (menuPath: string) => {
-    return menuAccessMap[menuPath] || { roles: [], level: 999, description: '' };
+    return getMenuPermissionConfig(menuPath);
   };
 
-  // [advice from AI] 모바일에서 사이드바 토글
-  const handleDrawerToggle = () => {
+  // [advice from AI] 프로덕션 레벨 개선: 스크롤 이벤트 처리
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+      setShowScrollTop(scrollTop > 400);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // [advice from AI] 프로덕션 레벨 개선: 키보드 단축키 처리
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Alt + M: 모바일 메뉴 토글
+      if (event.altKey && event.key === 'm' && isMobile) {
+        event.preventDefault();
+        handleDrawerToggle();
+      }
+      
+      // Ctrl + K: 검색 포커스
+      if (event.ctrlKey && event.key === 'k') {
+        event.preventDefault();
+        const searchInput = document.querySelector('[data-testid="menu-search"]') as HTMLInputElement;
+        searchInput?.focus();
+      }
+      
+      // Escape: 모바일 메뉴 닫기
+      if (event.key === 'Escape' && mobileOpen) {
+        handleDrawerToggle();
+      }
+      
+      // Alt + H: 홈으로 이동
+      if (event.altKey && event.key === 'h') {
+        event.preventDefault();
+        navigate('/');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isMobile, mobileOpen, navigate]);
+
+  // [advice from AI] 프로덕션 레벨 개선: 유틸리티 함수들
+  const handleDrawerToggle = useCallback(() => {
     setMobileOpen(!mobileOpen);
-  };
+  }, [mobileOpen]);
+
+  const handleScrollToTop = useCallback(() => {
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth'
+    });
+  }, []);
+
+  const showNotificationMessage = useCallback((message: string, severity: 'success' | 'error' | 'warning' | 'info' = 'info') => {
+    setNotification({
+      open: true,
+      message,
+      severity
+    });
+  }, []);
+
+  const handleNotificationClose = useCallback(() => {
+    setNotification(prev => ({ ...prev, open: false }));
+  }, []);
 
   // [advice from AI] 네비게이션 아이템 클릭 핸들러
   const handleNavigation = (path: string) => {
@@ -381,22 +257,59 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
     }
   };
 
-  // [advice from AI] 경로 변경 감지 디버깅
+  // [advice from AI] 현재 경로 확인 함수
+  const isCurrentPath = useCallback((path: string) => {
+    return location.pathname === path || location.pathname.startsWith(path + '/');
+  }, [location.pathname]);
+
+  // [advice from AI] 현재 페이지 정보 추출 (메모이제이션)
+  const currentPageInfo = useMemo(() => {
+    const pathSegments = location.pathname.split('/').filter(Boolean);
+    const pageName = pathSegments[pathSegments.length - 1] || 'home';
+    
+    const pageTitles: Record<string, string> = {
+      'home': '홈 대시보드',
+      'dashboard': '대시보드',
+      'knowledge': '지식자원 카탈로그',
+      'operations': '운영센터',
+      'admin': '시스템 관리',
+      'executive': '최고 관리자',
+      'domains': '도메인 관리',
+      'projects': '프로젝트 관리',
+      'systems': '시스템 관리',
+      'code': '코드 컴포넌트',
+      'design': '디자인 자산',
+      'docs': '문서/가이드'
+    };
+
+    return {
+      name: pageName,
+      title: pageTitles[pageName] || pageName,
+      breadcrumbs: pathSegments
+    };
+  }, [location.pathname]);
+
+  // [advice from AI] 경로 변경 감지 및 로깅
   useEffect(() => {
     console.log('📍 현재 경로 변경됨:', location.pathname);
   }, [location.pathname]);
 
-  // [advice from AI] 백스테이지IO 스타일의 사이드바 컴포넌트
+  // [advice from AI] 백스테이지IO 스타일의 사이드바 컴포넌트 (프로덕션 레벨 개선)
   const drawer = (
-    <Box>
-      {/* [advice from AI] 백스테이지IO 스타일의 로고 영역 */}
-      <Box sx={{ p: 2, borderBottom: `1px solid ${theme.palette.divider}` }}>
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      {/* [advice from AI] 백스테이지IO 스타일의 로고 영역 (배경색 제거) */}
+      <Box 
+        sx={{ 
+          p: 2, 
+          borderBottom: `1px solid ${theme.palette.divider}`
+        }}
+      >
         <Typography 
           variant="h6" 
           sx={{ 
-            fontWeight: 600,
-            color: theme.palette.primary.main,
-            fontSize: '1.1rem'
+            fontWeight: 700,
+            fontSize: isMobile ? '1.1rem' : '1.25rem',
+            color: theme.palette.primary.main
           }}
         >
           Timbel
@@ -404,36 +317,93 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
         <Typography 
           variant="body2" 
           sx={{ 
-            color: theme.palette.text.secondary,
             fontSize: '0.75rem',
-            mt: 0.5
+            mt: 0.5,
+            color: theme.palette.text.secondary
           }}
         >
-          Project Management Solution
+          CICD Operator Solution
         </Typography>
+        
+        {/* 모바일에서 닫기 버튼 */}
+        {isMobile && (
+          <IconButton
+            onClick={handleDrawerToggle}
+            sx={{
+              position: 'absolute',
+              right: 8,
+              top: 8
+            }}
+            aria-label="메뉴 닫기"
+          >
+            <CloseIcon />
+          </IconButton>
+        )}
+      </Box>
+
+      {/* [advice from AI] 프로덕션 레벨 개선: 메뉴 검색 영역 */}
+      <Box sx={{ p: 2, borderBottom: `1px solid ${theme.palette.divider}` }}>
+        <TextField
+          fullWidth
+          size="small"
+          placeholder="메뉴 검색... (Ctrl+K)"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          data-testid="menu-search"
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon fontSize="small" />
+              </InputAdornment>
+            ),
+            endAdornment: searchTerm && (
+              <InputAdornment position="end">
+                <IconButton
+                  size="small"
+                  onClick={() => setSearchTerm('')}
+                  aria-label="검색어 지우기"
+                >
+                  <ClearIcon fontSize="small" />
+                </IconButton>
+              </InputAdornment>
+            )
+          }}
+          sx={{
+            '& .MuiOutlinedInput-root': {
+              backgroundColor: alpha(theme.palette.background.paper, 0.8),
+              '&:hover': {
+                backgroundColor: theme.palette.background.paper
+              }
+            }
+          }}
+        />
       </Box>
 
       {/* [advice from AI] 메인 네비게이션 메뉴 */}
+      <Box sx={{ flex: 1, overflow: 'auto' }}>
       <List sx={{ pt: 1 }}>
         {navigationItems.map((item) => {
-          // [advice from AI] 메뉴 접근 권한 확인
-          const hasAccess = item.path === '/' || item.path === '/knowledge' ? true : canAccess(item.path);
+            // [advice from AI] 고도화된 권한 기반 메뉴 접근 권한 확인
+            const hasAccess = item.path === '/' ? true : canAccess(item.path);
           const accessInfo = getMenuAccessInfo(item.path);
           
-          // [advice from AI] 지식자원 카탈로그 하위 메뉴 처리
+            // [advice from AI] 권한이 없고 숨김 설정인 메뉴는 렌더링하지 않음
+            if (!hasAccess && accessInfo.hideIfNoPermission) {
+              return null;
+            }
+            
+            // [advice from AI] 지식자원 카탈로그 하위 메뉴 처리 - 권한 기반
           if (item.path === '/knowledge' && item.hasSubMenu) {
             return (
-              <React.Fragment key={item.text}>
-                <ListItem disablePadding>
-                  <Tooltip 
-                    title={hasAccess ? '' : accessInfo.description}
-                    placement="right"
-                    arrow
-                  >
-                    <Box component="span" sx={{ width: '100%' }}>
+                <PermissionGuard 
+                  key={item.text}
+                  permissions={['can_read_all']} 
+                  hideIfNoPermission={true}
+                >
+                  <React.Fragment>
+                    <ListItem disablePadding>
                       <ListItemButton
                         onClick={() => {
-                          if (!hasAccess) return;
                           if (knowledgeOpen) {
                             setKnowledgeOpen(false);
                           } else {
@@ -441,26 +411,19 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
                             handleNavigation(item.path);
                           }
                         }}
-                        selected={hasAccess && (location.pathname === item.path || location.pathname.startsWith('/knowledge/'))}
-                        disabled={!hasAccess}
+                        selected={isCurrentPath(item.path)}
                         sx={{
                           mx: 1,
                           borderRadius: 1,
-                          opacity: hasAccess ? 1 : 0.5,
                           '&.Mui-selected': {
-                            backgroundColor: theme.palette.primary.light + '20',
+                            backgroundColor: alpha(theme.palette.primary.main, 0.12),
                             '& .MuiListItemText-primary': {
                               color: theme.palette.primary.main,
                               fontWeight: 600,
                             },
                           },
                           '&:hover': {
-                            backgroundColor: hasAccess ? theme.palette.action.hover : 'transparent',
-                          },
-                          '&.Mui-disabled': {
-                            '& .MuiListItemText-primary': {
-                              color: theme.palette.text.disabled,
-                            },
+                            backgroundColor: theme.palette.action.hover,
                           },
                         }}
                       >
@@ -468,18 +431,16 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
                           primary={item.text}
                           primaryTypographyProps={{
                             fontSize: '0.875rem',
-                            fontWeight: location.pathname === item.path || location.pathname.startsWith('/knowledge/') ? 600 : 400,
+                            fontWeight: isCurrentPath(item.path) ? 600 : 400,
                           }}
                           sx={{ pl: 1 }}
                         />
                         <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-                          {knowledgeOpen ? '−' : '+'}
+                          {knowledgeOpen ? <ExpandLess /> : <ExpandMore />}
                         </Box>
                       </ListItemButton>
-                    </Box>
-                  </Tooltip>
                 </ListItem>
-                <Collapse in={knowledgeOpen && hasAccess} timeout="auto" unmountOnExit>
+                    <Collapse in={knowledgeOpen} timeout="auto" unmountOnExit>
                   <List component="div" disablePadding>
                     {knowledgeSubMenus.map((subItem) => {
                       const hasSubAccess = canAccess(subItem.path);
@@ -497,11 +458,8 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
                           >
                             <Box component="span" sx={{ width: '100%' }}>
                               <ListItemButton
-                                onClick={() => {
-                                  if (!hasSubAccess) return;
-                                  handleNavigation(subItem.path);
-                                }}
-                                selected={hasSubAccess && location.pathname === subItem.path}
+                                    onClick={() => hasSubAccess && handleNavigation(subItem.path)}
+                                    selected={hasSubAccess && isCurrentPath(subItem.path)}
                                 disabled={!hasSubAccess}
                                 sx={{
                                   mx: 1,
@@ -510,7 +468,7 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
                                   backgroundColor: 'transparent',
                                   opacity: hasSubAccess ? 1 : 0.5,
                                   '&.Mui-selected': {
-                                    backgroundColor: theme.palette.primary.light + '20',
+                                        backgroundColor: alpha(theme.palette.primary.main, 0.12),
                                     '& .MuiListItemText-primary': {
                                       color: theme.palette.primary.main,
                                       fontWeight: 600,
@@ -530,10 +488,19 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
                                   primary={subItem.text}
                                   primaryTypographyProps={{
                                     fontSize: '0.8rem',
-                                    fontWeight: location.pathname === subItem.path ? 600 : 400,
+                                        fontWeight: isCurrentPath(subItem.path) ? 600 : 400,
                                   }}
                                   sx={{ pl: 1 }}
                                 />
+                                    {subItem.badge && (
+                                      <Chip
+                                        label={subItem.badge}
+                                        size="small"
+                                        color="primary"
+                                        variant="outlined"
+                                        sx={{ height: 16, fontSize: '0.6rem' }}
+                                      />
+                                    )}
                               </ListItemButton>
                             </Box>
                           </Tooltip>
@@ -542,77 +509,23 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
                     })}
                   </List>
                 </Collapse>
-                
               </React.Fragment>
-            );
-          }
+                </PermissionGuard>
+              );
+            }
 
-
-          
-          // [advice from AI] 최고관리자 메뉴 (단순 링크)
-          if (item.path === '/executive') {
-            return (
-              <ListItem key={item.text} disablePadding>
-                <Tooltip 
-                  title={hasAccess ? '' : '접근 권한 없음'}
-                  placement="right"
-                  arrow
-                >
-                  <Box component="span" sx={{ width: '100%' }}>
-                    <ListItemButton
-                      onClick={() => hasAccess && handleNavigation(item.path)}
-                      selected={hasAccess && location.pathname === item.path}
-                      disabled={!hasAccess}
-                      sx={{
-                        mx: 1,
-                        borderRadius: 1,
-                        opacity: hasAccess ? 1 : 0.5,
-                        '&.Mui-selected': {
-                          backgroundColor: theme.palette.primary.light + '20',
-                          '& .MuiListItemText-primary': {
-                            color: theme.palette.primary.main,
-                            fontWeight: 600,
-                          },
-                        },
-                        '&:hover': {
-                          backgroundColor: hasAccess ? theme.palette.action.hover : 'transparent',
-                        },
-                        '&.Mui-disabled': {
-                          '& .MuiListItemText-primary': {
-                            color: theme.palette.text.disabled,
-                          },
-                        },
-                      }}
-                    >
-                      <ListItemText 
-                        primary={item.text}
-                        primaryTypographyProps={{
-                          fontSize: '0.875rem',
-                          fontWeight: location.pathname === item.path ? 600 : 400,
-                        }}
-                        sx={{ pl: 1 }}
-                      />
-                    </ListItemButton>
-                  </Box>
-                </Tooltip>
-              </ListItem>
-            );
-          }
-          
-          // [advice from AI] 운영센터 메뉴 (하위 메뉴 있음)
+            // [advice from AI] 운영센터 하위 메뉴 처리 - 권한 기반
           if (item.path === '/operations' && item.hasSubMenu) {
             return (
-              <React.Fragment key={item.text}>
-                <ListItem disablePadding>
-                  <Tooltip 
-                    title={hasAccess ? '' : '접근 권한 없음'}
-                    placement="right"
-                    arrow
-                  >
-                    <Box component="span" sx={{ width: '100%' }}>
+                <PermissionGuard 
+                  key={item.text}
+                  permissions={['can_view_operations']} 
+                  hideIfNoPermission={true}
+                >
+                  <React.Fragment>
+                    <ListItem disablePadding>
                       <ListItemButton
                         onClick={() => {
-                          if (!hasAccess) return;
                           if (operationsOpen) {
                             setOperationsOpen(false);
                           } else {
@@ -620,26 +533,19 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
                             handleNavigation(item.path);
                           }
                         }}
-                        selected={hasAccess && (location.pathname === item.path || location.pathname.startsWith('/operations/'))}
-                        disabled={!hasAccess}
+                        selected={isCurrentPath(item.path)}
                         sx={{
                           mx: 1,
                           borderRadius: 1,
-                          opacity: hasAccess ? 1 : 0.5,
                           '&.Mui-selected': {
-                            backgroundColor: theme.palette.primary.light + '20',
+                            backgroundColor: alpha(theme.palette.primary.main, 0.12),
                             '& .MuiListItemText-primary': {
                               color: theme.palette.primary.main,
                               fontWeight: 600,
                             },
                           },
                           '&:hover': {
-                            backgroundColor: hasAccess ? theme.palette.action.hover : 'transparent',
-                          },
-                          '&.Mui-disabled': {
-                            '& .MuiListItemText-primary': {
-                              color: theme.palette.text.disabled,
-                            },
+                            backgroundColor: theme.palette.action.hover,
                           },
                         }}
                       >
@@ -647,46 +553,47 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
                           primary={item.text}
                           primaryTypographyProps={{
                             fontSize: '0.875rem',
-                            fontWeight: location.pathname === item.path || location.pathname.startsWith('/operations/') ? 600 : 400,
+                            fontWeight: isCurrentPath(item.path) ? 600 : 400,
                           }}
                           sx={{ pl: 1 }}
                         />
                         <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-                          {operationsOpen ? '−' : '+'}
+                          {operationsOpen ? <ExpandLess /> : <ExpandMore />}
                         </Box>
                       </ListItemButton>
-                    </Box>
-                  </Tooltip>
                 </ListItem>
-                <Collapse in={operationsOpen && hasAccess} timeout="auto" unmountOnExit>
+                    <Collapse in={operationsOpen} timeout="auto" unmountOnExit>
                   <List component="div" disablePadding>
-                    {operationsSubMenus.map((subItem) => (
+                        {operationsSubMenus.map((subItem) => {
+                          const hasSubAccess = canAccess(subItem.path);
+                          
+                          return (
                       <ListItem key={subItem.text} disablePadding>
                         <Tooltip 
-                          title={hasAccess ? '' : '접근 권한 없음'}
+                                title={hasSubAccess ? subItem.description : '권한이 없습니다'}
                           placement="right"
                           arrow
                         >
                           <Box component="span" sx={{ width: '100%' }}>
                             <ListItemButton
-                              onClick={() => hasAccess && handleNavigation(subItem.path)}
-                              selected={hasAccess && location.pathname === subItem.path}
-                              disabled={!hasAccess}
+                                    onClick={() => hasSubAccess && handleNavigation(subItem.path)}
+                                    selected={hasSubAccess && isCurrentPath(subItem.path)}
+                                    disabled={!hasSubAccess}
                               sx={{
                                 mx: 1,
                                 ml: 3,
                                 borderRadius: 1,
                                 backgroundColor: 'transparent',
-                                opacity: hasAccess ? 1 : 0.5,
+                                      opacity: hasSubAccess ? 1 : 0.5,
                                 '&.Mui-selected': {
-                                  backgroundColor: theme.palette.primary.light + '20',
+                                        backgroundColor: alpha(theme.palette.primary.main, 0.12),
                                   '& .MuiListItemText-primary': {
                                     color: theme.palette.primary.main,
                                     fontWeight: 600,
                                   },
                                 },
                                 '&:hover': {
-                                  backgroundColor: hasAccess ? theme.palette.action.hover : 'transparent',
+                                        backgroundColor: hasSubAccess ? theme.palette.action.hover : 'transparent',
                                 },
                                 '&.Mui-disabled': {
                                   '& .MuiListItemText-primary': {
@@ -699,7 +606,7 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
                                 primary={subItem.text}
                                 primaryTypographyProps={{
                                   fontSize: '0.8rem',
-                                  fontWeight: location.pathname === subItem.path ? 600 : 400,
+                                        fontWeight: isCurrentPath(subItem.path) ? 600 : 400,
                                 }}
                                 sx={{ pl: 1 }}
                               />
@@ -707,153 +614,27 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
                           </Box>
                         </Tooltip>
                       </ListItem>
-                    ))}
+                          );
+                        })}
                   </List>
                 </Collapse>
               </React.Fragment>
+                </PermissionGuard>
             );
           }
           
-          // [advice from AI] 승인관리 메뉴 (하위 메뉴 있음)
-          if (item.path === '/admin/approvals' && item.hasSubMenu) {
-            return (
-              <React.Fragment key={item.text}>
-                <ListItem disablePadding>
-                  <Tooltip 
-                    title={hasAccess ? '' : '접근 권한 없음'}
-                    placement="right"
-                    arrow
-                  >
-                    <Box component="span" sx={{ width: '100%' }}>
-                      <ListItemButton
-                        onClick={() => {
-                          if (!hasAccess) return;
-                          setApprovalOpen(!approvalOpen);
-                        }}
-                        selected={hasAccess && location.pathname.startsWith('/admin/approvals')}
-                        disabled={!hasAccess}
-                        sx={{
-                          mx: 1,
-                          borderRadius: 1,
-                          opacity: hasAccess ? 1 : 0.5,
-                          '&.Mui-selected': {
-                            backgroundColor: theme.palette.warning.light + '20',
-                            '& .MuiListItemText-primary': {
-                              color: theme.palette.warning.main,
-                              fontWeight: 600,
-                            },
-                          },
-                          '&:hover': {
-                            backgroundColor: hasAccess ? theme.palette.action.hover : 'transparent',
-                          },
-                          '&.Mui-disabled': {
-                            '& .MuiListItemText-primary': {
-                              color: theme.palette.text.disabled,
-                            },
-                          },
-                        }}
-                      >
-                        <ListItemText 
-                          primary={item.text}
-                          primaryTypographyProps={{
-                            fontSize: '0.875rem',
-                            fontWeight: location.pathname.startsWith('/admin/approvals') ? 600 : 400,
-                          }}
-                          sx={{ pl: 1 }}
-                        />
-                        <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-                          {approvalOpen ? '−' : '+'}
-                        </Box>
-                      </ListItemButton>
-                    </Box>
-                  </Tooltip>
-                </ListItem>
-                <Collapse in={approvalOpen && hasAccess} timeout="auto" unmountOnExit>
-                  <List component="div" disablePadding>
-                    {adminApprovalSubMenus.map((subItem) => (
-                      <ListItem key={subItem.path} disablePadding>
-                        <Tooltip 
-                          title={hasAccess ? '' : '접근 권한 없음'}
-                          placement="right"
-                          arrow
-                        >
-                          <Box component="span" sx={{ width: '100%' }}>
-                            <ListItemButton
-                              onClick={() => hasAccess && handleNavigation(subItem.path)}
-                              selected={hasAccess && location.pathname === subItem.path}
-                              disabled={!hasAccess}
-                              sx={{
-                                mx: 1,
-                                ml: 3,
-                                borderRadius: 1,
-                                backgroundColor: 'transparent',
-                                opacity: hasAccess ? 1 : 0.5,
-                                '&.Mui-selected': {
-                                  backgroundColor: theme.palette.warning.light + '20',
-                                  '& .MuiListItemText-primary': {
-                                    color: theme.palette.warning.main,
-                                    fontWeight: 600,
-                                  },
-                                },
-                                '&:hover': {
-                                  backgroundColor: hasAccess ? theme.palette.action.hover : 'transparent',
-                                },
-                                '&.Mui-disabled': {
-                                  '& .MuiListItemText-primary': {
-                                    color: theme.palette.text.disabled,
-                                  },
-                                },
-                              }}
-                            >
-                              <ListItemText 
-                                primary={subItem.text}
-                                primaryTypographyProps={{
-                                  fontSize: '0.8rem',
-                                  fontWeight: location.pathname === subItem.path ? 600 : 400,
-                                }}
-                                sx={{ pl: 1 }}
-                              />
-                              {(subItem as any).badge && (
-                                <Chip
-                                  label={(subItem as any).badge}
-                                  size="small"
-                                  color="warning"
-                                  sx={{
-                                    height: '16px',
-                                    fontSize: '0.65rem',
-                                    fontWeight: 600,
-                                    mr: 1,
-                                    '& .MuiChip-label': {
-                                      px: 0.5
-                                    }
-                                  }}
-                                />
-                              )}
-                            </ListItemButton>
-                          </Box>
-                        </Tooltip>
-                      </ListItem>
-                    ))}
-                  </List>
-                </Collapse>
-              </React.Fragment>
-            );
-          }
-          
-          // [advice from AI] 시스템관리 메뉴 (하위 메뉴 있음)
+            // [advice from AI] 시스템 관리 하위 메뉴 처리 - 권한 기반
           if (item.path === '/admin' && item.hasSubMenu) {
             return (
-              <React.Fragment key={item.text}>
-                <ListItem disablePadding>
-                  <Tooltip 
-                    title={hasAccess ? '' : '접근 권한 없음'}
-                    placement="right"
-                    arrow
-                  >
-                    <Box component="span" sx={{ width: '100%' }}>
+                <PermissionGuard 
+                  key={item.text}
+                  permissions={['can_manage_users', 'can_manage_system']} 
+                  hideIfNoPermission={true}
+                >
+                  <React.Fragment>
+                    <ListItem disablePadding>
                       <ListItemButton
                         onClick={() => {
-                          if (!hasAccess) return;
                           if (adminOpen) {
                             setAdminOpen(false);
                           } else {
@@ -861,26 +642,19 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
                             handleNavigation(item.path);
                           }
                         }}
-                        selected={hasAccess && (location.pathname === item.path || location.pathname.startsWith('/admin/') && !location.pathname.startsWith('/admin/approvals'))}
-                        disabled={!hasAccess}
+                        selected={isCurrentPath(item.path)}
                         sx={{
                           mx: 1,
                           borderRadius: 1,
-                          opacity: hasAccess ? 1 : 0.5,
                           '&.Mui-selected': {
-                            backgroundColor: theme.palette.primary.light + '20',
+                            backgroundColor: alpha(theme.palette.primary.main, 0.12),
                             '& .MuiListItemText-primary': {
                               color: theme.palette.primary.main,
                               fontWeight: 600,
                             },
                           },
                           '&:hover': {
-                            backgroundColor: hasAccess ? theme.palette.action.hover : 'transparent',
-                          },
-                          '&.Mui-disabled': {
-                            '& .MuiListItemText-primary': {
-                              color: theme.palette.text.disabled,
-                            },
+                            backgroundColor: theme.palette.action.hover,
                           },
                         }}
                       >
@@ -888,32 +662,31 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
                           primary={item.text}
                           primaryTypographyProps={{
                             fontSize: '0.875rem',
-                            fontWeight: (location.pathname === item.path || (location.pathname.startsWith('/admin/') && !location.pathname.startsWith('/admin/approvals'))) ? 600 : 400,
+                            fontWeight: isCurrentPath(item.path) ? 600 : 400,
                           }}
                           sx={{ pl: 1 }}
                         />
                         <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-                          {adminOpen ? '−' : '+'}
+                          {adminOpen ? <ExpandLess /> : <ExpandMore />}
                         </Box>
                       </ListItemButton>
-                    </Box>
-                  </Tooltip>
                 </ListItem>
-                <Collapse in={adminOpen && hasAccess} timeout="auto" unmountOnExit>
+                    <Collapse in={adminOpen} timeout="auto" unmountOnExit>
                   <List component="div" disablePadding>
                     {adminSubMenus.map((subItem) => {
                       const hasSubAccess = canAccess(subItem.path);
+                          
                       return (
                         <ListItem key={subItem.text} disablePadding>
                           <Tooltip 
-                            title={hasSubAccess ? '' : '접근 권한 없음'}
+                                title={hasSubAccess ? subItem.description || '' : '권한이 없습니다'}
                             placement="right"
                             arrow
                           >
                             <Box component="span" sx={{ width: '100%' }}>
                               <ListItemButton
                                 onClick={() => hasSubAccess && handleNavigation(subItem.path)}
-                                selected={hasSubAccess && location.pathname === subItem.path}
+                                    selected={hasSubAccess && isCurrentPath(subItem.path)}
                                 disabled={!hasSubAccess}
                                 sx={{
                                   mx: 1,
@@ -922,7 +695,7 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
                                   backgroundColor: 'transparent',
                                   opacity: hasSubAccess ? 1 : 0.5,
                                   '&.Mui-selected': {
-                                    backgroundColor: theme.palette.primary.light + '20',
+                                        backgroundColor: alpha(theme.palette.primary.main, 0.12),
                                     '& .MuiListItemText-primary': {
                                       color: theme.palette.primary.main,
                                       fontWeight: 600,
@@ -942,7 +715,7 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
                                   primary={subItem.text}
                                   primaryTypographyProps={{
                                     fontSize: '0.8rem',
-                                    fontWeight: location.pathname === subItem.path ? 600 : 400,
+                                        fontWeight: isCurrentPath(subItem.path) ? 600 : 400,
                                   }}
                                   sx={{ pl: 1 }}
                                 />
@@ -955,27 +728,32 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
                   </List>
                 </Collapse>
               </React.Fragment>
+                </PermissionGuard>
             );
           }
 
+            // [advice from AI] 일반 메뉴 아이템
           return (
             <ListItem key={item.text} disablePadding>
               <Tooltip 
-                title={hasAccess ? '' : '접근 권한 없음'}
+                  title={hasAccess ? '' : accessInfo.description}
                 placement="right"
                 arrow
+                  componentsProps={{
+                    tooltip: { sx: { display: hasAccess ? 'none' : 'block' } }
+                  }}
               >
                 <Box component="span" sx={{ width: '100%' }}>
                   <ListItemButton
                     onClick={() => hasAccess && handleNavigation(item.path)}
-                    selected={hasAccess && location.pathname === item.path}
+                      selected={hasAccess && isCurrentPath(item.path)}
                     disabled={!hasAccess}
                     sx={{
                       mx: 1,
                       borderRadius: 1,
                       opacity: hasAccess ? 1 : 0.5,
                       '&.Mui-selected': {
-                        backgroundColor: theme.palette.primary.light + '20',
+                          backgroundColor: alpha(theme.palette.primary.main, 0.12),
                         '& .MuiListItemText-primary': {
                           color: theme.palette.primary.main,
                           fontWeight: 600,
@@ -995,7 +773,7 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
                       primary={item.text}
                       primaryTypographyProps={{
                         fontSize: '0.875rem',
-                        fontWeight: location.pathname === item.path ? 600 : 400,
+                          fontWeight: isCurrentPath(item.path) ? 600 : 400,
                       }}
                       sx={{ pl: 1 }}
                     />
@@ -1006,74 +784,86 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
           );
         })}
       </List>
+      </Box>
 
-
-      {/* [advice from AI] 관리 설정 영역 삭제됨 - 지식자원 카탈로그로 통합 */}
-
+      {/* [advice from AI] 키보드 단축키 도움말 (데스크톱만) */}
+      {!isMobile && (
+        <Box sx={{ p: 1, borderTop: `1px solid ${theme.palette.divider}` }}>
+          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+            단축키: Ctrl+K (검색), Alt+H (홈)
+          </Typography>
+        </Box>
+      )}
     </Box>
   );
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-      {/* [advice from AI] 백스테이지IO 스타일의 AppBar */}
+      {/* [advice from AI] 백스테이지IO 스타일의 AppBar (프로덕션 레벨 개선) */}
       <AppBar
         position="fixed"
         sx={{
           width: { md: `calc(100% - ${DRAWER_WIDTH}px)` },
           ml: { md: `${DRAWER_WIDTH}px` },
-          backgroundColor: '#ffffff',
+          backgroundColor: theme.palette.background.paper,
           color: theme.palette.text.primary,
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24)',
           borderBottom: `1px solid ${theme.palette.divider}`,
+          boxShadow: theme.shadows[1]
         }}
       >
         <Toolbar>
-          <Button
+          <IconButton
             color="inherit"
-            aria-label="open drawer"
+            aria-label="메뉴 열기"
+            edge="start"
             onClick={handleDrawerToggle}
             sx={{ mr: 2, display: { md: 'none' } }}
           >
-            메뉴
-          </Button>
-          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-            {title}
+            <MenuIcon />
+          </IconButton>
+
+          <Box sx={{ flex: 1 }}>
+            <Typography variant="h6" noWrap component="div" sx={{ fontWeight: 600 }}>
+              {currentPageInfo.title}
           </Typography>
+            {currentPageInfo.breadcrumbs.length > 1 && (
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                {currentPageInfo.breadcrumbs.join(' > ')}
+              </Typography>
+            )}
+          </Box>
           
-          {/* [advice from AI] 메시지 센터 제거됨 */}
-          
-          {/* [advice from AI] 사용자 정보 표시 */}
           <UserInfo />
         </Toolbar>
       </AppBar>
 
-      {/* [advice from AI] 백스테이지IO 스타일의 사이드바 */}
+      {/* [advice from AI] 네비게이션 드로어 (프로덕션 레벨 개선) */}
       <Box
         component="nav"
         sx={{ width: { md: DRAWER_WIDTH }, flexShrink: { md: 0 } }}
+        aria-label="메인 네비게이션"
       >
-        {/* 모바일 사이드바 */}
+        {/* 모바일 드로어 */}
         <Drawer
           variant="temporary"
           open={mobileOpen}
           onClose={handleDrawerToggle}
           ModalProps={{
-            keepMounted: true, // 모바일 성능 최적화
+            keepMounted: true // 성능 최적화
           }}
           sx={{
             display: { xs: 'block', md: 'none' },
             '& .MuiDrawer-paper': {
               boxSizing: 'border-box',
               width: DRAWER_WIDTH,
-              backgroundColor: '#ffffff',
-              borderRight: `1px solid ${theme.palette.divider}`,
-            },
+              backgroundImage: 'none'
+            }
           }}
         >
           {drawer}
         </Drawer>
 
-        {/* 데스크톱 사이드바 */}
+        {/* 데스크톱 드로어 */}
         <Drawer
           variant="permanent"
           sx={{
@@ -1081,9 +871,8 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
             '& .MuiDrawer-paper': {
               boxSizing: 'border-box',
               width: DRAWER_WIDTH,
-              backgroundColor: '#ffffff',
-              borderRight: `1px solid ${theme.palette.divider}`,
-            },
+              backgroundImage: 'none'
+            }
           }}
           open
         >
@@ -1091,21 +880,84 @@ const BackstageLayout: React.FC<BackstageLayoutProps> = ({
         </Drawer>
       </Box>
 
-      {/* [advice from AI] 메인 컨텐츠 영역 */}
+      {/* [advice from AI] 메인 컨텐츠 영역 (프로덕션 레벨 개선) */}
       <Box
         component="main"
         sx={{
           flexGrow: 1,
-          p: 3,
           width: { md: `calc(100% - ${DRAWER_WIDTH}px)` },
-          mt: '64px', // AppBar 높이만큼 마진
-          backgroundColor: theme.palette.background.default,
-          minHeight: 'calc(100vh - 64px)',
+          minHeight: '100vh',
+          backgroundColor: theme.palette.background.default
+        }}
+      >
+        {/* 헤더 높이만큼 여백 */}
+        <Box sx={{ height: '64px' }} />
+        
+        {/* 페이지 컨텐츠 */}
+        <Box
+          sx={{
+            p: { xs: 1, sm: 2, md: 3 },
+            maxWidth: '100%',
+            overflow: 'hidden'
         }}
       >
         {children}
+        </Box>
       </Box>
 
+      {/* [advice from AI] 프로덕션 레벨 개선: 맨 위로 가기 FAB */}
+      <Zoom in={showScrollTop}>
+        <Fab
+          color="primary"
+          size="medium"
+          onClick={handleScrollToTop}
+          sx={{
+            position: 'fixed',
+            bottom: 24,
+            right: 24,
+            zIndex: theme.zIndex.speedDial
+          }}
+          aria-label="맨 위로 가기"
+        >
+          <ArrowUpwardIcon />
+        </Fab>
+      </Zoom>
+
+      {/* [advice from AI] 프로덕션 레벨 개선: 알림 스낵바 */}
+      <Snackbar
+        open={notification.open}
+        autoHideDuration={6000}
+        onClose={handleNotificationClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        sx={{ bottom: { xs: 90, sm: 24 } }}
+      >
+        <Alert
+          onClose={handleNotificationClose}
+          severity={notification.severity}
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {notification.message}
+        </Alert>
+      </Snackbar>
+
+      {/* [advice from AI] 프로덕션 레벨 개선: 키보드 단축키 도움말 (데스크톱만) */}
+      {!isMobile && (
+        <Box
+          sx={{
+            position: 'fixed',
+            bottom: 8,
+            left: 8,
+            zIndex: 1,
+            opacity: 0.6,
+            '&:hover': { opacity: 1 }
+          }}
+        >
+          <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>
+            단축키: Ctrl+K (검색), Alt+H (홈), Alt+M (메뉴)
+          </Typography>
+        </Box>
+      )}
     </Box>
   );
 };

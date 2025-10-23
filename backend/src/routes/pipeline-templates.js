@@ -311,20 +311,68 @@ CMD ["java", "-jar", "app.jar"]`
   }
 };
 
-// [advice from AI] 템플릿 목록 조회 API
+// [advice from AI] 템플릿 목록 조회 API - DB 기반
 router.get('/templates', jwtAuth.verifyToken, async (req, res) => {
   try {
-    const templates = Object.entries(PIPELINE_TEMPLATES).map(([key, template]) => ({
-      id: key,
-      ...template,
-      usage_count: Math.floor(Math.random() * 50) + 5, // 시뮬레이션
-      last_used: new Date(Date.now() - Math.random() * 86400000 * 30).toISOString()
-    }));
+    const { category, language, search } = req.query;
+    
+    let query = `
+      SELECT 
+        id,
+        name,
+        display_name,
+        description,
+        category,
+        language,
+        framework,
+        provider_type,
+        usage_count,
+        created_at,
+        updated_at
+      FROM pipeline_templates
+      WHERE enabled = true
+    `;
+    
+    const params = [];
+    
+    if (category) {
+      params.push(category);
+      query += ` AND category = $${params.length}`;
+    }
+    
+    if (language) {
+      params.push(language);
+      query += ` AND language = $${params.length}`;
+    }
+    
+    if (search) {
+      params.push(`%${search}%`);
+      query += ` AND (display_name ILIKE $${params.length} OR description ILIKE $${params.length})`;
+    }
+    
+    query += ` ORDER BY usage_count DESC, display_name ASC`;
+    
+    const result = await pool.query(query, params);
+    
+    // 하드코딩 템플릿과 병합 (DB가 비어있을 경우 fallback)
+    let templates = result.rows;
+    
+    if (templates.length === 0) {
+      // DB가 비어있으면 하드코딩된 템플릿 사용
+      templates = Object.entries(PIPELINE_TEMPLATES).map(([key, template]) => ({
+        id: key,
+        name: key,
+        ...template,
+        usage_count: Math.floor(Math.random() * 50) + 5,
+        last_used: new Date(Date.now() - Math.random() * 86400000 * 30).toISOString()
+      })).slice(0, 3); // 기본 3개만
+    }
 
     res.json({
       success: true,
       templates: templates,
-      total_templates: templates.length
+      total_templates: templates.length,
+      source: result.rows.length > 0 ? 'database' : 'fallback'
     });
 
   } catch (error) {
@@ -337,13 +385,49 @@ router.get('/templates', jwtAuth.verifyToken, async (req, res) => {
   }
 });
 
-// [advice from AI] 템플릿 상세 조회 API
+// [advice from AI] 템플릿 상세 조회 API - DB 기반
 router.get('/templates/:id', jwtAuth.verifyToken, async (req, res) => {
   try {
     const { id } = req.params;
-    const template = PIPELINE_TEMPLATES[id];
+    
+    const result = await pool.query(`
+      SELECT 
+        id,
+        name,
+        display_name,
+        description,
+        category,
+        language,
+        framework,
+        provider_type,
+        usage_count,
+        jenkinsfile as jenkins_pipeline,
+        gitlab_ci_yml as gitlab_ci,
+        github_workflow as github_actions,
+        dockerfile,
+        parameters,
+        version,
+        created_at,
+        updated_at
+      FROM pipeline_templates
+      WHERE id = $1 AND enabled = true
+    `, [id]);
 
-    if (!template) {
+    if (result.rows.length === 0) {
+      // DB에 없으면 하드코딩된 템플릿 확인
+      const template = PIPELINE_TEMPLATES[id];
+      if (template) {
+        return res.json({
+          success: true,
+          template: {
+            id,
+            name: id,
+            ...template
+          },
+          source: 'fallback'
+        });
+      }
+      
       return res.status(404).json({
         success: false,
         error: '템플릿을 찾을 수 없습니다.'
@@ -352,10 +436,8 @@ router.get('/templates/:id', jwtAuth.verifyToken, async (req, res) => {
 
     res.json({
       success: true,
-      template: {
-        id,
-        ...template
-      }
+      template: result.rows[0],
+      source: 'database'
     });
 
   } catch (error) {

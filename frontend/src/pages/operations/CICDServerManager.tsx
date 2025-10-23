@@ -91,26 +91,15 @@ const CICDServerManager: React.FC = () => {
       if (groupsData.success) {
         setPipelineGroups(groupsData.data);
       } else {
-        // 샘플 데이터 사용
-        setPipelineGroups([
-          { id: '1', group_name: 'ECP-AI 파이프라인', group_type: 'project_based', 
-            execution_strategy: 'hybrid', components_count: 8, last_execution_at: '2025-09-30', success_rate: 95 },
-          { id: '2', group_name: 'Frontend 서비스', group_type: 'service_based',
-            execution_strategy: 'sequential', components_count: 3, last_execution_at: '2025-09-29', success_rate: 100 },
-          { id: '3', group_name: 'Production 환경', group_type: 'environment_based',
-            execution_strategy: 'parallel', components_count: 12, last_execution_at: '2025-09-30', success_rate: 87 }
-        ]);
+        // [advice from AI] API 실패 시 빈 배열로 초기화 (목업 데이터 제거)
+        setPipelineGroups([]);
       }
 
       if (domainsData.success) {
         setDomains(domainsData.data);
       } else {
-        // 샘플 데이터 사용
-        setDomains([
-          { domain_name: 'jenkins.rdc.rickyson.com', cert_status: 'valid', cert_expires_at: '2025-12-30', ssl_enabled: true },
-          { domain_name: 'nexus.rdc.rickyson.com', cert_status: 'valid', cert_expires_at: '2025-12-30', ssl_enabled: true },
-          { domain_name: 'argocd.rdc.rickyson.com', cert_status: 'valid', cert_expires_at: '2025-12-30', ssl_enabled: true }
-        ]);
+        // [advice from AI] API 실패 시 빈 배열로 초기화 (목업 데이터 제거)
+        setDomains([]);
       }
 
     } catch (error) {

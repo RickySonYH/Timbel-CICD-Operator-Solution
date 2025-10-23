@@ -4,7 +4,7 @@
 version: '3.8'
 
 services:
-  # Frontend - React 18 + TypeScript + Material-UI
+  # Frontend - React 18 + TypeScript + Material-UI (운영 환경 최적화)
   frontend:
     build:
       context: ./frontend
@@ -17,23 +17,25 @@ services:
       - frontend_node_modules:/app/node_modules
     environment:
       - REACT_APP_API_URL=/api
-      - REACT_APP_WS_URL=ws://rdc.rickyson.com:3001
+      - REACT_APP_WS_URL=ws://localhost:3001
       - VITE_API_URL=/api
-      - CHOKIDAR_USEPOLLING=true
-      - WATCHPACK_POLLING=true
-      - NODE_ENV=development
+      - NODE_ENV=production
       - DISABLE_ESLINT_PLUGIN=true
       - GENERATE_SOURCEMAP=false
-      - DANGEROUSLY_DISABLE_HOST_CHECK=true
-      - WDS_SOCKET_HOST=0.0.0.0
-      - WDS_SOCKET_PORT=0
       - FAST_REFRESH=false
       - WDS_HOT=false
       - DISABLE_NEW_JSX_TRANSFORM=true
       - REACT_APP_NO_WEBSOCKET=true
       - WEBPACK_DEV_SERVER_NO_WEBSOCKET=true
       - HOST=0.0.0.0
-      - PUBLIC_URL=http://rdc.rickyson.com:3000
+      - WEBPACK_DEV_SERVER_TRANSPORT_MODE=polling
+      - PUBLIC_URL=http://localhost:3000
+      - WDS_SOCKET_HOST=0.0.0.0
+      - WDS_SOCKET_PORT=0
+      - WDS_SOCKET_PATH=/ws
+      - WEBPACK_DEV_SERVER_URL=
+      - BROWSER=none
+      - SKIP_PREFLIGHT_CHECK=true
     depends_on:
       backend:
         condition: service_healthy
@@ -95,13 +97,58 @@ services:
       # Git Analytics & Development Environment Settings
       - DEV_PROJECTS_PATH=/app/dev-projects
       - DEV_TEMPLATE_PATH=/app/project-templates
-      - GITLAB_URL=http://rdc.rickyson.com:8929
+      - GITLAB_URL=http://localhost:8929
       - GITLAB_TOKEN=${GITLAB_TOKEN:-}
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
       
       # Scheduler Settings
       - ENABLE_SCHEDULER=true
       - SCHEDULER_TIMEZONE=Asia/Seoul
+      
+      # [advice from AI] Phase 2: CI/CD 시스템 연동 환경 변수
+      # ArgoCD Integration
+      - ARGOCD_URL=${ARGOCD_URL:-http://argocd.langsa.ai}
+      - ARGOCD_USERNAME=${ARGOCD_USERNAME:-admin}
+      - ARGOCD_PASSWORD=${ARGOCD_PASSWORD:-1q2w3e4r}
+      - ARGOCD_TOKEN=${ARGOCD_TOKEN:-}
+      - ARGOCD_NAMESPACE=${ARGOCD_NAMESPACE:-argocd}
+      - ARGOCD_INSECURE=${ARGOCD_INSECURE:-true}
+      
+      # Jenkins Integration
+      - JENKINS_URL=${JENKINS_URL:-http://jenkins.langsa.ai:8080}
+      - JENKINS_USERNAME=${JENKINS_USERNAME:-admin}
+      - JENKINS_PASSWORD=${JENKINS_PASSWORD:-1q2w3e4r}
+      - JENKINS_API_TOKEN=${JENKINS_API_TOKEN:-}
+      - JENKINS_BUILD_TIMEOUT=${JENKINS_BUILD_TIMEOUT:-1800}
+      
+      # Nexus Repository Integration
+      - NEXUS_URL=${NEXUS_URL:-http://nexus.langsa.ai:8081}
+      - NEXUS_USERNAME=${NEXUS_USERNAME:-admin}
+      - NEXUS_PASSWORD=${NEXUS_PASSWORD:-1q2w3e4r}
+      - NEXUS_DOCKER_REGISTRY=${NEXUS_DOCKER_REGISTRY:-nexus.langsa.ai:8082}
+      
+      # Kubernetes Configuration
+      - KUBERNETES_NAMESPACE=${KUBERNETES_NAMESPACE:-timbel-cicd}
+      - KUBERNETES_CONTEXT=${KUBERNETES_CONTEXT:-kind-timbel-cluster}
+      
+      # Docker Registry
+      - DOCKER_REGISTRY=${DOCKER_REGISTRY:-nexus.langsa.ai:8082}
+      - DOCKER_USERNAME=${DOCKER_USERNAME:-admin}
+      - DOCKER_PASSWORD=${DOCKER_PASSWORD:-1q2w3e4r}
+      
+      # Git Integration
+      - GIT_DEFAULT_BRANCH=${GIT_DEFAULT_BRANCH:-main}
+      - GIT_WEBHOOK_SECRET=${GIT_WEBHOOK_SECRET:-}
+      - GITHUB_WEBHOOK_URL=${GITHUB_WEBHOOK_URL:-http://rdc.rickyson.com:3001/api/github/webhooks}
+      
+      # Performance and Resource Configuration
+      - MAX_CONCURRENT_BUILDS=${MAX_CONCURRENT_BUILDS:-5}
+      - BUILD_TIMEOUT=${BUILD_TIMEOUT:-3600}
+      - DEPLOYMENT_TIMEOUT=${DEPLOYMENT_TIMEOUT:-1800}
+      
+      # Security Configuration
+      - API_SECRET_KEY=${API_SECRET_KEY:-timbel-api-secret-key}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET:-timbel-webhook-secret}
     depends_on:
       postgres:
         condition: service_healthy
@@ -292,6 +339,136 @@ services:
     networks:
       - timbel-network
 
+  # Jenkins - CI/CD 서버
+  jenkins:
+    image: jenkins/jenkins:lts-jdk17
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    environment:
+      - JENKINS_OPTS=--httpPort=8080
+      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false
+      - JENKINS_ADMIN_ID=admin
+      - JENKINS_ADMIN_PASSWORD=admin
+    volumes:
+      - jenkins_data:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    networks:
+      - timbel-network
+
+
+  # Jenkins 메트릭 서버
+  jenkins-metrics:
+    image: node:18-alpine
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./jenkins-metrics-server.js:/app/server.js
+    working_dir: /app
+    command: ["node", "server.js"]
+    restart: unless-stopped
+    depends_on:
+      - jenkins
+    networks:
+      - timbel-network
+
+  # Nexus - 아티팩트 저장소
+  nexus:
+    image: sonatype/nexus3:latest
+    ports:
+      - "8082:8081"
+    environment:
+      - NEXUS_SECURITY_RANDOMPASSWORD=false
+      - INSTALL4J_ADD_VM_PARAMS=-Xms512m -Xmx1024m -XX:MaxDirectMemorySize=1024m
+    volumes:
+      - nexus_data:/nexus-data
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/service/rest/v1/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    networks:
+      - timbel-network
+
+  # Nexus 메트릭 서버
+  nexus-metrics:
+    image: node:18-alpine
+    ports:
+      - "8083:8082"
+    volumes:
+      - ./nexus-metrics-server.js:/app/server.js
+    working_dir: /app
+    command: ["node", "server.js"]
+    restart: unless-stopped
+    depends_on:
+      - nexus
+    networks:
+      - timbel-network
+
+  # Harbor 메트릭 서버
+  harbor-metrics:
+    image: node:18-alpine
+    ports:
+      - "8084:8084"
+    volumes:
+      - ./harbor-metrics-server.js:/app/server.js
+    working_dir: /app
+    command: ["node", "server.js"]
+    restart: unless-stopped
+    networks:
+      - timbel-network
+
+  # GitLab CI 메트릭 서버
+  gitlab-ci-metrics:
+    image: node:18-alpine
+    ports:
+      - "8085:8085"
+    volumes:
+      - ./gitlab-ci-metrics-server.js:/app/server.js
+    working_dir: /app
+    command: ["node", "server.js"]
+    restart: unless-stopped
+    networks:
+      - timbel-network
+
+  # Tekton 메트릭 서버
+  tekton-metrics:
+    image: node:18-alpine
+    ports:
+      - "8086:8086"
+    volumes:
+      - ./tekton-metrics-server.js:/app/server.js
+    working_dir: /app
+    command: ["node", "server.js"]
+    restart: unless-stopped
+    networks:
+      - timbel-network
+
   # Nginx - 리버스 프록시 및 로드 밸런서
   nginx:
     image: nginx:alpine
@@ -303,6 +480,8 @@ services:
     depends_on:
       - frontend
       - backend
+      - jenkins
+      - nexus
     networks:
       - timbel-network
 
@@ -314,6 +493,8 @@ volumes:
   chromadb_data:
   prometheus_data:
   grafana_data:
+  jenkins_data:
+  nexus_data:
   frontend_node_modules:
   dev_projects_data:
   project_templates_data:

@@ -61,10 +61,10 @@ interface DashboardStats {
 
 interface RecentDeployment {
   id: string;
-  project_name: string;
+  projectName: string;
   status: 'running' | 'pending' | 'completed' | 'failed';
   progress: number;
-  created_at: string;
+  startedAt: string;
   environment: string;
   repository_url?: string;
 }
@@ -76,13 +76,6 @@ const OperationsDashboard: React.FC = () => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentDeployments, setRecentDeployments] = useState<RecentDeployment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [deploymentDialog, setDeploymentDialog] = useState(false);
-  const [deploymentForm, setDeploymentForm] = useState({
-    projectName: '',
-    repositoryUrl: '',
-    environment: 'development',
-    priority: 'normal'
-  });
 
   // [advice from AI] 대시보드 데이터 로드 - 실제 API에서 가져오기
   const loadDashboardData = async () => {
@@ -91,7 +84,7 @@ const OperationsDashboard: React.FC = () => {
       
       // API 호출로 실제 데이터 가져오기
       const { token: authToken } = useJwtAuthStore.getState();
-      const response = await fetch('http://localhost:3001/api/operations/dashboard-stats', {
+      const response = await fetch('http://rdc.rickyson.com:3001/api/operations/dashboard-stats', {
         headers: {
           'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json'
@@ -103,8 +96,12 @@ const OperationsDashboard: React.FC = () => {
       }
 
       const data = await response.json();
-      setStats(data.stats);
-      setRecentDeployments(data.recentDeployments || []);
+      if (data.success) {
+        setStats(data.stats);
+        setRecentDeployments(data.recentDeployments || []);
+      } else {
+        throw new Error(data.message || '데이터 로드 실패');
+      }
       
     } catch (error) {
       console.error('대시보드 데이터 로드 실패:', error);
@@ -124,45 +121,6 @@ const OperationsDashboard: React.FC = () => {
     }
   };
 
-  // [advice from AI] 배포 요청 처리
-  const handleDeploymentRequest = async () => {
-    try {
-      console.log('🚀 배포 요청:', deploymentForm);
-      
-      // 통합 배포 센터로 작업 요청 전달
-      const deploymentRequest = {
-        ...deploymentForm,
-        requestedBy: user?.username,
-        requestedAt: new Date().toISOString(),
-        status: 'pending'
-      };
-      
-      // API 호출로 배포 요청 전송
-      const { token: authToken } = useJwtAuthStore.getState();
-      await fetch('http://localhost:3001/api/operations/deployment-request', {
-        method: 'POST',
-        headers: { 
-          'Authorization': `Bearer ${authToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(deploymentRequest)
-      });
-      
-      setDeploymentDialog(false);
-      setDeploymentForm({
-        projectName: '',
-        repositoryUrl: '',
-        environment: 'development',
-        priority: 'normal'
-      });
-      
-      // 통합 배포 센터로 이동
-      navigate('/operations/deployment-center');
-      
-    } catch (error) {
-      console.error('배포 요청 실패:', error);
-    }
-  };
 
   useEffect(() => {
     loadDashboardData();
@@ -223,14 +181,13 @@ const OperationsDashboard: React.FC = () => {
           운영 센터 대시보드
         </Typography>
         <Typography variant="body1" color="text.secondary" paragraph>
-          실시간 운영 현황을 확인하고 배포 요청을 관리합니다.
+          실시간 운영 현황을 확인하고 레포지토리 배포를 관리합니다.
         </Typography>
         <Alert severity="info" sx={{ mt: 2 }}>
           <Typography variant="body2">
             <strong>운영 센터 사용 가이드:</strong><br/>
-            • <strong>배포 요청</strong>: 관리자가 운영팀에게 시스템 배포를 요청합니다.<br/>
             • <strong>레포지토리 배포</strong>: 운영팀이 GitHub 레포지토리를 직접 배포합니다.<br/>
-            • <strong>통합 배포 센터</strong>: 배포 요청이 5단계로 자동 진행되는 것을 모니터링합니다.<br/>
+            • <strong>파이프라인 관리</strong>: Jenkins + Nexus + Argo CD 통합 관리합니다.<br/>
             • 모든 배포는 Jenkins → Nexus → Argo CD 체인으로 자동 실행됩니다.
           </Typography>
         </Alert>
@@ -373,34 +330,27 @@ const OperationsDashboard: React.FC = () => {
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
             <Button
               variant="contained"
-              color="primary"
-              onClick={() => setDeploymentDialog(true)}
+              onClick={() => navigate('/operations')}
             >
-              배포 요청 작성
+              🏢 운영 센터
             </Button>
             <Button
               variant="outlined"
               onClick={() => navigate('/operations/repository-deploy')}
             >
-              레포지토리 배포
-            </Button>
-            <Button
-              variant="outlined"
-              onClick={() => navigate('/operations/deployment-center')}
-            >
-              통합 배포 센터
+              📦 레포지토리 배포
             </Button>
             <Button
               variant="outlined"
               onClick={() => navigate('/operations/comprehensive-monitoring')}
             >
-              종합 모니터링
+              📊 종합 모니터링
             </Button>
             <Button
               variant="outlined"
-              onClick={() => navigate('/operations/issues')}
+              onClick={() => navigate('/knowledge')}
             >
-              이슈 관리
+              📚 지식자원 카탈로그
             </Button>
           </Box>
         </CardContent>
@@ -417,7 +367,7 @@ const OperationsDashboard: React.FC = () => {
           </Typography>
           {recentDeployments.length === 0 ? (
             <Alert severity="info">
-              최근 배포 내역이 없습니다. 배포 요청을 생성하거나 레포지토리를 직접 배포해보세요.
+              최근 배포 내역이 없습니다. 레포지토리를 직접 배포해보세요.
             </Alert>
           ) : (
             <TableContainer>
@@ -435,7 +385,7 @@ const OperationsDashboard: React.FC = () => {
                 <TableBody>
                   {recentDeployments.map((deployment) => (
                     <TableRow key={deployment.id}>
-                      <TableCell>{deployment.project_name}</TableCell>
+                      <TableCell>{deployment.projectName}</TableCell>
                       <TableCell>
                         <Chip 
                           label={getStatusLabel(deployment.environment)} 
@@ -461,7 +411,7 @@ const OperationsDashboard: React.FC = () => {
                         </Box>
                       </TableCell>
                       <TableCell>
-                        {new Date(deployment.created_at).toLocaleString('ko-KR')}
+                        {new Date(deployment.startedAt).toLocaleString('ko-KR')}
                       </TableCell>
                       <TableCell>
                         <Button 
@@ -480,72 +430,6 @@ const OperationsDashboard: React.FC = () => {
         </CardContent>
       </Card>
 
-      {/* 배포 요청 다이얼로그 */}
-      <Dialog open={deploymentDialog} onClose={() => setDeploymentDialog(false)} maxWidth="md" fullWidth>
-        <DialogTitle>배포 요청 작성</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" color="text.secondary" paragraph sx={{ mt: 1 }}>
-            시스템 배포를 운영팀에게 요청합니다. 요청 후 통합 배포 센터에서 5단계 진행 상황을 모니터링할 수 있습니다.
-          </Typography>
-          <TextField
-            fullWidth
-            label="프로젝트명"
-            value={deploymentForm.projectName}
-            onChange={(e) => setDeploymentForm({ ...deploymentForm, projectName: e.target.value })}
-            margin="normal"
-            required
-            helperText="배포할 프로젝트의 이름을 입력하세요"
-          />
-          <TextField
-            fullWidth
-            label="레포지토리 URL"
-            value={deploymentForm.repositoryUrl}
-            onChange={(e) => setDeploymentForm({ ...deploymentForm, repositoryUrl: e.target.value })}
-            margin="normal"
-            required
-            placeholder="https://github.com/username/repository"
-            helperText="GitHub 레포지토리 URL을 입력하세요"
-          />
-          <FormControl fullWidth margin="normal">
-            <InputLabel>배포 환경</InputLabel>
-            <Select
-              value={deploymentForm.environment}
-              onChange={(e) => setDeploymentForm({ ...deploymentForm, environment: e.target.value })}
-              label="배포 환경"
-            >
-              <MenuItem value="development">개발 (Development)</MenuItem>
-              <MenuItem value="staging">스테이징 (Staging)</MenuItem>
-              <MenuItem value="production">운영 (Production)</MenuItem>
-            </Select>
-          </FormControl>
-          <FormControl fullWidth margin="normal">
-            <InputLabel>우선순위</InputLabel>
-            <Select
-              value={deploymentForm.priority}
-              onChange={(e) => setDeploymentForm({ ...deploymentForm, priority: e.target.value })}
-              label="우선순위"
-            >
-              <MenuItem value="low">낮음</MenuItem>
-              <MenuItem value="normal">보통</MenuItem>
-              <MenuItem value="high">높음</MenuItem>
-              <MenuItem value="urgent">긴급</MenuItem>
-            </Select>
-          </FormControl>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeploymentDialog(false)}>
-            취소
-          </Button>
-          <Button 
-            onClick={handleDeploymentRequest} 
-            variant="contained" 
-            color="primary"
-            disabled={!deploymentForm.projectName || !deploymentForm.repositoryUrl}
-          >
-            배포 요청
-          </Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   );
 };

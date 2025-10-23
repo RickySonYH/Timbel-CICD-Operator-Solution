@@ -6,8 +6,8 @@ const { v4: uuidv4 } = require('uuid');
 
 class CICDPipelineService {
   constructor() {
-    // [advice from AI] CI/CD 설정
-    this.jenkinsURL = process.env.JENKINS_URL || 'http://localhost:8080';
+    // [advice from AI] CI/CD 설정 (Docker 네트워크 내부 연결)
+    this.jenkinsURL = process.env.JENKINS_URL || 'http://jenkins:8080';
     this.jenkinsUser = process.env.JENKINS_USER || 'admin';
     this.jenkinsToken = process.env.JENKINS_TOKEN || '';
     this.gitlabURL = process.env.GITLAB_URL || 'https://gitlab.com';

@@ -1,7 +1,7 @@
 {
-  "name": "timbel-knowledge-dev",
-  "version": "0.55.0",
-  "description": "Timbel 지식자원 플랫폼 - 개발 버전",
+  "name": "timbel-cicd-operator",
+  "version": "0.60.0",
+  "description": "Timbel CICD Operator - 엔터프라이즈 CI/CD 통합 플랫폼",
   "dependencies": {
     "axios": "^1.11.0",
     "cors": "^2.8.5",

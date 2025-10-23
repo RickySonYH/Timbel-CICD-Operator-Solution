@@ -1,0 +1,95 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ecp-ai-staging
+  namespace: argocd
+  labels:
+    app: ecp-ai-orchestrator
+    environment: staging
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ecp-ai/orchestrator-k8s-manifests
+    targetRevision: HEAD
+    path: k8s/staging
+    helm:
+      valueFiles:
+        - values-staging.yaml
+      parameters:
+        - name: image.tag
+          value: "1.2.3"
+        - name: image.repository
+          value: "nexus.rdc.rickyson.com:8081/ecp-ai-orchestrator"
+        - name: ingress.hosts[0].host
+          value: "ecp-ai-staging.rdc.rickyson.com"
+        - name: ingress.tls[0].hosts[0]
+          value: "ecp-ai-staging.rdc.rickyson.com"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ecp-ai-staging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+  revisionHistoryLimit: 10
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ecp-ai-production
+  namespace: argocd
+  labels:
+    app: ecp-ai-orchestrator
+    environment: production
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ecp-ai/orchestrator-k8s-manifests
+    targetRevision: HEAD
+    path: k8s/production
+    helm:
+      valueFiles:
+        - values-production.yaml
+      parameters:
+        - name: image.tag
+          value: "1.2.3"
+        - name: image.repository
+          value: "nexus.rdc.rickyson.com:8081/ecp-ai-orchestrator"
+        - name: ingress.hosts[0].host
+          value: "ecp-ai.rdc.rickyson.com"
+        - name: ingress.tls[0].hosts[0]
+          value: "ecp-ai.rdc.rickyson.com"
+        - name: replicas
+          value: "3"
+        - name: resources.limits.cpu
+          value: "1000m"
+        - name: resources.limits.memory
+          value: "2Gi"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ecp-ai-production
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+  revisionHistoryLimit: 10

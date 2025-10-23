@@ -417,11 +417,11 @@ const BuildPipelineCenter: React.FC = () => {
                             <Box sx={{ width: '100%' }}>
                               <LinearProgress 
                                 variant="determinate" 
-                                value={job.progress} 
+                                value={Math.max(0, Math.min(100, job.progress || 0))} 
                                 sx={{ mb: 1 }}
                               />
                               <Typography variant="caption">
-                                {job.progress}%
+                                {job.progress || 0}%
                               </Typography>
                             </Box>
                           ) : (
@@ -551,6 +551,7 @@ const BuildPipelineCenter: React.FC = () => {
         onClose={() => setBuildDialog(false)}
         maxWidth="sm"
         fullWidth
+        disableEnforceFocus
       >
         <DialogTitle>
           새 빌드 실행

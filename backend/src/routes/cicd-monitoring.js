@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
-const { verifyToken, requireRole } = require('../middleware/jwtAuth');
+const jwtAuth = require('../middleware/jwtAuth');
 
 // Jenkins 설정
 const JENKINS_URL = process.env.JENKINS_URL || 'http://localhost:8080';
@@ -41,7 +41,7 @@ const makeJenkinsRequest = async (endpoint, method = 'GET', data = null) => {
 };
 
 // 1. Jenkins 전체 상태 조회
-router.get('/jenkins/status', verifyToken, async (req, res) => {
+router.get('/jenkins/status', jwtAuth.verifyToken, async (req, res) => {
   try {
     const status = await makeJenkinsRequest('/api/json');
     
@@ -68,7 +68,7 @@ router.get('/jenkins/status', verifyToken, async (req, res) => {
 });
 
 // 2. Jenkins Job 목록 조회
-router.get('/jenkins/jobs', verifyToken, async (req, res) => {
+router.get('/jenkins/jobs', jwtAuth.verifyToken, async (req, res) => {
   try {
     const data = await makeJenkinsRequest('/api/json');
     
@@ -103,7 +103,7 @@ router.get('/jenkins/jobs', verifyToken, async (req, res) => {
 });
 
 // 3. 특정 Job의 빌드 히스토리 조회
-router.get('/jenkins/jobs/:jobName/builds', verifyToken, async (req, res) => {
+router.get('/jenkins/jobs/:jobName/builds', jwtAuth.verifyToken, async (req, res) => {
   try {
     const { jobName } = req.params;
     const { limit = 10 } = req.query;
@@ -161,7 +161,7 @@ router.get('/jenkins/jobs/:jobName/builds', verifyToken, async (req, res) => {
 });
 
 // 4. 특정 빌드의 실시간 로그 조회
-router.get('/jenkins/jobs/:jobName/builds/:buildNumber/log', verifyToken, async (req, res) => {
+router.get('/jenkins/jobs/:jobName/builds/:buildNumber/log', jwtAuth.verifyToken, async (req, res) => {
   try {
     const { jobName, buildNumber } = req.params;
     const { start = 0 } = req.query;
@@ -189,7 +189,7 @@ router.get('/jenkins/jobs/:jobName/builds/:buildNumber/log', verifyToken, async 
 });
 
 // 5. Jenkins Job 빌드 트리거
-router.post('/jenkins/jobs/:jobName/build', verifyToken, requireRole(['admin', 'po', 'pe']), async (req, res) => {
+router.post('/jenkins/jobs/:jobName/build', jwtAuth.verifyToken, jwtAuth.requireRole(['admin', 'po', 'pe']), async (req, res) => {
   try {
     const { jobName } = req.params;
     const { parameters = {} } = req.body;
@@ -220,7 +220,7 @@ router.post('/jenkins/jobs/:jobName/build', verifyToken, requireRole(['admin', '
 });
 
 // 6. Nexus 상태 조회
-router.get('/nexus/status', verifyToken, async (req, res) => {
+router.get('/nexus/status', jwtAuth.verifyToken, async (req, res) => {
   try {
     const response = await axios.get(`${NEXUS_URL}/service/rest/v1/status`, {
       timeout: 5000
@@ -240,7 +240,7 @@ router.get('/nexus/status', verifyToken, async (req, res) => {
 });
 
 // 7. Nexus Repository 목록 조회
-router.get('/nexus/repositories', verifyToken, async (req, res) => {
+router.get('/nexus/repositories', jwtAuth.verifyToken, async (req, res) => {
   try {
     const response = await axios.get(`${NEXUS_URL}/service/rest/v1/repositories`, {
       timeout: 10000
@@ -274,7 +274,7 @@ router.get('/nexus/repositories', verifyToken, async (req, res) => {
 });
 
 // 8. 통합 CI/CD 파이프라인 상태 조회
-router.get('/pipeline/status', verifyToken, async (req, res) => {
+router.get('/pipeline/status', jwtAuth.verifyToken, async (req, res) => {
   try {
     // Jenkins 상태
     let jenkinsStatus = null;
@@ -328,7 +328,7 @@ router.get('/pipeline/status', verifyToken, async (req, res) => {
 });
 
 // 9. ECP-AI 프로젝트 전용 빌드 모니터링
-router.get('/ecp-ai/build-status', verifyToken, async (req, res) => {
+router.get('/ecp-ai/build-status', jwtAuth.verifyToken, async (req, res) => {
   try {
     const jobName = 'ecp-ai-local-test';
     

@@ -5,14 +5,25 @@ const jwtAuth = require('../middleware/jwtAuth');
 
 const router = express.Router();
 
-// [advice from AI] 데이터베이스 연결 풀
-const pool = new Pool({
+// [advice from AI] 데이터베이스 연결 풀 - 두 개의 DB 연결
+const operationsPool = new Pool({
   user: 'timbel_user',
   host: 'postgres',
   database: 'timbel_cicd_operator',
   password: 'timbel_password',
   port: 5432,
 });
+
+const knowledgePool = new Pool({
+  user: 'timbel_user',
+  host: 'postgres',
+  database: 'timbel_knowledge',
+  password: 'timbel_password',
+  port: 5432,
+});
+
+// 기본 pool은 operations DB 사용
+const pool = operationsPool;
 
 // [advice from AI] 이슈 생성 API (자동 생성)
 router.post('/create', jwtAuth.verifyToken, async (req, res) => {
@@ -34,27 +45,23 @@ router.post('/create', jwtAuth.verifyToken, async (req, res) => {
     // 이슈 생성
     const result = await pool.query(`
       INSERT INTO issues (
-        issue_type, title, description, severity, status,
-        affected_system_id, affected_service, error_details,
-        jenkins_build_id, argocd_application_id, prometheus_alert_id,
-        auto_created, created_by, priority_score
+        title, description, issue_type, severity, status,
+        project_name, component, assigned_to, reported_by,
+        jenkins_job_id, deployment_id
       )
-      VALUES ($1, $2, $3, $4, 'open', $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      VALUES ($1, $2, $3, $4, 'open', $5, $6, $7, $8, $9, $10)
       RETURNING *
     `, [
-      issue_type,
       title,
       description,
+      issue_type,
       severity,
-      affected_system_id,
-      affected_service,
-      JSON.stringify(error_details),
+      affected_service || 'Unknown Project',
+      affected_service || 'Unknown Component',
+      req.user?.username || null,
+      req.user?.username || 'system',
       jenkins_build_id,
-      argocd_application_id,
-      prometheus_alert_id,
-      auto_created,
-      req.user?.id || 'system',
-      calculatePriorityScore(severity, issue_type)
+      argocd_application_id
     ]);
 
     const issue = result.rows[0];
@@ -130,23 +137,59 @@ router.get('/list', jwtAuth.verifyToken, async (req, res) => {
 
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
+    // 이슈 기본 정보 조회 (operations DB)
     const result = await pool.query(`
       SELECT 
         i.*,
-        u.username as created_by_name,
-        u2.username as assigned_to_name,
         COUNT(ih.id) as history_count
       FROM issues i
-      LEFT JOIN timbel_users u ON i.created_by = u.id
-      LEFT JOIN timbel_users u2 ON i.assigned_to = u2.id
       LEFT JOIN issue_history ih ON i.id = ih.issue_id
       ${whereClause}
-      GROUP BY i.id, u.username, u2.username
-      ORDER BY i.priority_score DESC, i.created_at DESC
+      GROUP BY i.id
+      ORDER BY 
+        CASE i.severity 
+          WHEN 'critical' THEN 1
+          WHEN 'high' THEN 2
+          WHEN 'medium' THEN 3
+          WHEN 'low' THEN 4
+          ELSE 5
+        END,
+        i.created_at DESC
       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
     `, [...queryParams, limit, offset]);
 
-    // 이슈 통계 계산
+    // 사용자 정보 별도 조회 (knowledge DB)
+    const userIds = [...new Set([
+      ...result.rows.map(i => i.created_by).filter(Boolean),
+      ...result.rows.map(i => i.assigned_to).filter(Boolean)
+    ])];
+
+    let userMap = {};
+    if (userIds.length > 0) {
+      try {
+        const userResult = await knowledgePool.query(`
+          SELECT id, username, full_name 
+          FROM timbel_users 
+          WHERE id = ANY($1)
+        `, [userIds]);
+        
+        userMap = userResult.rows.reduce((acc, user) => {
+          acc[user.id] = user;
+          return acc;
+        }, {});
+      } catch (userError) {
+        console.log('⚠️ 사용자 정보 조회 오류:', userError.message);
+      }
+    }
+
+    // 이슈 데이터에 사용자 정보 추가
+    const enrichedIssues = result.rows.map(issue => ({
+      ...issue,
+      created_by_name: userMap[issue.created_by]?.full_name || userMap[issue.created_by]?.username || '시스템',
+      assigned_to_name: userMap[issue.assigned_to]?.full_name || userMap[issue.assigned_to]?.username || null
+    }));
+
+    // 이슈 통계 계산 (실제 테이블 구조 기반)
     const statsResult = await pool.query(`
       SELECT 
         COUNT(*) as total_issues,
@@ -155,14 +198,14 @@ router.get('/list', jwtAuth.verifyToken, async (req, res) => {
         COUNT(CASE WHEN status = 'resolved' THEN 1 END) as resolved_issues,
         COUNT(CASE WHEN severity = 'critical' THEN 1 END) as critical_issues,
         COUNT(CASE WHEN severity = 'high' THEN 1 END) as high_issues,
-        COUNT(CASE WHEN auto_created = true THEN 1 END) as auto_created_issues
+        COUNT(CASE WHEN issue_type = 'build_failure' THEN 1 END) as build_failure_issues
       FROM issues
       ${whereClause}
     `, queryParams.slice(0, -2)); // limit, offset 제외
 
     res.json({
       success: true,
-      issues: result.rows,
+      issues: enrichedIssues,
       statistics: statsResult.rows[0],
       pagination: {
         limit: parseInt(limit),

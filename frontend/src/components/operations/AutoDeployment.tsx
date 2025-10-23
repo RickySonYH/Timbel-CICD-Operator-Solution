@@ -572,7 +572,7 @@ const AutoDeployment: React.FC = () => {
                     </Typography>
                     <LinearProgress
                       variant="determinate"
-                      value={selectedDeployment.progress}
+                      value={Math.max(0, Math.min(100, selectedDeployment?.progress || 0))}
                       sx={{ height: 20, borderRadius: 1, mb: 2 }}
                     />
                     <Typography variant="body2" color="text.secondary">

@@ -11,19 +11,59 @@ import {
   MenuItem,
   Avatar,
   useTheme,
+  Divider,
 } from '@mui/material';
 import {
   AccountCircle as AccountCircleIcon,
   Logout as LogoutIcon,
   Settings as SettingsIcon,
+  Schedule as ScheduleIcon,
+  Refresh as RefreshIcon,
+  Notifications as NotificationsIcon,
+  NotificationsOff as NotificationsOffIcon,
 } from '@mui/icons-material';
 import { useJwtAuthStore } from '../../store/jwtAuthStore';
+import SimpleTokenDisplay from '../auth/SimpleTokenDisplay';
+import { useSimpleTokenNotifications } from '../../hooks/useSimpleTokenNotifications';
+import { useTokenTimer } from '../../hooks/useTokenTimer';
 
 const UserInfo: React.FC = () => {
   const theme = useTheme();
   const { user, logout } = useJwtAuthStore();
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
+
+  // [advice from AI] 안전한 토큰 알림 시스템 활성화
+  useSimpleTokenNotifications({
+    enable10MinWarning: true,
+    enable5MinWarning: true,
+    enable1MinWarning: true,
+    useBrowserNotification: true
+  });
+
+  // [advice from AI] 토큰 갱신 기능
+  const { refreshToken, isRefreshing, canRefresh } = useTokenTimer();
+
+  // [advice from AI] 브라우저 알림 상태 관리
+  const [notificationPermission, setNotificationPermission] = React.useState(
+    typeof Notification !== 'undefined' ? Notification.permission : 'unsupported'
+  );
+
+  // [advice from AI] 알림 권한 상태 실시간 업데이트
+  React.useEffect(() => {
+    const updatePermission = () => {
+      if (typeof Notification !== 'undefined') {
+        setNotificationPermission(Notification.permission);
+      }
+    };
+
+    // 페이지 포커스 시 권한 상태 확인
+    window.addEventListener('focus', updatePermission);
+    
+    return () => {
+      window.removeEventListener('focus', updatePermission);
+    };
+  }, []);
 
   // [advice from AI] 역할별 표시 텍스트 (PO-PE-QA-운영팀 구조 + admin)
   const getRoleText = (roleType?: string, level?: number) => {
@@ -84,6 +124,96 @@ const UserInfo: React.FC = () => {
     handleMenuClose();
   };
 
+  // [advice from AI] 토큰 갱신 핸들러
+  const handleRefreshToken = async () => {
+    if (canRefresh && !isRefreshing) {
+      const success = await refreshToken();
+      if (success) {
+        // 토스트 알림
+        const event = new CustomEvent('showToast', {
+          detail: { 
+            message: '세션이 성공적으로 연장되었습니다!',
+            type: 'success',
+            duration: 3000,
+            title: '세션 연장 완료'
+          }
+        });
+        window.dispatchEvent(event);
+      } else {
+        // 실패 알림
+        const event = new CustomEvent('showToast', {
+          detail: { 
+            message: '세션 연장에 실패했습니다. 다시 로그인해 주세요.',
+            type: 'error',
+            duration: 5000,
+            title: '세션 연장 실패'
+          }
+        });
+        window.dispatchEvent(event);
+      }
+    }
+    handleMenuClose();
+  };
+
+  // [advice from AI] 브라우저 알림 권한 요청 핸들러
+  const handleNotificationPermission = async () => {
+    if (typeof Notification === 'undefined') {
+      // 토스트 알림
+      const event = new CustomEvent('showToast', {
+        detail: { 
+          message: '이 브라우저는 알림을 지원하지 않습니다.',
+          type: 'warning',
+          duration: 3000,
+          title: '알림 미지원'
+        }
+      });
+      window.dispatchEvent(event);
+      handleMenuClose();
+      return;
+    }
+
+    if (Notification.permission === 'granted') {
+      // 이미 허용된 경우
+      const event = new CustomEvent('showToast', {
+        detail: { 
+          message: '브라우저 알림이 이미 활성화되어 있습니다.',
+          type: 'info',
+          duration: 3000,
+          title: '알림 활성화됨'
+        }
+      });
+      window.dispatchEvent(event);
+    } else {
+      // 권한 요청
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission);
+      
+      if (permission === 'granted') {
+        const event = new CustomEvent('showToast', {
+          detail: { 
+            message: '브라우저 알림이 활성화되었습니다!',
+            type: 'success',
+            duration: 3000,
+            title: '알림 활성화'
+          }
+        });
+        window.dispatchEvent(event);
+      } else {
+        const event = new CustomEvent('showToast', {
+          detail: { 
+            message: '브라우저 알림이 거부되었습니다. 토스트 알림만 사용됩니다.',
+            type: 'info',
+            duration: 4000,
+            title: '알림 거부됨'
+          }
+        });
+        window.dispatchEvent(event);
+      }
+    }
+    
+    handleMenuClose();
+  };
+
   if (!user) return null;
 
   return (
@@ -113,7 +243,7 @@ const UserInfo: React.FC = () => {
         >
           {user.fullName}
         </Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
           <Chip
             label={getRoleText(user.roleType, user.permissionLevel)}
             size="small"
@@ -127,22 +257,11 @@ const UserInfo: React.FC = () => {
               },
             }}
           />
-          {/* [advice from AI] organization 속성 제거 - JWT 사용자 정보에 없음 */}
-          {/* {user.organization && (
-            <Chip
-              label={user.organization.name}
-              size="small"
-              color="secondary"
-              variant="outlined"
-              sx={{
-                fontSize: '0.75rem',
-                height: 18,
-                '& .MuiChip-label': {
-                  px: 1,
-                },
-              }}
-            />
-          )} */}
+          
+          {/* [advice from AI] 안전한 토큰 시간 표시 */}
+          <SimpleTokenDisplay 
+            showTooltip={true}
+          />
         </Box>
       </Box>
 
@@ -185,6 +304,50 @@ const UserInfo: React.FC = () => {
           <SettingsIcon sx={{ mr: 1, fontSize: '1rem' }} />
           설정
         </MenuItem>
+        
+        {/* [advice from AI] 브라우저 알림 설정 메뉴 항목 */}
+        <MenuItem 
+          onClick={handleNotificationPermission}
+          sx={{
+            color: notificationPermission === 'granted' 
+              ? theme.palette.success.main 
+              : theme.palette.text.secondary
+          }}
+        >
+          {notificationPermission === 'granted' ? (
+            <NotificationsIcon sx={{ mr: 1, fontSize: '1rem', color: 'inherit' }} />
+          ) : (
+            <NotificationsOffIcon sx={{ mr: 1, fontSize: '1rem', color: 'inherit' }} />
+          )}
+          {notificationPermission === 'granted' ? '알림 활성화됨' : '브라우저 알림 설정'}
+        </MenuItem>
+        
+        <Divider />
+        
+        {/* [advice from AI] 토큰 갱신 메뉴 항목 */}
+        <MenuItem 
+          onClick={handleRefreshToken} 
+          disabled={!canRefresh || isRefreshing}
+          sx={{
+            color: canRefresh ? theme.palette.primary.main : theme.palette.text.disabled
+          }}
+        >
+          <RefreshIcon 
+            sx={{ 
+              mr: 1, 
+              fontSize: '1rem',
+              animation: isRefreshing ? 'spin 1s linear infinite' : 'none',
+              '@keyframes spin': {
+                '0%': { transform: 'rotate(0deg)' },
+                '100%': { transform: 'rotate(360deg)' }
+              }
+            }} 
+          />
+          {isRefreshing ? '세션 연장 중...' : '세션 연장'}
+        </MenuItem>
+        
+        <Divider />
+        
         <MenuItem onClick={handleLogout}>
           <LogoutIcon sx={{ mr: 1, fontSize: '1rem' }} />
           로그아웃

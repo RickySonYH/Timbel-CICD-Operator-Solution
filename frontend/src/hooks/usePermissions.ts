@@ -4,6 +4,7 @@ import { useJwtAuthStore } from '../store/jwtAuthStore';
 export interface UserPermissions {
   // 개발/등록 권한 (Admin, Operations)
   canManageDomains: boolean;
+  canManageProjects: boolean;
   canManageSystems: boolean;
   canManageCodeComponents: boolean;
   canManageDesignAssets: boolean;
@@ -24,6 +25,9 @@ export interface UserPermissions {
   canViewCatalog: boolean;
   canDownloadAssets: boolean;
   canUseAssets: boolean;
+  
+  // 편집 권한 (Admin, Operations)
+  canEditCatalog: boolean;
   
   // 시스템 관리 권한 (Admin만)
   canViewSystemAdmin: boolean;
@@ -51,6 +55,7 @@ export const usePermissions = (): UserPermissions => {
   return {
     // 개발/등록 권한 - Admin, Operations만 가능
     canManageDomains: canManage,
+    canManageProjects: canManage,
     canManageSystems: canManage,
     canManageCodeComponents: canManage,
     canManageDesignAssets: canManage,
@@ -71,6 +76,9 @@ export const usePermissions = (): UserPermissions => {
     canViewCatalog: true,
     canDownloadAssets: true,
     canUseAssets: true,
+    
+    // 편집 권한 - Admin, Operations만 가능
+    canEditCatalog: canManage,
     
     // 시스템 관리 권한 - Admin만
     canViewSystemAdmin: isAdmin,

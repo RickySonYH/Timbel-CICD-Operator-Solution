@@ -497,7 +497,7 @@ const SystemConfigurationCenter: React.FC = () => {
                 variant="outlined"
                 color="error"
                 onClick={() => {
-                  if (confirm('정말로 시스템을 재시작하시겠습니까?')) {
+                  if (window.confirm('정말로 시스템을 재시작하시겠습니까?')) {
                     alert('시스템 재시작은 관리자에게 문의하세요.');
                   }
                 }}

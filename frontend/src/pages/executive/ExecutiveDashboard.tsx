@@ -14,6 +14,7 @@ import {
 } from '@mui/material';
 import { useJwtAuthStore } from '../../store/jwtAuthStore';
 import { usePermissions } from '../../hooks/usePermissions';
+import OperationalReadyState from '../../components/common/OperationalReadyState';
 
 // [advice from AI] 클러스터 통계 타입
 interface ClusterStatistics {
@@ -39,6 +40,20 @@ interface CICDStatistics {
   average_build_time: number;
   today_deployments: number;
   success_rate: number;
+}
+
+// [advice from AI] 배포 히스토리 타입
+interface DeploymentHistoryItem {
+  id: string;
+  project_name: string;
+  environment: string;
+  status: string;
+  deployed_at: string;
+  deployed_by: string;
+  version?: string;
+  duration?: string;
+  repository_url?: string;
+  commit_hash?: string;
 }
 
 // [advice from AI] 운영 안정성 타입
@@ -94,6 +109,7 @@ const ExecutiveDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [metrics, setMetrics] = useState<ExecutiveMetrics | null>(null);
   const [projectStatuses, setProjectStatuses] = useState<ProjectStatus[]>([]);
+  const [deploymentHistory, setDeploymentHistory] = useState<DeploymentHistoryItem[]>([]);
 
   // [advice from AI] 경영진 메트릭 로드 (실제 데이터 통합)
   const loadExecutiveMetrics = async () => {
@@ -103,7 +119,7 @@ const ExecutiveDashboard: React.FC = () => {
       const { token: authToken } = useJwtAuthStore.getState();
       
       // 지식자원 카탈로그, 운영센터, 클러스터 데이터를 모두 가져와서 통합
-      const [knowledgeRes, operationsRes, clusterStatsRes] = await Promise.all([
+      const [knowledgeRes, operationsRes, clusterStatsRes, deploymentHistoryRes] = await Promise.all([
         fetch('/api/knowledge/catalog-stats', {
           headers: {
             'Authorization': `Bearer ${authToken}`,
@@ -121,12 +137,19 @@ const ExecutiveDashboard: React.FC = () => {
             'Authorization': `Bearer ${authToken}`,
             'Content-Type': 'application/json'
           }
+        }),
+        fetch('/api/operations/deployment-history?limit=5', {
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json'
+          }
         })
       ]);
 
       let knowledgeData = null;
       let operationsData = null;
       let clusterStatsData = null;
+      let deploymentHistoryData = null;
 
       if (knowledgeRes.ok) {
         knowledgeData = await knowledgeRes.json();
@@ -138,6 +161,10 @@ const ExecutiveDashboard: React.FC = () => {
 
       if (clusterStatsRes.ok) {
         clusterStatsData = await clusterStatsRes.json();
+      }
+
+      if (deploymentHistoryRes.ok) {
+        deploymentHistoryData = await deploymentHistoryRes.json();
       }
 
       // [advice from AI] 통합 메트릭 생성 (운영 중심, 클러스터 포함)
@@ -155,34 +182,53 @@ const ExecutiveDashboard: React.FC = () => {
         total_deployments: 0
       };
 
-      // CI/CD 통계 시뮬레이션 (실제로는 Jenkins/Nexus/ArgoCD에서 가져와야 함)
+      // CI/CD 통계 - 실제 데이터 기반 (Jenkins/Nexus/ArgoCD 통합)
       const cicdStats: CICDStatistics = {
-        total_builds: 245,
-        successful_builds: 220,
-        failed_builds: 15,
-        in_progress_builds: 10,
-        average_build_time: 512, // 초
-        today_deployments: operationsData?.stats?.deployments?.completed || 32,
-        success_rate: 89.8
+        total_builds: operationsData?.jenkins?.total || 0,
+        successful_builds: operationsData?.jenkins?.success || 0,
+        failed_builds: operationsData?.jenkins?.failed || 0,
+        in_progress_builds: operationsData?.jenkins?.running || 0,
+        average_build_time: 0, // 실제 빌드 시간 계산 필요
+        today_deployments: operationsData?.stats?.deployments?.completed || 0,
+        success_rate: operationsData?.jenkins?.total > 0 ? 
+          Math.round((operationsData.jenkins.success / operationsData.jenkins.total) * 100 * 10) / 10 : 0
       };
 
-      // 운영 안정성 시뮬레이션 (실제로는 Prometheus에서 가져와야 함)
-      const operationalStability: OperationalStability = {
-        production_sla: 99.95,
-        staging_sla: 99.80,
-        development_sla: 98.50,
-        cluster_health: [
-          { cluster_name: 'Prod Cluster 1', status: 'healthy', sla: 99.98 },
-          { cluster_name: 'Prod Cluster 2', status: 'warning', sla: 99.20 },
-          { cluster_name: 'Stg Cluster', status: 'healthy', sla: 99.80 },
-          { cluster_name: 'Dev Cluster 1', status: 'warning', sla: 98.20 }
-        ],
+      // 실제 운영 안정성 데이터 (Prometheus에서 가져오기)
+      let operationalStability: OperationalStability = {
+        production_sla: 0,
+        staging_sla: 0,
+        development_sla: 0,
+        cluster_health: [],
         active_issues: {
           critical: 0,
-          warning: 2,
-          info: 1
+          warning: 0,
+          info: 0
         }
       };
+
+      // Prometheus에서 실제 SLA 데이터 가져오기
+      try {
+        const prometheusRes = await fetch('/api/prometheus/sla/calculate', {
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (prometheusRes.ok) {
+          const slaData = await prometheusRes.json();
+          operationalStability = {
+            production_sla: slaData.production_sla || 0,
+            staging_sla: slaData.staging_sla || 0,
+            development_sla: slaData.development_sla || 0,
+            cluster_health: slaData.cluster_health || [],
+            active_issues: slaData.active_issues || { critical: 0, warning: 0, info: 0 }
+          };
+        }
+      } catch (error) {
+        console.log('Prometheus SLA 데이터 로드 실패, 기본값 사용');
+      }
 
       const integratedMetrics: ExecutiveMetrics = {
         totalProjects: knowledgeData?.stats?.projects || 0,
@@ -211,8 +257,48 @@ const ExecutiveDashboard: React.FC = () => {
         estimated_completion: deployment.startedAt
       })) || [];
 
-      setMetrics(integratedMetrics);
+      // [advice from AI] 실제 배포 히스토리 데이터 설정
+      const historyItems: DeploymentHistoryItem[] = deploymentHistoryData?.deployments?.map((deployment: any) => ({
+        id: deployment.id,
+        project_name: deployment.project_name || 'Unknown Project',
+        environment: deployment.environment || 'development',
+        status: deployment.status,
+        deployed_at: deployment.deployed_at,
+        deployed_by: deployment.deployed_by || 'System',
+        version: deployment.version || 'latest',
+        duration: deployment.duration_seconds ? `${Math.floor(deployment.duration_seconds / 60)}m ${deployment.duration_seconds % 60}s` : 'N/A',
+        repository_url: deployment.repository_url,
+        commit_hash: deployment.commit_hash || 'N/A'
+      })) || [];
+
+      // [advice from AI] 오늘의 배포 횟수 계산 (실제 데이터 기반)
+      const today = new Date().toDateString();
+      const todayDeployments = historyItems.filter(deployment => 
+        new Date(deployment.deployed_at).toDateString() === today
+      ).length;
+
+      // [advice from AI] 성공률 계산 (실제 데이터 기반)
+      const successfulDeployments = historyItems.filter(deployment => 
+        deployment.status === 'completed' || deployment.status === 'success'
+      ).length;
+      const actualSuccessRate = historyItems.length > 0 ? 
+        Math.round((successfulDeployments / historyItems.length) * 100) : 0;
+
+      // [advice from AI] CI/CD 통계 업데이트 (실제 데이터 기반)
+      const updatedCicdStats: CICDStatistics = {
+        ...cicdStats,
+        today_deployments: todayDeployments,
+        success_rate: actualSuccessRate
+      };
+
+      const updatedIntegratedMetrics: ExecutiveMetrics = {
+        ...integratedMetrics,
+        cicdStats: updatedCicdStats
+      };
+
+      setMetrics(updatedIntegratedMetrics);
       setProjectStatuses(projectStatuses);
+      setDeploymentHistory(historyItems);
       
     } catch (error) {
       console.error('경영진 메트릭 로드 실패:', error);
@@ -370,17 +456,17 @@ const ExecutiveDashboard: React.FC = () => {
               transition: 'all 0.2s',
               '&:hover': { transform: 'translateY(-2px)', boxShadow: 4 }
             }}
-            onClick={() => navigate('/knowledge/domains')}
+            onClick={() => navigate('/operations/clusters')}
           >
             <CardContent>
               <Typography color="text.secondary" gutterBottom fontSize={14}>
-                영업처 관리
+                클러스터 현황
               </Typography>
               <Typography variant="h3" color="info.main" sx={{ my: 1 }}>
-                {metrics.domainsCount}
+                {metrics.clusterStats.active_clusters}/{metrics.clusterStats.total_clusters}
               </Typography>
               <Typography variant="caption" color="text.secondary">
-                활성: {Math.floor(metrics.domainsCount * 0.9)} / 전체: {metrics.domainsCount}
+                활성 클러스터 / 전체 클러스터
               </Typography>
             </CardContent>
           </Card>
@@ -658,117 +744,140 @@ const ExecutiveDashboard: React.FC = () => {
             운영 안정성 (SLA)
           </Typography>
           
-          {/* 환경별 SLA */}
-          <Grid container spacing={2} sx={{ mt: 1, mb: 3 }}>
-            <Grid item xs={12} md={4}>
-              <Box sx={{ textAlign: 'center', p: 3, bgcolor: 'error.lighter', borderRadius: 2 }}>
-                <Typography variant="caption" color="error.dark">Production</Typography>
-                <Typography variant="h3" color="error.main" sx={{ my: 1 }}>
-                  {metrics.operationalStability.production_sla}%
-                </Typography>
-                <LinearProgress 
-                  variant="determinate" 
-                  value={metrics.operationalStability.production_sla}
-                  color="error"
-                  sx={{ height: 6, borderRadius: 3 }}
-                />
-              </Box>
+          {/* 데이터가 없을 때 안내 메시지 */}
+          {metrics.operationalStability.production_sla === 0 && 
+           metrics.operationalStability.staging_sla === 0 && 
+           metrics.operationalStability.development_sla === 0 ? (
+            <Alert severity="info" sx={{ mt: 2 }}>
+              SLA 데이터를 수집 중입니다. Prometheus 메트릭이 활성화되면 실제 운영 안정성 데이터가 표시됩니다.
+            </Alert>
+          ) : (
+            /* 환경별 SLA */
+            <Grid container spacing={2} sx={{ mt: 1, mb: 3 }}>
+              <Grid item xs={12} md={4}>
+                <Box sx={{ textAlign: 'center', p: 3, bgcolor: 'error.lighter', borderRadius: 2 }}>
+                  <Typography variant="caption" color="error.dark">Production</Typography>
+                  <Typography variant="h3" color="error.main" sx={{ my: 1 }}>
+                    {metrics.operationalStability.production_sla}%
+                  </Typography>
+                  <LinearProgress 
+                    variant="determinate" 
+                    value={metrics.operationalStability.production_sla}
+                    color="error"
+                    sx={{ height: 6, borderRadius: 3 }}
+                  />
+                </Box>
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <Box sx={{ textAlign: 'center', p: 3, bgcolor: 'warning.lighter', borderRadius: 2 }}>
+                  <Typography variant="caption" color="warning.dark">Staging</Typography>
+                  <Typography variant="h3" color="warning.main" sx={{ my: 1 }}>
+                    {metrics.operationalStability.staging_sla}%
+                  </Typography>
+                  <LinearProgress 
+                    variant="determinate" 
+                    value={metrics.operationalStability.staging_sla}
+                    color="warning"
+                    sx={{ height: 6, borderRadius: 3 }}
+                  />
+                </Box>
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <Box sx={{ textAlign: 'center', p: 3, bgcolor: 'info.lighter', borderRadius: 2 }}>
+                  <Typography variant="caption" color="info.dark">Development</Typography>
+                  <Typography variant="h3" color="info.main" sx={{ my: 1 }}>
+                    {metrics.operationalStability.development_sla}%
+                  </Typography>
+                  <LinearProgress 
+                    variant="determinate" 
+                    value={metrics.operationalStability.development_sla}
+                    color="info"
+                    sx={{ height: 6, borderRadius: 3 }}
+                  />
+                </Box>
+              </Grid>
             </Grid>
-            <Grid item xs={12} md={4}>
-              <Box sx={{ textAlign: 'center', p: 3, bgcolor: 'warning.lighter', borderRadius: 2 }}>
-                <Typography variant="caption" color="warning.dark">Staging</Typography>
-                <Typography variant="h3" color="warning.main" sx={{ my: 1 }}>
-                  {metrics.operationalStability.staging_sla}%
-                </Typography>
-                <LinearProgress 
-                  variant="determinate" 
-                  value={metrics.operationalStability.staging_sla}
-                  color="warning"
-                  sx={{ height: 6, borderRadius: 3 }}
-                />
-              </Box>
-            </Grid>
-            <Grid item xs={12} md={4}>
-              <Box sx={{ textAlign: 'center', p: 3, bgcolor: 'info.lighter', borderRadius: 2 }}>
-                <Typography variant="caption" color="info.dark">Development</Typography>
-                <Typography variant="h3" color="info.main" sx={{ my: 1 }}>
-                  {metrics.operationalStability.development_sla}%
-                </Typography>
-                <LinearProgress 
-                  variant="determinate" 
-                  value={metrics.operationalStability.development_sla}
-                  color="info"
-                  sx={{ height: 6, borderRadius: 3 }}
-                />
-              </Box>
-            </Grid>
-          </Grid>
+          )}
 
           {/* 클러스터별 헬스 상태 */}
           <Box sx={{ mb: 3 }}>
             <Typography variant="subtitle2" gutterBottom>클러스터별 안정성</Typography>
-            <Grid container spacing={2}>
-              {metrics.operationalStability.cluster_health.map((cluster, index) => (
-                <Grid item xs={12} sm={6} key={index}>
-                  <Box sx={{ 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    alignItems: 'center', 
-                    p: 2, 
-                    bgcolor: 'grey.50', 
-                    borderRadius: 1,
-                    border: cluster.status === 'warning' ? '1px solid' : 'none',
-                    borderColor: cluster.status === 'warning' ? 'warning.main' : 'transparent'
-                  }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Typography variant="body2">{cluster.cluster_name}</Typography>
-                      <Chip 
-                        label={cluster.status === 'healthy' ? '정상' : cluster.status === 'warning' ? '경고' : '위험'}
-                        color={cluster.status === 'healthy' ? 'success' : cluster.status === 'warning' ? 'warning' : 'error'}
-                        size="small"
-                      />
+            {metrics.operationalStability.cluster_health.length === 0 ? (
+              <Alert severity="info" sx={{ mt: 1 }}>
+                등록된 클러스터가 없습니다. 클러스터를 등록하면 안정성 데이터가 표시됩니다.
+              </Alert>
+            ) : (
+              <Grid container spacing={2}>
+                {metrics.operationalStability.cluster_health.map((cluster, index) => (
+                  <Grid item xs={12} sm={6} key={index}>
+                    <Box sx={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'center', 
+                      p: 2, 
+                      bgcolor: 'grey.50', 
+                      borderRadius: 1,
+                      border: cluster.status === 'warning' ? '1px solid' : 'none',
+                      borderColor: cluster.status === 'warning' ? 'warning.main' : 'transparent'
+                    }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="body2">{cluster.cluster_name}</Typography>
+                        <Chip 
+                          label={cluster.status === 'healthy' ? '정상' : cluster.status === 'warning' ? '경고' : '위험'}
+                          color={cluster.status === 'healthy' ? 'success' : cluster.status === 'warning' ? 'warning' : 'error'}
+                          size="small"
+                        />
+                      </Box>
+                      <Typography variant="body1" fontWeight="bold">
+                        {cluster.sla}%
+                      </Typography>
                     </Box>
-                    <Typography variant="body1" fontWeight="bold">
-                      {cluster.sla}%
-                    </Typography>
-                  </Box>
-                </Grid>
-              ))}
-            </Grid>
+                  </Grid>
+                ))}
+              </Grid>
+            )}
           </Box>
 
           {/* 활성 이슈 */}
           <Box>
             <Typography variant="subtitle2" gutterBottom>활성 이슈 현황</Typography>
-            <Grid container spacing={2}>
-              <Grid item xs={4}>
-                <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'error.lighter', borderRadius: 2 }}>
-                  <Typography variant="caption">심각</Typography>
-                  <Typography variant="h4" color="error.main">
-                    {metrics.operationalStability.active_issues.critical}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">건</Typography>
-                </Box>
+            {metrics.operationalStability.active_issues.critical === 0 && 
+             metrics.operationalStability.active_issues.warning === 0 && 
+             metrics.operationalStability.active_issues.info === 0 ? (
+              <Alert severity="success" sx={{ mt: 1 }}>
+                현재 활성 이슈가 없습니다. 시스템이 정상적으로 운영되고 있습니다.
+              </Alert>
+            ) : (
+              <Grid container spacing={2}>
+                <Grid item xs={4}>
+                  <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'error.lighter', borderRadius: 2 }}>
+                    <Typography variant="caption">심각</Typography>
+                    <Typography variant="h4" color="error.main">
+                      {metrics.operationalStability.active_issues.critical}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">건</Typography>
+                  </Box>
+                </Grid>
+                <Grid item xs={4}>
+                  <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'warning.lighter', borderRadius: 2 }}>
+                    <Typography variant="caption">경고</Typography>
+                    <Typography variant="h4" color="warning.main">
+                      {metrics.operationalStability.active_issues.warning}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">건</Typography>
+                  </Box>
+                </Grid>
+                <Grid item xs={4}>
+                  <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'info.lighter', borderRadius: 2 }}>
+                    <Typography variant="caption">정보</Typography>
+                    <Typography variant="h4" color="info.main">
+                      {metrics.operationalStability.active_issues.info}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">건</Typography>
+                  </Box>
+                </Grid>
               </Grid>
-              <Grid item xs={4}>
-                <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'warning.lighter', borderRadius: 2 }}>
-                  <Typography variant="caption">경고</Typography>
-                  <Typography variant="h4" color="warning.main">
-                    {metrics.operationalStability.active_issues.warning}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">건</Typography>
-                </Box>
-              </Grid>
-              <Grid item xs={4}>
-                <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'info.lighter', borderRadius: 2 }}>
-                  <Typography variant="caption">정보</Typography>
-                  <Typography variant="h4" color="info.main">
-                    {metrics.operationalStability.active_issues.info}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">건</Typography>
-                </Box>
-              </Grid>
-            </Grid>
+            )}
           </Box>
 
           <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
@@ -787,13 +896,60 @@ const ExecutiveDashboard: React.FC = () => {
               <Typography variant="h6" gutterBottom>
                 최근 배포 히스토리
               </Typography>
-              <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
-                <Typography variant="body2">
-                  <strong>오늘:</strong> {metrics.cicdStats.today_deployments}회 배포<br/>
-                  <strong>성공률:</strong> {metrics.cicdStats.success_rate}%<br/>
-                  <strong>평균 시간:</strong> {Math.floor(metrics.cicdStats.average_build_time / 60)}분
-                </Typography>
-              </Alert>
+              {deploymentHistory.length === 0 ? (
+                <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
+                  <Typography variant="body2">
+                    아직 배포 기록이 없습니다. 첫 번째 배포를 실행하면 히스토리가 표시됩니다.
+                  </Typography>
+                </Alert>
+              ) : (
+                <Box sx={{ mt: 2, mb: 2 }}>
+                  {/* 배포 히스토리 목록 */}
+                  {deploymentHistory.slice(0, 3).map((deployment) => (
+                    <Box key={deployment.id} sx={{ 
+                      mb: 2, 
+                      p: 2, 
+                      border: '1px solid', 
+                      borderColor: 'divider', 
+                      borderRadius: 1,
+                      backgroundColor: 'background.paper'
+                    }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                          {deployment.project_name}
+                        </Typography>
+                        <Chip 
+                          label={deployment.status} 
+                          size="small" 
+                          color={
+                            deployment.status === 'completed' || deployment.status === 'success' ? 'success' :
+                            deployment.status === 'failed' || deployment.status === 'error' ? 'error' :
+                            deployment.status === 'running' || deployment.status === 'in_progress' ? 'primary' : 'default'
+                          }
+                        />
+                      </Box>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                        <strong>환경:</strong> {deployment.environment} | 
+                        <strong> 버전:</strong> {deployment.version} | 
+                        <strong> 배포자:</strong> {deployment.deployed_by}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {new Date(deployment.deployed_at).toLocaleString('ko-KR')}
+                        {deployment.duration && ` (${deployment.duration})`}
+                      </Typography>
+                    </Box>
+                  ))}
+                  
+                  {/* 통계 요약 */}
+                  <Alert severity="info" sx={{ mt: 2 }}>
+                    <Typography variant="body2">
+                      <strong>오늘:</strong> {metrics.cicdStats.today_deployments}회 배포 | 
+                      <strong> 성공률:</strong> {metrics.cicdStats.success_rate}% | 
+                      <strong> 평균 시간:</strong> {Math.floor(metrics.cicdStats.average_build_time / 60)}분
+                    </Typography>
+                  </Alert>
+                </Box>
+              )}
               <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
                 <Button onClick={() => navigate('/operations/deployment-history')}>
                   배포 히스토리 전체보기
@@ -808,19 +964,29 @@ const ExecutiveDashboard: React.FC = () => {
               <Typography variant="h6" gutterBottom>
                 주요 이슈 현황
               </Typography>
-              <Alert 
-                severity={
-                  metrics.operationalStability.active_issues.critical > 0 ? "error" :
-                  metrics.operationalStability.active_issues.warning > 0 ? "warning" : "success"
-                } 
-                sx={{ mt: 2, mb: 2 }}
-              >
-                <Typography variant="body2">
-                  <strong>심각:</strong> {metrics.operationalStability.active_issues.critical}건<br/>
-                  <strong>경고:</strong> {metrics.operationalStability.active_issues.warning}건<br/>
-                  <strong>정보:</strong> {metrics.operationalStability.active_issues.info}건
-                </Typography>
-              </Alert>
+              {metrics.operationalStability.active_issues.critical === 0 && 
+               metrics.operationalStability.active_issues.warning === 0 && 
+               metrics.operationalStability.active_issues.info === 0 ? (
+                <Alert severity="success" sx={{ mt: 2, mb: 2 }}>
+                  <Typography variant="body2">
+                    현재 활성 이슈가 없습니다. 시스템이 정상적으로 운영되고 있습니다.
+                  </Typography>
+                </Alert>
+              ) : (
+                <Alert 
+                  severity={
+                    metrics.operationalStability.active_issues.critical > 0 ? "error" :
+                    metrics.operationalStability.active_issues.warning > 0 ? "warning" : "info"
+                  } 
+                  sx={{ mt: 2, mb: 2 }}
+                >
+                  <Typography variant="body2">
+                    <strong>심각:</strong> {metrics.operationalStability.active_issues.critical}건<br/>
+                    <strong>경고:</strong> {metrics.operationalStability.active_issues.warning}건<br/>
+                    <strong>정보:</strong> {metrics.operationalStability.active_issues.info}건
+                  </Typography>
+                </Alert>
+              )}
               <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
                 <Button onClick={() => navigate('/operations/issues')}>
                   이슈 관리 보기

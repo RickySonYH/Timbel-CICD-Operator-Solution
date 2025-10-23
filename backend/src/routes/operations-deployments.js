@@ -1,7 +1,7 @@
 // [advice from AI] 운영팀 전용 배포 실행 API - 레포지토리 기반 직접 배포
 const express = require('express');
 const router = express.Router();
-const { verifyToken, requireRole } = require('../middleware/jwtAuth');
+const jwtAuth = require('../middleware/jwtAuth');
 const { Pool } = require('pg');
 const { v4: uuidv4 } = require('uuid');
 
@@ -15,7 +15,7 @@ const pool = new Pool({
 });
 
 // [advice from AI] POST /api/operations/deployments/execute - 배포 실행
-router.post('/execute', verifyToken, requireRole(['admin', 'operations']), async (req, res) => {
+router.post('/execute', jwtAuth.verifyToken, jwtAuth.requireRole(['admin', 'operations']), async (req, res) => {
   try {
     const client = await pool.connect();
     
@@ -123,7 +123,7 @@ router.post('/execute', verifyToken, requireRole(['admin', 'operations']), async
 });
 
 // [advice from AI] GET /api/operations/deployments/:id/status - 배포 상태 조회
-router.get('/:id/status', verifyToken, requireRole(['admin', 'operations']), async (req, res) => {
+router.get('/:id/status', jwtAuth.verifyToken, jwtAuth.requireRole(['admin', 'operations']), async (req, res) => {
   try {
     const client = await pool.connect();
     const { id } = req.params;
@@ -212,7 +212,7 @@ router.get('/:id/status', verifyToken, requireRole(['admin', 'operations']), asy
 });
 
 // [advice from AI] GET /api/operations/deployments/history - 배포 히스토리 조회
-router.get('/history', verifyToken, requireRole(['admin', 'operations']), async (req, res) => {
+router.get('/history', jwtAuth.verifyToken, jwtAuth.requireRole(['admin', 'operations']), async (req, res) => {
   try {
     const client = await pool.connect();
     
@@ -306,7 +306,7 @@ router.get('/history', verifyToken, requireRole(['admin', 'operations']), async 
 });
 
 // [advice from AI] DELETE /api/operations/deployments/:id - 배포 중단
-router.delete('/:id', verifyToken, requireRole(['admin', 'operations']), async (req, res) => {
+router.delete('/:id', jwtAuth.verifyToken, jwtAuth.requireRole(['admin', 'operations']), async (req, res) => {
   try {
     const client = await pool.connect();
     const { id } = req.params;

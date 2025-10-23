@@ -1,11 +1,13 @@
 {
-  "name": "timbel-frontend",
-  "version": "0.56.0",
+  "name": "timbel-cicd-operator-frontend",
+  "version": "0.60.0",
   "private": true,
+  "proxy": "http://backend:3001",
   "dependencies": {
     "@emotion/react": "^11.11.1",
     "@emotion/styled": "^11.11.0",
     "@mui/icons-material": "^5.14.19",
+    "@mui/lab": "^5.0.0-alpha.170",
     "@mui/material": "^5.14.20",
     "@tanstack/react-query": "^5.8.4",
     "@types/d3": "^7.4.3",
@@ -16,6 +18,7 @@
     "@types/react-syntax-highlighter": "^15.5.13",
     "ajv": "^8.17.1",
     "ajv-keywords": "^5.1.0",
+    "axios": "^1.12.2",
     "d3": "^7.8.5",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -27,9 +30,10 @@
     "zustand": "^4.4.7"
   },
   "scripts": {
-    "start": "DISABLE_ESLINT_PLUGIN=true GENERATE_SOURCEMAP=false DANGEROUSLY_DISABLE_HOST_CHECK=true react-scripts start",
-    "build": "craco build",
-    "test": "craco test",
+    "start": "NODE_ENV=production DISABLE_ESLINT_PLUGIN=true GENERATE_SOURCEMAP=false WDS_SOCKET_PORT=0 FAST_REFRESH=false WDS_HOT=false WEBPACK_DEV_SERVER_TRANSPORT_MODE= WEBPACK_DEV_SERVER_URL= react-scripts start",
+    "start:dev": "DISABLE_ESLINT_PLUGIN=true GENERATE_SOURCEMAP=false DANGEROUSLY_DISABLE_HOST_CHECK=true react-scripts start",
+    "build": "NODE_ENV=production TSC_COMPILE_ON_ERROR=true react-scripts build",
+    "test": "react-scripts test",
     "eject": "react-scripts eject"
   },
   "eslintConfig": {
@@ -55,6 +59,5 @@
     "@testing-library/jest-dom": "^6.1.4",
     "@testing-library/react": "^13.4.0",
     "@testing-library/user-event": "^14.5.1"
-  },
-  "proxy": "http://localhost:3001"
+  }
 }

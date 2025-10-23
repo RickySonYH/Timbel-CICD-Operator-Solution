@@ -6,14 +6,15 @@ const router = express.Router();
 const { Pool } = require('pg');
 const { v4: uuidv4 } = require('uuid');
 const JenkinsIntegration = require('../services/jenkinsIntegration');
-const { verifyToken, requireRole } = require('../middleware/jwtAuth');
+const jwtAuth = require('../middleware/jwtAuth');
+const advancedPermissions = require('./advanced-permissions');
 
-// PostgreSQL 연결
+// PostgreSQL 연결 - jenkins_jobs 테이블이 있는 timbel_cicd_operator 데이터베이스에 연결
 const pool = new Pool({
-  user: process.env.DB_USER || 'postgres',
-  host: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_NAME || 'timbel_knowledge',
-  password: process.env.DB_PASSWORD || 'password',
+  user: process.env.DB_USER || 'timbel_user',
+  host: process.env.DB_HOST || 'postgres',
+  database: 'timbel_cicd_operator', // [advice from AI] jenkins_jobs 테이블이 있는 운영센터 데이터베이스
+  password: process.env.DB_PASSWORD || 'timbel_password',
   port: process.env.DB_PORT || 5432,
 });
 
@@ -21,32 +22,41 @@ const pool = new Pool({
 const jenkinsService = new JenkinsIntegration();
 
 // [advice from AI] 파이프라인 목록 조회
-router.get('/pipelines', verifyToken, async (req, res) => {
+router.get('/pipelines', jwtAuth.verifyToken, async (req, res) => {
   try {
     console.log('🔍 CI/CD 파이프라인 목록 조회 시작...');
+    console.log('🔑 사용자 정보:', req.user?.username || 'unknown');
+    console.log('🔗 데이터베이스 연결 풀 상태:', pool.totalCount, '/', pool.idleCount);
     
     const query = `
       SELECT 
-        id,
-        project_name,
-        repository_url,
-        branch,
-        jenkins_job_name,
-        build_number,
-        build_status,
-        image_tag,
-        deployment_status,
-        dockerfile_path,
-        deployment_environment,
-        created_at,
-        updated_at
-      FROM cicd_pipelines 
-      ORDER BY updated_at DESC
+        pe.id,
+        pe.pipeline_id,
+        pe.repository,
+        pe.branch,
+        pe.provider_name as pipeline_type,
+        pe.environment,
+        pe.status,
+        pe.current_stage,
+        pe.config,
+        pe.created_at,
+        pe.updated_at,
+        pe.started_at,
+        pe.completed_at,
+        pt.name as template_name,
+        pt.description as template_description
+      FROM pipeline_executions pe
+      LEFT JOIN pipeline_templates pt ON pe.template_id = pt.id
+      ORDER BY pe.created_at DESC
+      LIMIT 50
     `;
+    
+    console.log('📝 실행할 쿼리:', query.replace(/\s+/g, ' ').trim());
     
     const result = await pool.query(query);
     
     console.log(`✅ 파이프라인 목록 조회 완료: ${result.rows.length}개`);
+    console.log('📊 첫 번째 데이터:', result.rows[0] ? result.rows[0].pipeline_name : 'no data');
     
     res.json({
       success: true,
@@ -56,6 +66,13 @@ router.get('/pipelines', verifyToken, async (req, res) => {
     
   } catch (error) {
     console.error('❌ 파이프라인 목록 조회 실패:', error);
+    console.error('❌ 오류 스택:', error.stack);
+    console.error('❌ 데이터베이스 설정:', {
+      user: pool.options.user,
+      host: pool.options.host,
+      database: pool.options.database,
+      port: pool.options.port
+    });
     res.status(500).json({
       success: false,
       message: '파이프라인 목록 조회 중 오류가 발생했습니다.',
@@ -65,7 +82,7 @@ router.get('/pipelines', verifyToken, async (req, res) => {
 });
 
 // [advice from AI] 새 파이프라인 생성
-router.post('/pipelines', verifyToken, async (req, res) => {
+router.post('/pipelines', jwtAuth.verifyToken, advancedPermissions.checkAdvancedPermission('can_manage_pipelines'), async (req, res) => {
   try {
     console.log('🚀 새 CI/CD 파이프라인 생성 시작...');
     
@@ -145,7 +162,7 @@ router.post('/pipelines', verifyToken, async (req, res) => {
 });
 
 // [advice from AI] 파이프라인 트리거 (빌드 시작)
-router.post('/pipelines/:id/trigger', verifyToken, async (req, res) => {
+router.post('/pipelines/:id/trigger', jwtAuth.verifyToken, advancedPermissions.checkAdvancedPermission('can_deploy_services'), async (req, res) => {
   try {
     console.log('🔥 파이프라인 트리거 시작...');
     
@@ -297,7 +314,7 @@ router.post('/pipelines/:id/status', async (req, res) => {
 });
 
 // [advice from AI] CI/CD 설정 조회
-router.get('/config', verifyToken, async (req, res) => {
+router.get('/config', jwtAuth.verifyToken, async (req, res) => {
   try {
     console.log('🔧 CI/CD 설정 조회 시작...');
     
@@ -332,7 +349,7 @@ router.get('/config', verifyToken, async (req, res) => {
 });
 
 // [advice from AI] 파이프라인 삭제
-router.delete('/pipelines/:id', verifyToken, async (req, res) => {
+router.delete('/pipelines/:id', jwtAuth.verifyToken, advancedPermissions.checkAdvancedPermission('can_manage_pipelines'), async (req, res) => {
   try {
     console.log('🗑️ 파이프라인 삭제 시작...');
     
@@ -381,7 +398,7 @@ router.delete('/pipelines/:id', verifyToken, async (req, res) => {
 });
 
 // [advice from AI] Jenkins 서버 상태 확인
-router.get('/jenkins/health', verifyToken, async (req, res) => {
+router.get('/jenkins/health', jwtAuth.verifyToken, async (req, res) => {
   try {
     console.log('🔍 Jenkins 서버 상태 확인...');
     
@@ -403,18 +420,109 @@ router.get('/jenkins/health', verifyToken, async (req, res) => {
   }
 });
 
-// [advice from AI] Jenkins Job 목록 조회
-router.get('/jenkins/jobs', verifyToken, async (req, res) => {
+// [advice from AI] Jenkins Job 목록 조회 - 프로덕션 레벨 (실제 데이터)
+router.get('/jenkins/jobs', jwtAuth.verifyToken, async (req, res) => {
   try {
-    console.log('🔍 Jenkins Job 목록 조회...');
+    console.log('🔍 Jenkins Job 목록 조회 (실제 데이터)...');
     
-    const jobsList = await jenkinsService.listJenkinsJobs();
-    
-    res.json({
-      success: true,
-      data: jobsList.jobs,
-      message: 'Jenkins Job 목록 조회 완료'
-    });
+    // [advice from AI] 데이터베이스에서 Jenkins Job 정보 조회 (실제 테이블 구조 기반)
+    const dbJobsResult = await pool.query(`
+      SELECT 
+        jj.id,
+        jj.job_name,
+        jj.project_name,
+        jj.repository_url,
+        jj.branch_name,
+        jj.build_number,
+        jj.job_status,
+        jj.build_duration,
+        jj.artifacts,
+        jj.created_at,
+        jj.updated_at,
+        jj.started_at,
+        jj.completed_at
+      FROM jenkins_jobs jj
+      ORDER BY jj.updated_at DESC
+    `);
+
+    const dbJobs = dbJobsResult.rows.map(job => ({
+      id: job.id,
+      name: job.job_name,
+      project_name: job.project_name,
+      repository_url: job.repository_url,
+      branch_name: job.branch_name,
+      status: job.job_status || 'unknown',
+      url: job.repository_url ? `http://jenkins.company.com/job/${job.job_name}/` : null,
+      buildable: true,
+      lastBuild: job.build_number ? {
+        number: job.build_number,
+        result: job.job_status,
+        timestamp: job.completed_at || job.started_at,
+        duration: job.build_duration,
+        url: `http://jenkins.company.com/job/${job.job_name}/${job.build_number}/`
+      } : null,
+      artifacts: job.artifacts || [],
+      created_at: job.created_at,
+      updated_at: job.updated_at,
+      started_at: job.started_at,
+      completed_at: job.completed_at
+    }));
+
+    // [advice from AI] Jenkins 서버에서 실시간 상태 업데이트 시도 (비동기)
+    try {
+      const jenkinsJobs = await jenkinsService.listJenkinsJobs();
+      
+      // [advice from AI] 실시간 데이터로 DB 업데이트 (백그라운드) - 실제 테이블 구조 기반
+      jenkinsJobs.jobs.forEach(async (job) => {
+        try {
+          await pool.query(`
+            INSERT INTO jenkins_jobs (
+              job_name, repository_url, job_status, 
+              build_number, build_duration, started_at, completed_at,
+              created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+            ON CONFLICT (job_name) DO UPDATE SET
+              repository_url = EXCLUDED.repository_url,
+              job_status = EXCLUDED.job_status,
+              build_number = EXCLUDED.build_number,
+              build_duration = EXCLUDED.build_duration,
+              started_at = EXCLUDED.started_at,
+              completed_at = EXCLUDED.completed_at,
+              updated_at = NOW()
+          `, [
+            job.name,
+            job.url,
+            job.status,
+            job.lastBuild?.number,
+            null, // build_duration은 Jenkins API에서 직접 제공되지 않음
+            job.lastBuild?.timestamp ? new Date(job.lastBuild.timestamp) : null,
+            job.lastBuild?.timestamp ? new Date(job.lastBuild.timestamp) : null
+          ]);
+        } catch (updateError) {
+          console.warn('Jenkins Job DB 업데이트 실패:', job.name, updateError.message);
+        }
+      });
+
+      // [advice from AI] Jenkins 실시간 데이터 반환
+      res.json({
+        success: true,
+        data: jenkinsJobs.jobs,
+        message: 'Jenkins Job 목록 조회 완료 (실시간 데이터)',
+        source: 'jenkins_live'
+      });
+      
+    } catch (jenkinsError) {
+      console.warn('⚠️ Jenkins 서버 연결 실패, DB 데이터 사용:', jenkinsError.message);
+      
+      // [advice from AI] Jenkins 연결 실패 시 DB 데이터 반환
+      res.json({
+        success: true,
+        data: dbJobs,
+        message: 'Jenkins Job 목록 조회 완료 (DB 데이터)',
+        source: 'database',
+        warning: 'Jenkins 서버 연결 불가'
+      });
+    }
     
   } catch (error) {
     console.error('❌ Jenkins Job 목록 조회 실패:', error);
@@ -427,7 +535,7 @@ router.get('/jenkins/jobs', verifyToken, async (req, res) => {
 });
 
 // [advice from AI] Jenkins Job 생성
-router.post('/jenkins/jobs', verifyToken, requireRole(['admin', 'operations']), async (req, res) => {
+router.post('/jenkins/jobs', jwtAuth.verifyToken, advancedPermissions.checkAdvancedPermission('can_manage_pipelines'), async (req, res) => {
   try {
     const { jobName, jobConfig } = req.body;
     
@@ -480,7 +588,7 @@ router.post('/jenkins/jobs', verifyToken, requireRole(['admin', 'operations']), 
 });
 
 // [advice from AI] Jenkins Job 빌드 트리거
-router.post('/jenkins/jobs/:jobName/build', verifyToken, async (req, res) => {
+router.post('/jenkins/jobs/:jobName/build', jwtAuth.verifyToken, advancedPermissions.checkAdvancedPermission('can_deploy_services'), async (req, res) => {
   try {
     const { jobName } = req.params;
     const { parameters = {} } = req.body;
@@ -524,7 +632,7 @@ router.post('/jenkins/jobs/:jobName/build', verifyToken, async (req, res) => {
 });
 
 // [advice from AI] Jenkins Job 상태 조회
-router.get('/jenkins/jobs/:jobName/status', verifyToken, async (req, res) => {
+router.get('/jenkins/jobs/:jobName/status', jwtAuth.verifyToken, async (req, res) => {
   try {
     const { jobName } = req.params;
     
@@ -549,7 +657,7 @@ router.get('/jenkins/jobs/:jobName/status', verifyToken, async (req, res) => {
 });
 
 // [advice from AI] Jenkins Job 삭제
-router.delete('/jenkins/jobs/:jobName', verifyToken, requireRole(['admin', 'operations']), async (req, res) => {
+router.delete('/jenkins/jobs/:jobName', jwtAuth.verifyToken, advancedPermissions.checkAdvancedPermission('can_manage_pipelines'), async (req, res) => {
   try {
     const { jobName } = req.params;
     

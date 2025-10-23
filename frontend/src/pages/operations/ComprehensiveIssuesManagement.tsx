@@ -38,16 +38,18 @@ import {
   IconButton,
   Tooltip,
   Badge,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails
+} from '@mui/material';
+import {
   Timeline,
   TimelineItem,
   TimelineSeparator,
   TimelineConnector,
   TimelineContent,
-  TimelineDot,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails
-} from '@mui/material';
+  TimelineDot
+} from '@mui/lab';
 import {
   Refresh as RefreshIcon,
   ExpandMore as ExpandMoreIcon
@@ -330,7 +332,7 @@ const ComprehensiveIssuesManagement: React.FC = () => {
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box>
           <Typography variant="h4" gutterBottom>
-            완전한 이슈 관리 시스템
+            이슈 관리 시스템
           </Typography>
           <Typography variant="body1" color="text.secondary">
             빌드/배포 실패 자동 추적, 실시간 알림 및 이슈 해결 관리

@@ -1,0 +1,190 @@
+# ECP-AI Orchestrator Kubernetes Manifests
+# Staging Environment
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ecp-ai-staging
+  labels:
+    name: ecp-ai-staging
+    environment: staging
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ecp-ai-orchestrator
+  namespace: ecp-ai-staging
+  labels:
+    app: ecp-ai-orchestrator
+    version: "1.2.3"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ecp-ai-orchestrator
+  template:
+    metadata:
+      labels:
+        app: ecp-ai-orchestrator
+        version: "1.2.3"
+    spec:
+      containers:
+      - name: ecp-ai-orchestrator
+        image: nexus.rdc.rickyson.com:8081/ecp-ai-orchestrator:1.2.3
+        ports:
+        - containerPort: 8080
+          name: http
+        - containerPort: 8081
+          name: management
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: "staging"
+        - name: SERVER_PORT
+          value: "8080"
+        - name: MANAGEMENT_SERVER_PORT
+          value: "8081"
+        - name: LOGGING_LEVEL_ROOT
+          value: "INFO"
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+        livenessProbe:
+          httpGet:
+            path: /actuator/health/liveness
+            port: 8081
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /actuator/health/readiness
+            port: 8081
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8081
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ecp-ai-orchestrator-service
+  namespace: ecp-ai-staging
+  labels:
+    app: ecp-ai-orchestrator
+spec:
+  selector:
+    app: ecp-ai-orchestrator
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+  - name: management
+    port: 8081
+    targetPort: 8081
+    protocol: TCP
+  type: ClusterIP
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ecp-ai-orchestrator-ingress
+  namespace: ecp-ai-staging
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+spec:
+  tls:
+  - hosts:
+    - ecp-ai-staging.rdc.rickyson.com
+    secretName: ecp-ai-staging-tls
+  rules:
+  - host: ecp-ai-staging.rdc.rickyson.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: ecp-ai-orchestrator-service
+            port:
+              number: 80
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ecp-ai-orchestrator-config
+  namespace: ecp-ai-staging
+data:
+  application-staging.yml: |
+    server:
+      port: 8080
+      servlet:
+        context-path: /
+    management:
+      server:
+        port: 8081
+      endpoints:
+        web:
+          exposure:
+            include: health,info,metrics,prometheus
+      endpoint:
+        health:
+          show-details: always
+    spring:
+      application:
+        name: ecp-ai-orchestrator
+      profiles:
+        active: staging
+      datasource:
+        url: jdbc:postgresql://postgres.ecp-ai-staging.svc.cluster.local:5432/ecp_ai_orchestrator
+        username: ${DB_USERNAME:ecpai_user}
+        password: ${DB_PASSWORD:ecpai_password}
+        driver-class-name: org.postgresql.Driver
+      jpa:
+        hibernate:
+          ddl-auto: validate
+        show-sql: false
+        properties:
+          hibernate:
+            dialect: org.hibernate.dialect.PostgreSQLDialect
+      redis:
+        host: redis.ecp-ai-staging.svc.cluster.local
+        port: 6379
+        password: ${REDIS_PASSWORD:redis_password}
+    logging:
+      level:
+        com.ecpai.orchestrator: INFO
+        org.springframework.web: INFO
+        org.hibernate.SQL: WARN
+      pattern:
+        console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+        file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+      file:
+        name: /app/logs/ecp-ai-orchestrator.log
+        max-size: 100MB
+        max-history: 30

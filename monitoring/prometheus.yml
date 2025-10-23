@@ -10,15 +10,42 @@ scrape_configs:
   - job_name: 'backend'
     static_configs:
       - targets: ['backend:3001']
+    metrics_path: /metrics
+    scrape_interval: 15s
 
   - job_name: 'jenkins'
     static_configs:
-      - targets: ['jenkins:8080']
+      - targets: ['jenkins-metrics:8081']
+    metrics_path: /metrics
+    scrape_interval: 30s
 
   - job_name: 'nexus'
     static_configs:
-      - targets: ['nexus:8081']
+      - targets: ['nexus-metrics:8083']
+    metrics_path: /metrics
+    scrape_interval: 30s
 
-  - job_name: 'argocd'
+  # ArgoCD는 KIND 클러스터에서 실행되므로 메트릭 수집 비활성화
+  # - job_name: 'argocd'
+  #   static_configs:
+  #     - targets: ['argocd-server:8080']
+  #   metrics_path: /metrics
+  #   scrape_interval: 30s
+
+  - job_name: 'harbor'
     static_configs:
-      - targets: ['argocd-server:8080']
+      - targets: ['harbor-metrics:8084']
+    metrics_path: /metrics
+    scrape_interval: 30s
+
+  - job_name: 'gitlab-ci'
+    static_configs:
+      - targets: ['gitlab-ci-metrics:8085']
+    metrics_path: /metrics
+    scrape_interval: 30s
+
+  - job_name: 'tekton'
+    static_configs:
+      - targets: ['tekton-metrics:8086']
+    metrics_path: /metrics
+    scrape_interval: 30s

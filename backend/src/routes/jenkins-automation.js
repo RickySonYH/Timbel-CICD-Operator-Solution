@@ -1,7 +1,8 @@
-// [advice from AI] Jenkins 자동화 API - 레포지토리 기반 Job 자동 생성
+// [advice from AI] Jenkins 자동화 API - 실제 Jenkins 서버 연동
 const express = require('express');
 const { Pool } = require('pg');
 const jwtAuth = require('../middleware/jwtAuth');
+const jenkinsService = require('../services/jenkinsService');
 
 const router = express.Router();
 
@@ -83,70 +84,38 @@ docker build -t ${name.toLowerCase()}:latest .`;
 </project>`;
 };
 
-// [advice from AI] Jenkins Job 자동 생성 API
+// [advice from AI] Jenkins Job 자동 생성 API - 실제 Jenkins 서버 연동
 router.post('/create-job', jwtAuth.verifyToken, async (req, res) => {
   try {
-    const { system_id, repository_url, repository_info } = req.body;
+    const { project_name, repository_url, branch = 'main', build_script = 'npm run build' } = req.body;
     
-    // Jenkins 설정 조회
-    const jenkinsConfig = await pool.query(`
-      SELECT endpoint_url, username, password FROM monitoring_configurations 
-      WHERE config_type = 'jenkins' AND status = 'connected'
-      LIMIT 1
-    `);
+    console.log('🔨 Jenkins Job 생성 요청 (실제 서버 연동):', { project_name, repository_url });
 
-    if (jenkinsConfig.rows.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: '연결된 Jenkins 서버가 없습니다.'
-      });
-    }
+    const jobConfig = {
+      project_name,
+      repository_url,
+      branch,
+      build_script
+    };
 
-    const jenkins = jenkinsConfig.rows[0];
-    const jobName = `${repository_info.name}-build`;
-    const jobXML = generateJobXML(repository_info);
-
-    // Jenkins API로 Job 생성 (시뮬레이션)
-    try {
-      // 실제 Jenkins API 호출은 여기서 구현
-      console.log(`Jenkins Job 생성 시뮬레이션: ${jobName}`);
-      console.log(`Jenkins URL: ${jenkins.endpoint_url}`);
-      console.log(`Repository: ${repository_url}`);
-      
-      // Job 생성 기록 저장
-      await pool.query(`
-        INSERT INTO jenkins_jobs (
-          job_name, system_id, repository_url, job_xml, 
-          jenkins_url, status, created_by
-        )
-        VALUES ($1, $2, $3, $4, $5, 'created', $6)
-      `, [
-        jobName, 
-        system_id, 
-        repository_url, 
-        jobXML, 
-        jenkins.endpoint_url,
-        req.user?.id || 'system'
-      ]);
-
+    const result = await jenkinsService.createJob(`${project_name}-build`, jobConfig);
+    
+    if (result.success) {
       res.json({
         success: true,
-        job_name: jobName,
-        jenkins_url: `${jenkins.endpoint_url}/job/${jobName}`,
-        message: 'Jenkins Job이 성공적으로 생성되었습니다.'
+        job_name: result.job_name,
+        message: result.message
       });
-
-    } catch (jenkinsError) {
-      console.error('Jenkins API 오류:', jenkinsError);
+    } else {
       res.status(500).json({
         success: false,
-        error: 'Jenkins Job 생성에 실패했습니다.',
-        message: jenkinsError.message
+        error: result.error,
+        message: 'Jenkins Job 생성에 실패했습니다.'
       });
     }
-
+    
   } catch (error) {
-    console.error('Jenkins Job 생성 오류:', error);
+    console.error('❌ Jenkins Job 생성 실패:', error);
     res.status(500).json({
       success: false,
       error: 'Jenkins Job 생성 중 오류가 발생했습니다.',
@@ -155,36 +124,36 @@ router.post('/create-job', jwtAuth.verifyToken, async (req, res) => {
   }
 });
 
-// [advice from AI] Jenkins Job 목록 조회
+// [advice from AI] Jenkins Job 목록 조회 - 실제 Jenkins 서버 연동
 router.get('/jobs', jwtAuth.verifyToken, async (req, res) => {
   try {
-    const result = await pool.query(`
-      SELECT 
-        jj.id,
-        jj.job_name,
-        jj.system_id,
-        jj.repository_url,
-        jj.jenkins_url,
-        jj.status,
-        jj.last_build_number,
-        jj.last_build_status,
-        jj.last_build_time,
-        jj.created_at
-      FROM jenkins_jobs jj
-      ORDER BY jj.created_at DESC
-    `);
-
-    res.json({
-      success: true,
-      jobs: result.rows
-    });
-
+    console.log('🔍 Jenkins Job 목록 조회 (실제 서버 연동)...');
+    
+    const result = await jenkinsService.listJobs();
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        jobs: result.jobs,
+        total: result.total,
+        message: `${result.total}개 Jenkins Job 조회 완료`
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: result.error,
+        jobs: [],
+        message: 'Jenkins 서버 연결 실패'
+      });
+    }
+    
   } catch (error) {
-    console.error('Jenkins Job 목록 조회 오류:', error);
+    console.error('❌ Jenkins Job 목록 조회 실패:', error);
     res.status(500).json({
       success: false,
       error: 'Jenkins Job 목록 조회 중 오류가 발생했습니다.',
-      message: error.message
+      message: error.message,
+      jobs: []
     });
   }
 });
@@ -223,6 +192,95 @@ router.post('/setup-webhook', jwtAuth.verifyToken, async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'GitHub Webhook 설정 중 오류가 발생했습니다.',
+      message: error.message
+    });
+  }
+});
+
+// [advice from AI] Jenkins 서버 상태 확인
+router.get('/health', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    console.log('🏥 Jenkins 서버 상태 확인...');
+    
+    const health = await jenkinsService.checkHealth();
+    
+    res.json({
+      success: true,
+      health: health,
+      message: health.status === 'connected' ? 
+        `Jenkins 서버 연결됨 (버전: ${health.version}, Jobs: ${health.jobs_count}개)` :
+        `Jenkins 서버 연결 실패: ${health.error}`
+    });
+    
+  } catch (error) {
+    console.error('❌ Jenkins 서버 상태 확인 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Jenkins 서버 상태 확인 중 오류가 발생했습니다.',
+      message: error.message
+    });
+  }
+});
+
+// [advice from AI] Jenkins Job 빌드 실행
+router.post('/jobs/:jobName/build', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    const { jobName } = req.params;
+    
+    console.log(`🚀 Jenkins Job 빌드 실행: ${jobName}`);
+    
+    const result = await jenkinsService.triggerBuild(jobName);
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        message: result.message
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: result.error,
+        message: 'Jenkins Job 빌드 실행에 실패했습니다.'
+      });
+    }
+    
+  } catch (error) {
+    console.error('❌ Jenkins Job 빌드 실행 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Jenkins Job 빌드 실행 중 오류가 발생했습니다.',
+      message: error.message
+    });
+  }
+});
+
+// [advice from AI] Jenkins Job 삭제
+router.delete('/jobs/:jobName', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    const { jobName } = req.params;
+    
+    console.log(`🗑️ Jenkins Job 삭제: ${jobName}`);
+    
+    const result = await jenkinsService.deleteJob(jobName);
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        message: result.message
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: result.error,
+        message: 'Jenkins Job 삭제에 실패했습니다.'
+      });
+    }
+    
+  } catch (error) {
+    console.error('❌ Jenkins Job 삭제 실패:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Jenkins Job 삭제 중 오류가 발생했습니다.',
       message: error.message
     });
   }

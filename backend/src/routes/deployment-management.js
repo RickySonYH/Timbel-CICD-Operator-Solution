@@ -135,16 +135,16 @@ router.get('/deployment-history', jwtAuth.verifyToken, async (req, res) => {
       SELECT 
         od.id,
         od.project_name,
-        'development' as environment,
-        od.status,
-        od.created_at as deployed_at,
-        od.created_by as deployed_by,
-        od.version,
+        COALESCE(od.deployment_environment, 'development') as environment,
+        od.deployment_status as status,
+        COALESCE(od.completed_at, od.started_at, od.created_at) as deployed_at,
+        COALESCE(od.deployed_by, od.requested_by, 'System') as deployed_by,
+        'v1.0.0' as version,
         od.repository_url,
         'abc123' as commit_hash,
-        COALESCE(EXTRACT(EPOCH FROM (od.updated_at - od.created_at))::integer, 0) as duration_seconds
+        COALESCE(EXTRACT(EPOCH FROM (od.completed_at - od.started_at))::integer, 0) as duration_seconds
       FROM operations_deployments od
-      WHERE od.status IN ('completed', 'failed', 'rollback', 'success')
+      WHERE od.deployment_status IN ('completed', 'failed', 'rollback', 'success') OR od.deployment_status IS NULL
       ORDER BY od.created_at DESC
       LIMIT 100
     `);

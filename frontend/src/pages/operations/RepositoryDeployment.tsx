@@ -36,6 +36,7 @@ import {
 } from '@mui/material';
 import { ExpandMore as ExpandMoreIcon } from '@mui/icons-material';
 import { useJwtAuthStore } from '../../store/jwtAuthStore';
+import DeploymentMonitor from '../../components/operations/DeploymentMonitor';
 
 // [advice from AI] 레포지토리 정보 타입
 interface RepositoryInfo {
@@ -77,13 +78,42 @@ interface DeploymentConfig {
   };
 }
 
+// [advice from AI] 파이프라인 정보 타입
+interface PipelineInfo {
+  id: string;
+  pipeline_name: string;
+  pipeline_type: string;
+  environment: string;
+  deployment_strategy: string;
+  status: string;
+  last_status?: string;
+  config: {
+    repository_url: string;
+    branch: string;
+    jenkins_job_name: string;
+    jenkins_url: string;
+    nexus_url: string;
+    nexus_repository: string;
+    argocd_url: string;
+    argocd_app_name: string;
+    dockerfile_path: string;
+    image_tag: string;
+    namespace: string;
+  };
+  created_at: string;
+  updated_at: string;
+}
+
 const RepositoryDeployment: React.FC = () => {
   const navigate = useNavigate();
   const { user, token } = useJwtAuthStore();
   
   const [activeStep, setActiveStep] = useState(0);
+  const [deploymentMode, setDeploymentMode] = useState<'new' | 'existing'>('new'); // [advice from AI] 배포 모드 선택
   const [repositoryUrl, setRepositoryUrl] = useState('https://github.com/RickySonYH/ecp-ai-k8s-orchestrator');
   const [repositoryInfo, setRepositoryInfo] = useState<RepositoryInfo | null>(null);
+  const [existingPipelines, setExistingPipelines] = useState<PipelineInfo[]>([]); // [advice from AI] 기존 파이프라인 목록
+  const [selectedPipeline, setSelectedPipeline] = useState<PipelineInfo | null>(null); // [advice from AI] 선택된 파이프라인
   const [deploymentConfig, setDeploymentConfig] = useState<DeploymentConfig>({
     environment: 'development',
     domain_id: '',
@@ -104,6 +134,66 @@ const RepositoryDeployment: React.FC = () => {
   const [analyzing, setAnalyzing] = useState(false);
   const [deploying, setDeploying] = useState(false);
   const [deploymentResult, setDeploymentResult] = useState<any>(null);
+  const [monitorOpen, setMonitorOpen] = useState(false);
+  const [currentDeploymentId, setCurrentDeploymentId] = useState<string>('');
+
+  // [advice from AI] 컴포넌트 마운트 시 기존 파이프라인 로드
+  useEffect(() => {
+    loadExistingPipelines();
+  }, []);
+
+  // [advice from AI] 기존 파이프라인 목록 로드
+  const loadExistingPipelines = async () => {
+    try {
+      const { token: authToken } = useJwtAuthStore.getState();
+      const apiUrl = window.location.hostname === 'localhost' 
+        ? 'http://localhost:3001' 
+        : `http://${window.location.hostname}:3001`;
+      
+      const response = await fetch(`${apiUrl}/api/operations/cicd/pipelines`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setExistingPipelines(data.data || []);
+        console.log('✅ 기존 파이프라인 로드 완료:', data.data?.length || 0, '개');
+      }
+    } catch (error) {
+      console.error('❌ 기존 파이프라인 로드 실패:', error);
+    }
+  };
+
+  // [advice from AI] 기존 파이프라인 선택 처리
+  const handleSelectExistingPipeline = (pipeline: PipelineInfo) => {
+    setSelectedPipeline(pipeline);
+    setRepositoryUrl(pipeline.config.repository_url);
+    
+    // 선택된 파이프라인 정보로 RepositoryInfo 설정
+    const repoInfo: RepositoryInfo = {
+      url: pipeline.config.repository_url,
+      branch: pipeline.config.branch || 'main',
+      name: pipeline.pipeline_name.replace('-pipeline', ''),
+      description: `기존 파이프라인: ${pipeline.pipeline_name}`,
+      language: 'JavaScript', // 기본값
+      framework: 'React', // 기본값
+      hasDockerfile: true,
+      hasKubernetesManifests: true,
+      dependencies: [],
+      estimatedResources: {
+        cpu: 1,
+        memory: 1024,
+        storage: 10,
+        replicas: 1
+      }
+    };
+    
+    setRepositoryInfo(repoInfo);
+    setActiveStep(1); // 설정 단계로 이동
+  };
 
   // [advice from AI] 레포지토리 분석
   const handleAnalyzeRepository = async () => {
@@ -111,7 +201,11 @@ const RepositoryDeployment: React.FC = () => {
       setAnalyzing(true);
       
       const { token: authToken } = useJwtAuthStore.getState();
-      const response = await fetch('http://localhost:3001/api/operations/repository/analyze', {
+      const apiUrl = window.location.hostname === 'localhost' 
+        ? 'http://localhost:3001' 
+        : `http://${window.location.hostname}:3001`;
+      
+      const response = await fetch(`${apiUrl}/api/operations/repository/analyze`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${authToken}`,
@@ -162,7 +256,11 @@ const RepositoryDeployment: React.FC = () => {
       setDeploying(true);
       
       const { token: authToken } = useJwtAuthStore.getState();
-      const response = await fetch('http://localhost:3001/api/operations/repository/deploy', {
+      const apiUrl = window.location.hostname === 'localhost' 
+        ? 'http://localhost:3001' 
+        : `http://${window.location.hostname}:3001`;
+      
+      const response = await fetch(`${apiUrl}/api/operations/repository/deploy`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${authToken}`,
@@ -171,7 +269,16 @@ const RepositoryDeployment: React.FC = () => {
         body: JSON.stringify({
           repository_url: repositoryUrl,
           repository_info: repositoryInfo,
-          deployment_config: deploymentConfig
+          deployment_config: {
+            ...deploymentConfig,
+            deployment_mode: deploymentMode,
+            existing_pipeline_id: selectedPipeline?.id,
+            jenkins_job_name: selectedPipeline?.config?.jenkins_job_name,
+            jenkins_url: selectedPipeline?.config?.jenkins_url,
+            nexus_url: selectedPipeline?.config?.nexus_url,
+            argocd_url: selectedPipeline?.config?.argocd_url
+          },
+          deployed_by: user?.username || 'system'
         })
       });
 
@@ -182,6 +289,12 @@ const RepositoryDeployment: React.FC = () => {
       const data = await response.json();
       setDeploymentResult(data);
       setActiveStep(2);
+      
+      // [advice from AI] 배포 모니터링 다이얼로그 열기
+      if (data.deployment?.id) {
+        setCurrentDeploymentId(data.deployment.id);
+        setMonitorOpen(true);
+      }
       
     } catch (error) {
       console.error('배포 실행 오류:', error);
@@ -235,32 +348,153 @@ const RepositoryDeployment: React.FC = () => {
             {/* 1단계: 레포지토리 분석 */}
             <Step>
               <StepLabel>
-                <Typography variant="h6">1단계: 레포지토리 분석</Typography>
+                <Typography variant="h6">1단계: 배포 방식 선택</Typography>
               </StepLabel>
               <StepContent>
                 <Typography variant="body2" color="text.secondary" paragraph>
-                  GitHub 레포지토리 URL을 입력하세요. 시스템이 자동으로 코드를 분석하여 언어, 프레임워크, 
-                  Dockerfile 존재 여부, K8s 매니페스트 등을 감지합니다.
+                  새로운 레포지토리를 분석하거나 기존 파이프라인을 선택하여 배포할 수 있습니다.
                 </Typography>
-                <TextField
-                  fullWidth
-                  label="GitHub 레포지토리 URL"
-                  value={repositoryUrl}
-                  onChange={(e) => setRepositoryUrl(e.target.value)}
-                  placeholder="https://github.com/username/repository"
-                  margin="normal"
-                  helperText="예: https://github.com/RickySonYH/ecp-ai-k8s-orchestrator"
-                />
-                <Box sx={{ mt: 2 }}>
-                  <Button
-                    variant="contained"
-                    onClick={handleAnalyzeRepository}
-                    disabled={!repositoryUrl || analyzing}
-                  >
-                    {analyzing ? '분석 중...' : '레포지토리 분석'}
-                  </Button>
-                </Box>
-                {analyzing && <LinearProgress sx={{ mt: 2 }} />}
+                
+                {/* [advice from AI] 배포 모드 선택 */}
+                <FormControl component="fieldset" sx={{ mb: 3 }}>
+                  <Typography variant="h6" gutterBottom>배포 방식 선택</Typography>
+                  <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+                    <Button
+                      variant={deploymentMode === 'new' ? 'contained' : 'outlined'}
+                      onClick={() => setDeploymentMode('new')}
+                      sx={{ flex: 1 }}
+                    >
+                      새 레포지토리 배포
+                    </Button>
+                    <Button
+                      variant={deploymentMode === 'existing' ? 'contained' : 'outlined'}
+                      onClick={() => setDeploymentMode('existing')}
+                      sx={{ flex: 1 }}
+                    >
+                      기존 파이프라인 재배포
+                    </Button>
+                  </Box>
+                </FormControl>
+
+                {/* [advice from AI] 새 레포지토리 배포 */}
+                {deploymentMode === 'new' && (
+                  <Box>
+                    <Typography variant="body2" color="text.secondary" paragraph>
+                      GitHub 레포지토리 URL을 입력하세요. 시스템이 자동으로 코드를 분석하여 언어, 프레임워크, 
+                      Dockerfile 존재 여부, K8s 매니페스트 등을 감지합니다.
+                    </Typography>
+                    <TextField
+                      fullWidth
+                      label="GitHub 레포지토리 URL"
+                      value={repositoryUrl}
+                      onChange={(e) => setRepositoryUrl(e.target.value)}
+                      placeholder="https://github.com/username/repository"
+                      margin="normal"
+                      helperText="예: https://github.com/RickySonYH/ecp-ai-k8s-orchestrator"
+                    />
+                    <Box sx={{ mt: 2 }}>
+                      <Button
+                        variant="contained"
+                        onClick={handleAnalyzeRepository}
+                        disabled={!repositoryUrl || analyzing}
+                      >
+                        {analyzing ? '분석 중...' : '레포지토리 분석'}
+                      </Button>
+                    </Box>
+                    {analyzing && <LinearProgress sx={{ mt: 2 }} />}
+                  </Box>
+                )}
+
+                {/* [advice from AI] 기존 파이프라인 선택 */}
+                {deploymentMode === 'existing' && (
+                  <Box>
+                    <Typography variant="body2" color="text.secondary" paragraph>
+                      기존에 설정된 파이프라인을 선택하여 재배포할 수 있습니다.
+                    </Typography>
+                    
+                    {existingPipelines.length === 0 ? (
+                      <Alert severity="info">
+                        등록된 파이프라인이 없습니다. 새 레포지토리 배포를 선택하세요.
+                      </Alert>
+                    ) : (
+                      <Box>
+                        <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
+                          기존 파이프라인 목록 ({existingPipelines.length}개)
+                        </Typography>
+                        <Grid container spacing={2}>
+                          {existingPipelines.map((pipeline) => (
+                            <Grid item xs={12} md={6} key={pipeline.id}>
+                              <Card 
+                                sx={{ 
+                                  cursor: 'pointer',
+                                  border: selectedPipeline?.id === pipeline.id ? 2 : 1,
+                                  borderColor: selectedPipeline?.id === pipeline.id ? 'primary.main' : 'divider'
+                                }}
+                                onClick={() => handleSelectExistingPipeline(pipeline)}
+                              >
+                                <CardContent>
+                                  <Typography variant="h6" gutterBottom>
+                                    {pipeline.pipeline_name}
+                                  </Typography>
+                                  <Typography variant="body2" color="text.secondary" gutterBottom>
+                                    {pipeline.config.repository_url}
+                                  </Typography>
+                                  <Typography variant="caption" color="text.secondary" gutterBottom sx={{ display: 'block' }}>
+                                    Jenkins: {pipeline.config.jenkins_url} | Nexus: {pipeline.config.nexus_url}
+                                  </Typography>
+                                  <Box sx={{ mt: 1 }}>
+                                    <Chip 
+                                      label={pipeline.config.branch || 'main'} 
+                                      size="small" 
+                                      sx={{ mr: 1 }} 
+                                    />
+                                    <Chip 
+                                      label={pipeline.environment} 
+                                      size="small" 
+                                      color="primary"
+                                      sx={{ mr: 1 }} 
+                                    />
+                                    <Chip 
+                                      label={pipeline.deployment_strategy} 
+                                      size="small" 
+                                      color="secondary"
+                                      sx={{ mr: 1 }} 
+                                    />
+                                    <Chip 
+                                      label={pipeline.last_status || 'ready'} 
+                                      size="small" 
+                                      color={pipeline.last_status === 'success' ? 'success' : 
+                                            pipeline.last_status === 'failed' ? 'error' :
+                                            pipeline.last_status === 'running' ? 'warning' : 'default'}
+                                    />
+                                  </Box>
+                                  <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                                    이미지: {pipeline.config.image_tag} | 네임스페이스: {pipeline.config.namespace}
+                                  </Typography>
+                                </CardContent>
+                              </Card>
+                            </Grid>
+                          ))}
+                        </Grid>
+                        
+                        {selectedPipeline && (
+                          <Box sx={{ mt: 2 }}>
+                            <Alert severity="success">
+                              선택된 파이프라인: <strong>{selectedPipeline.pipeline_name}</strong>
+                            </Alert>
+                            <Button
+                              variant="contained"
+                              onClick={() => setActiveStep(1)}
+                              sx={{ mt: 2 }}
+                            >
+                              선택된 파이프라인으로 배포 진행
+                            </Button>
+                          </Box>
+                        )}
+                      </Box>
+                    )}
+                  </Box>
+                )}
               </StepContent>
             </Step>
 
@@ -557,6 +791,13 @@ const RepositoryDeployment: React.FC = () => {
           </Stepper>
         </CardContent>
       </Card>
+
+      {/* [advice from AI] 배포 모니터링 다이얼로그 */}
+      <DeploymentMonitor
+        open={monitorOpen}
+        deploymentId={currentDeploymentId}
+        onClose={() => setMonitorOpen(false)}
+      />
     </Box>
   );
 };

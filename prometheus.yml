@@ -1,0 +1,44 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+  external_labels:
+    cluster: 'timbel-cicd'
+
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 5s
+    metrics_path: /metrics
+
+  - job_name: 'backend'
+    static_configs:
+      - targets: ['backend:3001']
+    scrape_interval: 5s
+    metrics_path: /metrics
+    scrape_timeout: 10s
+
+  - job_name: 'jenkins'
+    static_configs:
+      - targets: ['jenkins:8080']
+    scrape_interval: 15s
+    metrics_path: /metrics
+    scrape_timeout: 10s
+
+  - job_name: 'nexus'
+    static_configs:
+      - targets: ['nexus:8081']
+    scrape_interval: 15s
+    metrics_path: /metrics
+    scrape_timeout: 10s
+
+  - job_name: 'argocd'
+    static_configs:
+      - targets: ['argocd-server:8080']
+    scrape_interval: 15s
+    metrics_path: /metrics
+    scrape_timeout: 10s

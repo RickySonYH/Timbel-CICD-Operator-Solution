@@ -115,7 +115,7 @@ const ComprehensiveMonitoring: React.FC = () => {
   const loadMetrics = async (metricType: string) => {
     try {
       const { token: authToken } = useJwtAuthStore.getState();
-      const response = await fetch(`http://localhost:3001/api/prometheus/metrics/current?metric_type=${metricType}`, {
+      const response = await fetch(`/api/prometheus/metrics/current?metric_type=${metricType}`, {
         headers: {
           'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json'
@@ -140,7 +140,7 @@ const ComprehensiveMonitoring: React.FC = () => {
       const services = ['timbel-frontend', 'timbel-backend', 'jenkins', 'nexus'];
       
       const slaPromises = services.map(service =>
-        fetch(`http://localhost:3001/api/prometheus/sla/calculate?service_name=${service}&time_period=24h`, {
+        fetch(`/api/prometheus/sla/calculate?service_name=${service}&time_period=24h`, {
           headers: {
             'Authorization': `Bearer ${authToken}`,
             'Content-Type': 'application/json'
@@ -160,7 +160,7 @@ const ComprehensiveMonitoring: React.FC = () => {
   const loadActiveAlerts = async () => {
     try {
       const { token: authToken } = useJwtAuthStore.getState();
-      const response = await fetch('http://localhost:3001/api/prometheus/alerts/active', {
+      const response = await fetch('/api/prometheus/alerts/active', {
         headers: {
           'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json'
@@ -214,7 +214,7 @@ const ComprehensiveMonitoring: React.FC = () => {
   const handleCreateAlertRule = async () => {
     try {
       const { token: authToken } = useJwtAuthStore.getState();
-      const response = await fetch('http://localhost:3001/api/prometheus/alerts/rules', {
+      const response = await fetch('/api/prometheus/alerts/rules', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${authToken}`,
@@ -331,7 +331,7 @@ const ComprehensiveMonitoring: React.FC = () => {
                 전체 서비스 상태
               </Typography>
               <Typography variant="h4" color="success.main">
-                {getMetricValue(systemMetrics.healthy_services, 4)}/{getMetricValue(systemMetrics.total_services, 4)}
+                {getMetricValue(systemMetrics.healthy_services, 0)}/{getMetricValue(systemMetrics.total_services, 0)}
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 정상 운영 중
@@ -346,9 +346,9 @@ const ComprehensiveMonitoring: React.FC = () => {
                 평균 CPU 사용률
               </Typography>
               <Typography variant="h4" color={
-                getMetricValue(systemMetrics.cpu_avg, 45) > 80 ? 'error.main' : 'primary'
+                getMetricValue(systemMetrics.cpu_avg, 0) > 80 ? 'error.main' : 'primary'
               }>
-                {(getMetricValue(systemMetrics.cpu_avg, 45) || 0).toFixed(1)}%
+                {(getMetricValue(systemMetrics.cpu_avg, 0) || 0).toFixed(1)}%
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 시스템 리소스
@@ -504,7 +504,11 @@ const ComprehensiveMonitoring: React.FC = () => {
                           </TableCell>
                           <TableCell>{metric.value[1]}</TableCell>
                           <TableCell>
-                            {((parseInt(metric.value[1]) || 0) / 187 * 100).toFixed(1)}%
+                            {(() => {
+                              const totalBuilds = (cicdMetrics.jenkins_builds || []).reduce((sum, metric) => sum + (parseInt(metric.value[1]) || 0), 0);
+                              const currentBuilds = parseInt(metric.value[1]) || 0;
+                              return totalBuilds > 0 ? ((currentBuilds / totalBuilds) * 100).toFixed(1) : '0.0';
+                            })()}%
                           </TableCell>
                         </TableRow>
                       ))}

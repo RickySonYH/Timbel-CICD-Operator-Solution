@@ -252,7 +252,7 @@ const ClusterManagement: React.FC = () => {
 
   // [advice from AI] 클러스터 삭제
   const handleDeleteCluster = async (clusterId: string) => {
-    if (!confirm('이 클러스터를 삭제하시겠습니까?')) return;
+    if (!window.confirm('이 클러스터를 삭제하시겠습니까?')) return;
 
     try {
       const { token: authToken } = useJwtAuthStore.getState();

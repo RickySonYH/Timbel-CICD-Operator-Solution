@@ -699,6 +699,7 @@ const DeploymentRequestDialog: React.FC<DeploymentRequestDialogProps> = ({
       onClose={handleClose}
       maxWidth="lg"
       fullWidth
+      disableEnforceFocus
       PaperProps={{ sx: { minHeight: '70vh' } }}
     >
       <DialogTitle>

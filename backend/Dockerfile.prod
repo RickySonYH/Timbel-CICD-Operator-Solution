@@ -1,0 +1,75 @@
+# [advice from AI] 프로덕션 레벨 백엔드 Dockerfile
+# 멀티스테이지 빌드, 보안 최적화, 성능 최적화
+
+# ===== 빌드 스테이지 =====
+FROM node:18-alpine AS builder
+
+# 보안: 루트 사용자 대신 전용 사용자 생성
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S timbel -u 1001
+
+# 작업 디렉토리 설정
+WORKDIR /app
+
+# 패키지 파일 복사 (캐시 최적화)
+COPY package*.json ./
+
+# [advice from AI] 프로덕션 의존성만 설치
+RUN npm ci --only=production --silent && \
+    npm cache clean --force
+
+# 소스 코드 복사
+COPY --chown=timbel:nodejs . .
+
+# [advice from AI] 불필요한 파일 제거
+RUN rm -rf tests/ docs/ *.md .git/ .gitignore \
+    Dockerfile* docker-compose* .env.example
+
+# ===== 프로덕션 스테이지 =====
+FROM node:18-alpine AS production
+
+# 보안 업데이트 및 필수 패키지 설치
+RUN apk update && apk upgrade && \
+    apk add --no-cache \
+    dumb-init \
+    curl \
+    ca-certificates && \
+    rm -rf /var/cache/apk/*
+
+# 사용자 생성
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S timbel -u 1001
+
+# 작업 디렉토리 설정
+WORKDIR /app
+
+# [advice from AI] 빌드 스테이지에서 파일 복사
+COPY --from=builder --chown=timbel:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=timbel:nodejs /app/src ./src
+COPY --from=builder --chown=timbel:nodejs /app/package*.json ./
+
+# [advice from AI] 로그 및 업로드 디렉토리 생성
+RUN mkdir -p /app/logs /app/uploads && \
+    chown -R timbel:nodejs /app/logs /app/uploads
+
+# [advice from AI] 환경 변수 설정
+ENV NODE_ENV=production \
+    NODE_OPTIONS="--max-old-space-size=2048 --enable-source-maps" \
+    PORT=3001 \
+    UV_THREADPOOL_SIZE=16
+
+# [advice from AI] 헬스체크 설정
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:3001/health || exit 1
+
+# 포트 노출
+EXPOSE 3001
+
+# 사용자 변경
+USER timbel
+
+# [advice from AI] dumb-init으로 프로세스 시작 (좀비 프로세스 방지)
+ENTRYPOINT ["dumb-init", "--"]
+
+# [advice from AI] 프로덕션 모드로 서버 시작
+CMD ["node", "--max-old-space-size=2048", "src/index.js"]

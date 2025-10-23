@@ -1,23 +1,63 @@
-// [advice from AI] Jenkins 서버 연동 서비스
-// CI/CD 이미지 빌드, 파이프라인 관리, GitHub 연동
+// [advice from AI] Jenkins 서버 연동 서비스 - Phase 2 프로덕션 레벨
+// CI/CD 파이프라인 자동화, 실시간 빌드 모니터링, 멀티브랜치 지원
 
 const axios = require('axios');
+const https = require('https');
 const { v4: uuidv4 } = require('uuid');
+const EventEmitter = require('events');
 
-class JenkinsIntegration {
+class JenkinsIntegration extends EventEmitter {
   constructor() {
-    // [advice from AI] Jenkins 서버 설정 - 실제 jenkins.langsa.ai 연동
-    this.jenkinsURL = process.env.JENKINS_URL || 'https://jenkins.langsa.ai';
-    this.jenkinsUser = process.env.JENKINS_USER || 'admin';
-    this.jenkinsToken = process.env.JENKINS_TOKEN || 'timbelJenkins0901!';
-    this.jenkinsTimeout = parseInt(process.env.JENKINS_TIMEOUT || '30000');
+    super();
     
-    // [advice from AI] Jenkins API 기본 헤더 설정
-    this.defaultHeaders = {
-      'Content-Type': 'application/json',
-      'Authorization': `Basic ${Buffer.from(`${this.jenkinsUser}:${this.jenkinsToken}`).toString('base64')}`,
-      'Jenkins-Crumb': null // 동적으로 설정됨
-    };
+    // [advice from AI] Phase 2: 환경 변수 기반 Jenkins 서버 설정 (Docker 네트워크 내부 연결)
+    this.jenkinsURL = process.env.JENKINS_URL || 'http://jenkins:8080';
+    this.jenkinsUser = process.env.JENKINS_USERNAME || 'admin';
+    this.jenkinsPassword = process.env.JENKINS_PASSWORD || 'admin';
+    this.jenkinsToken = process.env.JENKINS_API_TOKEN || '';
+    this.jenkinsTimeout = parseInt(process.env.JENKINS_BUILD_TIMEOUT || '1800000'); // 30분
+    this.jenkinsCrumbIssuer = process.env.JENKINS_CRUMB_ISSUER === 'true';
+    
+    // [advice from AI] 고급 설정
+    this.maxRetries = 3;
+    this.retryDelay = 2000;
+    this.pollInterval = 5000; // 빌드 상태 폴링 간격
+    this.maxConcurrentBuilds = parseInt(process.env.MAX_CONCURRENT_BUILDS || '5');
+    
+    // [advice from AI] 인증 정보 관리
+    this.authHeader = this.jenkinsToken 
+      ? `Basic ${Buffer.from(`${this.jenkinsUser}:${this.jenkinsToken}`).toString('base64')}`
+      : `Basic ${Buffer.from(`${this.jenkinsUser}:${this.jenkinsPassword}`).toString('base64')}`;
+    
+    // [advice from AI] 빌드 상태 추적
+    this.activeBuildQueue = new Map(); // buildId -> buildInfo
+    this.buildHistory = new Map(); // buildId -> buildResult
+    this.webhookTokens = new Map(); // jobName -> webhookToken
+    
+    // [advice from AI] Phase 2: 향상된 Axios 클라이언트 설정
+    this.client = axios.create({
+      baseURL: this.jenkinsURL,
+      timeout: this.jenkinsTimeout,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': this.authHeader,
+        'Accept': 'application/json',
+        'User-Agent': 'Timbel-CICD-Operator/2.0'
+      },
+      httpsAgent: new https.Agent({
+        rejectUnauthorized: false // 자체 서명 인증서 허용
+      }),
+      validateStatus: (status) => status < 500 // 5xx 에러만 재시도
+    });
+    
+    // [advice from AI] CSRF 토큰 관리
+    this.crumbToken = null;
+    this.crumbField = null;
+    this.lastCrumbTime = null;
+    this.crumbExpiry = 30 * 60 * 1000; // 30분
+    
+    // [advice from AI] 요청/응답 인터셉터 설정
+    this.setupInterceptors();
     
     // [advice from AI] 지원 이미지 레지스트리
     this.supportedRegistries = [
@@ -97,55 +137,157 @@ class JenkinsIntegration {
     ];
   }
 
-  // [advice from AI] Jenkins CSRF 보호를 위한 Crumb 토큰 획득
+  // [advice from AI] Phase 2: 요청/응답 인터셉터 설정
+  setupInterceptors() {
+    // 요청 인터셉터: CSRF 토큰 자동 추가
+    this.client.interceptors.request.use(
+      async (config) => {
+        // CSRF 토큰이 필요한 POST/PUT/DELETE 요청에 자동 추가
+        if (['post', 'put', 'delete'].includes(config.method?.toLowerCase())) {
+          await this.ensureCrumbToken();
+          if (this.crumbToken && this.crumbField) {
+            config.headers[this.crumbField] = this.crumbToken;
+          }
+        }
+        
+        console.log(`🔄 Jenkins API 요청: ${config.method?.toUpperCase()} ${config.url}`);
+        return config;
+      },
+      (error) => {
+        console.error('❌ Jenkins 요청 인터셉터 오류:', error);
+        return Promise.reject(error);
+      }
+    );
+
+    // 응답 인터셉터: 자동 재시도 및 에러 처리
+    this.client.interceptors.response.use(
+      (response) => {
+        console.log(`✅ Jenkins API 응답: ${response.status} ${response.config.url}`);
+        return response;
+      },
+      async (error) => {
+        const originalRequest = error.config;
+        
+        // 403 Forbidden (CSRF) 에러시 토큰 갱신 후 재시도
+        if (error.response?.status === 403 && !originalRequest._csrfRetry) {
+          originalRequest._csrfRetry = true;
+          console.log('🔄 Jenkins CSRF 토큰 갱신 후 재시도...');
+          
+          try {
+            this.crumbToken = null; // 기존 토큰 초기화
+            await this.ensureCrumbToken();
+            if (this.crumbToken && this.crumbField) {
+              originalRequest.headers[this.crumbField] = this.crumbToken;
+            }
+            return this.client(originalRequest);
+          } catch (csrfError) {
+            console.error('❌ Jenkins CSRF 토큰 갱신 실패:', csrfError.message);
+            return Promise.reject(csrfError);
+          }
+        }
+        
+        // 5xx 에러시 재시도
+        if (error.response?.status >= 500 && !originalRequest._retryCount) {
+          originalRequest._retryCount = 0;
+        }
+        
+        if (error.response?.status >= 500 && originalRequest._retryCount < this.maxRetries) {
+          originalRequest._retryCount++;
+          const delay = this.retryDelay * originalRequest._retryCount;
+          
+          console.log(`🔄 Jenkins API 재시도 (${originalRequest._retryCount}/${this.maxRetries}) ${delay}ms 후...`);
+          
+          await new Promise(resolve => setTimeout(resolve, delay));
+          return this.client(originalRequest);
+        }
+        
+        console.error(`❌ Jenkins API 오류: ${error.response?.status} ${error.config?.url}`, error.response?.data);
+        return Promise.reject(error);
+      }
+    );
+  }
+
+  // [advice from AI] Phase 2: CSRF 토큰 자동 관리
+  async ensureCrumbToken() {
+    if (this.crumbToken && this.isCrumbValid()) {
+      return true;
+    }
+    
+    return await this.getCrumbToken();
+  }
+
+  // [advice from AI] CSRF 토큰 유효성 검사
+  isCrumbValid() {
+    if (!this.crumbToken || !this.lastCrumbTime) {
+      return false;
+    }
+    
+    const tokenAge = Date.now() - this.lastCrumbTime;
+    return tokenAge < this.crumbExpiry;
+  }
+
+  // [advice from AI] Phase 2: 향상된 CSRF 토큰 획득
   async getCrumbToken() {
     try {
+      console.log('🔐 Jenkins CSRF 토큰 요청 중...');
+      
       const response = await axios.get(`${this.jenkinsURL}/crumbIssuer/api/json`, {
         headers: {
-          'Authorization': this.defaultHeaders.Authorization
+          'Authorization': this.authHeader
         },
-        timeout: this.jenkinsTimeout,
-        httpsAgent: new (require('https')).Agent({
-          rejectUnauthorized: false // 자체 서명 인증서 허용
+        timeout: 10000, // 짧은 타임아웃
+        httpsAgent: new https.Agent({
+          rejectUnauthorized: false
         })
       });
       
       if (response.data && response.data.crumb) {
-        this.defaultHeaders['Jenkins-Crumb'] = response.data.crumb;
-        this.defaultHeaders[response.data.crumbRequestField] = response.data.crumb;
-        console.log('✅ Jenkins Crumb 토큰 획득 성공');
-        return response.data.crumb;
+        this.crumbToken = response.data.crumb;
+        this.crumbField = response.data.crumbRequestField || 'Jenkins-Crumb';
+        this.lastCrumbTime = Date.now();
+        
+        console.log(`✅ Jenkins CSRF 토큰 획득 성공: ${this.crumbField}`);
+        return true;
       }
+      
+      console.warn('⚠️ Jenkins CSRF 토큰 응답이 비어있음');
+      return false;
+      
     } catch (error) {
-      console.warn('⚠️ Jenkins Crumb 토큰 획득 실패:', error.message);
-      // Crumb 없이도 진행 가능한 경우가 있음
-      return null;
+      if (error.response?.status === 404) {
+        console.log('ℹ️ Jenkins CSRF 보호가 비활성화됨');
+        return true; // CSRF가 비활성화된 경우
+      }
+      
+      console.warn('⚠️ Jenkins CSRF 토큰 획득 실패:', error.message);
+      
+      // 상세한 에러 정보 제공
+      if (error.code === 'ECONNREFUSED') {
+        throw new Error(`Jenkins 서버 연결 실패: ${this.jenkinsURL}`);
+      } else if (error.code === 'ENOTFOUND') {
+        throw new Error(`Jenkins 서버 호스트를 찾을 수 없음: ${this.jenkinsURL}`);
+      } else if (error.response?.status === 401) {
+        throw new Error(`Jenkins 인증 실패: 잘못된 사용자명 또는 토큰 (${this.jenkinsUser})`);
+      }
+      
+      return false;
     }
   }
 
-  // [advice from AI] Jenkins API 호출 헬퍼 메서드
-  async makeJenkinsRequest(method, endpoint, data = null) {
+  // [advice from AI] Phase 2: 향상된 Jenkins API 호출 (인터셉터 사용)
+  async makeJenkinsRequest(method, endpoint, data = null, options = {}) {
     try {
-      // Crumb 토큰이 없으면 먼저 획득
-      if (!this.defaultHeaders['Jenkins-Crumb']) {
-        await this.getCrumbToken();
-      }
-
       const config = {
-        method,
-        url: `${this.jenkinsURL}${endpoint}`,
-        headers: { ...this.defaultHeaders },
-        timeout: this.jenkinsTimeout,
-        httpsAgent: new (require('https')).Agent({
-          rejectUnauthorized: false
-        })
+        method: method.toLowerCase(),
+        url: endpoint,
+        ...options
       };
 
       if (data) {
         config.data = data;
       }
 
-      const response = await axios(config);
+      const response = await this.client(config);
       return response;
     } catch (error) {
       console.error(`❌ Jenkins API 호출 실패 [${method} ${endpoint}]:`, error.message);
@@ -843,6 +985,414 @@ pipeline {
     } catch (error) {
       console.error('❌ Jenkins Job 목록 조회 실패:', error.message);
       throw new Error(`Jenkins Job 목록 조회 실패: ${error.message}`);
+    }
+  }
+
+  // [advice from AI] Phase 2: 멀티브랜치 파이프라인 생성
+  async createMultiBranchPipeline(config) {
+    try {
+      console.log(`🌿 멀티브랜치 파이프라인 생성: ${config.jobName}`);
+      
+      const multiBranchConfig = this.generateMultiBranchConfig(config);
+      
+      const response = await this.makeJenkinsRequest(
+        'POST',
+        `/createItem?name=${encodeURIComponent(config.jobName)}`,
+        multiBranchConfig,
+        {
+          headers: {
+            'Content-Type': 'application/xml'
+          }
+        }
+      );
+
+      console.log(`✅ 멀티브랜치 파이프라인 생성 성공: ${config.jobName}`);
+      return {
+        success: true,
+        jobName: config.jobName,
+        jobUrl: `${this.jenkinsURL}/job/${encodeURIComponent(config.jobName)}/`,
+        type: 'multibranch',
+        branches: config.branches || ['main', 'develop'],
+        message: '멀티브랜치 파이프라인이 성공적으로 생성되었습니다'
+      };
+    } catch (error) {
+      console.error(`❌ 멀티브랜치 파이프라인 생성 실패: ${config.jobName}`, error.message);
+      throw new Error(`멀티브랜치 파이프라인 생성 실패: ${error.message}`);
+    }
+  }
+
+  // [advice from AI] Phase 2: Blue Ocean 파이프라인 생성
+  async createBlueOceanPipeline(config) {
+    try {
+      console.log(`🌊 Blue Ocean 파이프라인 생성: ${config.jobName}`);
+      
+      const pipelineConfig = {
+        name: config.jobName,
+        organization: config.organization || 'jenkins',
+        scmSource: {
+          id: uuidv4(),
+          source: {
+            remote: config.repositoryUrl,
+            credentialsId: config.credentialsId || '',
+            traits: [
+              {
+                $class: 'jenkins.plugins.git.traits.BranchDiscoveryTrait'
+              },
+              {
+                $class: 'jenkins.plugins.git.traits.OriginPullRequestDiscoveryTrait',
+                strategyId: 1
+              }
+            ]
+          }
+        }
+      };
+
+      // Blue Ocean REST API 사용
+      const response = await this.makeJenkinsRequest(
+        'POST',
+        `/blue/rest/organizations/${config.organization || 'jenkins'}/pipelines/`,
+        pipelineConfig
+      );
+
+      console.log(`✅ Blue Ocean 파이프라인 생성 성공: ${config.jobName}`);
+      return {
+        success: true,
+        jobName: config.jobName,
+        jobUrl: `${this.jenkinsURL}/blue/organizations/jenkins/pipelines/${config.jobName}/`,
+        blueOceanUrl: `${this.jenkinsURL}/blue/organizations/jenkins/pipelines/${config.jobName}/activity/`,
+        message: 'Blue Ocean 파이프라인이 성공적으로 생성되었습니다'
+      };
+    } catch (error) {
+      console.error(`❌ Blue Ocean 파이프라인 생성 실패: ${config.jobName}`, error.message);
+      
+      // Blue Ocean이 없는 경우 일반 파이프라인으로 폴백
+      if (error.response?.status === 404) {
+        console.log('ℹ️ Blue Ocean 플러그인이 없어 일반 파이프라인으로 생성합니다');
+        return await this.createJenkinsJob(config.jobName, config);
+      }
+      
+      throw new Error(`Blue Ocean 파이프라인 생성 실패: ${error.message}`);
+    }
+  }
+
+  // [advice from AI] Phase 2: 빌드 실시간 모니터링
+  async monitorBuildProgress(jobName, buildNumber, onProgress = null) {
+    const buildId = `${jobName}-${buildNumber}`;
+    const startTime = Date.now();
+    
+    console.log(`👁️ 빌드 모니터링 시작: ${buildId}`);
+    
+    return new Promise((resolve, reject) => {
+      const pollBuild = async () => {
+        try {
+          const response = await this.makeJenkinsRequest(
+            'GET',
+            `/job/${encodeURIComponent(jobName)}/${buildNumber}/api/json`
+          );
+          
+          const buildInfo = response.data;
+          const progress = {
+            buildId,
+            jobName,
+            buildNumber,
+            status: buildInfo.result || (buildInfo.building ? 'BUILDING' : 'UNKNOWN'),
+            duration: buildInfo.duration || (Date.now() - startTime),
+            estimatedDuration: buildInfo.estimatedDuration || 0,
+            building: buildInfo.building,
+            timestamp: buildInfo.timestamp,
+            url: buildInfo.url,
+            stages: await this.getBuildStages(jobName, buildNumber).catch(() => []),
+            logs: await this.getBuildLogs(jobName, buildNumber, 50).catch(() => [])
+          };
+          
+          // 진행 상황 콜백 호출
+          if (onProgress) {
+            onProgress(progress);
+          }
+          
+          // 이벤트 발생
+          this.emit('buildProgress', progress);
+          
+          // 빌드 완료 확인
+          if (!buildInfo.building) {
+            console.log(`✅ 빌드 모니터링 완료: ${buildId} (${buildInfo.result})`);
+            resolve(progress);
+            return;
+          }
+          
+          // 다음 폴링 예약
+          setTimeout(pollBuild, this.pollInterval);
+          
+        } catch (error) {
+          console.error(`❌ 빌드 모니터링 오류: ${buildId}`, error.message);
+          reject(error);
+        }
+      };
+      
+      // 모니터링 시작
+      pollBuild();
+    });
+  }
+
+  // [advice from AI] Phase 2: 빌드 스테이지 정보 조회
+  async getBuildStages(jobName, buildNumber) {
+    try {
+      const response = await this.makeJenkinsRequest(
+        'GET',
+        `/job/${encodeURIComponent(jobName)}/${buildNumber}/wfapi/describe`
+      );
+      
+      return response.data.stages?.map(stage => ({
+        id: stage.id,
+        name: stage.name,
+        status: stage.status,
+        startTimeMillis: stage.startTimeMillis,
+        durationMillis: stage.durationMillis,
+        pauseDurationMillis: stage.pauseDurationMillis
+      })) || [];
+    } catch (error) {
+      console.warn(`⚠️ 빌드 스테이지 조회 실패: ${jobName}#${buildNumber}`, error.message);
+      return [];
+    }
+  }
+
+  // [advice from AI] Phase 2: 빌드 로그 조회 (실시간)
+  async getBuildLogs(jobName, buildNumber, lines = 100) {
+    try {
+      const response = await this.makeJenkinsRequest(
+        'GET',
+        `/job/${encodeURIComponent(jobName)}/${buildNumber}/logText/progressiveText`,
+        null,
+        {
+          params: {
+            start: Math.max(0, lines * -1)
+          },
+          headers: {
+            'Accept': 'text/plain'
+          }
+        }
+      );
+      
+      return response.data.split('\n').filter(line => line.trim());
+    } catch (error) {
+      console.warn(`⚠️ 빌드 로그 조회 실패: ${jobName}#${buildNumber}`, error.message);
+      return [];
+    }
+  }
+
+  // [advice from AI] Phase 2: 웹훅 설정
+  async setupWebhook(jobName, webhookConfig) {
+    try {
+      const webhookToken = uuidv4();
+      const webhookUrl = `${this.jenkinsURL}/generic-webhook-trigger/invoke?token=${webhookToken}&job=${encodeURIComponent(jobName)}`;
+      
+      // 웹훅 토큰 저장
+      this.webhookTokens.set(jobName, {
+        token: webhookToken,
+        url: webhookUrl,
+        config: webhookConfig,
+        createdAt: new Date().toISOString()
+      });
+      
+      console.log(`🔗 웹훅 설정 완료: ${jobName}`);
+      return {
+        success: true,
+        jobName,
+        webhookUrl,
+        webhookToken,
+        instructions: {
+          github: `GitHub Repository Settings > Webhooks > Add webhook\nPayload URL: ${webhookUrl}\nContent type: application/json\nEvents: Push events, Pull requests`,
+          gitlab: `GitLab Project Settings > Webhooks > Add webhook\nURL: ${webhookUrl}\nTrigger: Push events, Merge request events`,
+          bitbucket: `Bitbucket Repository Settings > Webhooks > Add webhook\nURL: ${webhookUrl}\nTriggers: Repository push, Pull request created`
+        }
+      };
+    } catch (error) {
+      console.error(`❌ 웹훅 설정 실패: ${jobName}`, error.message);
+      throw new Error(`웹훅 설정 실패: ${error.message}`);
+    }
+  }
+
+  // [advice from AI] Phase 2: 아티팩트 관리
+  async getJobArtifacts(jobName, buildNumber) {
+    try {
+      const response = await this.makeJenkinsRequest(
+        'GET',
+        `/job/${encodeURIComponent(jobName)}/${buildNumber}/api/json?tree=artifacts[*]`
+      );
+      
+      const artifacts = response.data.artifacts || [];
+      
+      return {
+        success: true,
+        jobName,
+        buildNumber,
+        artifacts: artifacts.map(artifact => ({
+          fileName: artifact.fileName,
+          relativePath: artifact.relativePath,
+          size: artifact.size || 0,
+          downloadUrl: `${this.jenkinsURL}/job/${encodeURIComponent(jobName)}/${buildNumber}/artifact/${artifact.relativePath}`
+        })),
+        count: artifacts.length
+      };
+    } catch (error) {
+      console.error(`❌ 아티팩트 조회 실패: ${jobName}#${buildNumber}`, error.message);
+      throw new Error(`아티팩트 조회 실패: ${error.message}`);
+    }
+  }
+
+  // [advice from AI] Phase 2: 빌드 파라미터 검증
+  validateBuildParameters(parameters) {
+    const errors = [];
+    
+    if (!parameters.repositoryUrl) {
+      errors.push('Repository URL이 필요합니다');
+    } else {
+      try {
+        new URL(parameters.repositoryUrl);
+      } catch (error) {
+        errors.push('유효하지 않은 Repository URL입니다');
+      }
+    }
+    
+    if (!parameters.branch) {
+      parameters.branch = 'main'; // 기본값 설정
+    }
+    
+    if (parameters.dockerfilePath && !parameters.dockerfilePath.endsWith('Dockerfile')) {
+      errors.push('Dockerfile 경로가 올바르지 않습니다');
+    }
+    
+    if (errors.length > 0) {
+      throw new Error(`빌드 파라미터 검증 실패: ${errors.join(', ')}`);
+    }
+    
+    return true;
+  }
+
+  // [advice from AI] Phase 2: 멀티브랜치 설정 생성
+  generateMultiBranchConfig(config) {
+    return `<?xml version='1.1' encoding='UTF-8'?>
+<org.jenkinsci.plugins.workflow.multibranch.WorkflowMultiBranchProject plugin="workflow-multibranch@2.22">
+  <actions/>
+  <description>${config.description || 'Timbel CICD 멀티브랜치 파이프라인'}</description>
+  <properties>
+    <org.jenkinsci.plugins.pipeline.modeldefinition.config.FolderConfig plugin="pipeline-model-definition@1.8.5">
+      <dockerLabel></dockerLabel>
+      <registry plugin="docker-commons@1.17"/>
+    </org.jenkinsci.plugins.pipeline.modeldefinition.config.FolderConfig>
+  </properties>
+  <folderViews class="jenkins.branch.MultiBranchProjectViewHolder" plugin="branch-api@2.6.4">
+    <owner class="org.jenkinsci.plugins.workflow.multibranch.WorkflowMultiBranchProject" reference="../.."/>
+  </folderViews>
+  <healthMetrics>
+    <com.cloudbees.hudson.plugins.folder.health.WorstChildHealthMetric plugin="cloudbees-folder@6.15">
+      <nonRecursive>false</nonRecursive>
+    </com.cloudbees.hudson.plugins.folder.health.WorstChildHealthMetric>
+  </healthMetrics>
+  <icon class="jenkins.branch.MetadataActionFolderIcon" plugin="branch-api@2.6.4">
+    <owner class="org.jenkinsci.plugins.workflow.multibranch.WorkflowMultiBranchProject" reference="../.."/>
+  </icon>
+  <orphanedItemStrategy class="com.cloudbees.hudson.plugins.folder.computed.DefaultOrphanedItemStrategy" plugin="cloudbees-folder@6.15">
+    <pruneDeadBranches>true</pruneDeadBranches>
+    <daysToKeep>-1</daysToKeep>
+    <numToKeep>-1</numToKeep>
+  </orphanedItemStrategy>
+  <triggers>
+    <com.cloudbees.hudson.plugins.folder.computed.PeriodicFolderTrigger plugin="cloudbees-folder@6.15">
+      <spec>H H * * *</spec>
+      <interval>86400000</interval>
+    </com.cloudbees.hudson.plugins.folder.computed.PeriodicFolderTrigger>
+  </triggers>
+  <disabled>false</disabled>
+  <sources class="jenkins.branch.BranchSource" plugin="branch-api@2.6.4">
+    <source class="jenkins.plugins.git.GitSCMSource" plugin="git@4.8.2">
+      <id>${uuidv4()}</id>
+      <remote>${config.repositoryUrl}</remote>
+      <credentialsId>${config.credentialsId || ''}</credentialsId>
+      <traits>
+        <jenkins.plugins.git.traits.BranchDiscoveryTrait/>
+        <jenkins.plugins.git.traits.OriginPullRequestDiscoveryTrait>
+          <strategyId>1</strategyId>
+        </jenkins.plugins.git.traits.OriginPullRequestDiscoveryTrait>
+        <jenkins.plugins.git.traits.ForkPullRequestDiscoveryTrait>
+          <strategyId>1</strategyId>
+          <trust class="jenkins.plugins.git.traits.ForkPullRequestDiscoveryTrait$TrustPermission"/>
+        </jenkins.plugins.git.traits.ForkPullRequestDiscoveryTrait>
+      </traits>
+    </source>
+    <strategy class="jenkins.branch.DefaultBranchPropertyStrategy">
+      <properties class="empty-list"/>
+    </strategy>
+  </sources>
+  <factory class="org.jenkinsci.plugins.workflow.multibranch.WorkflowBranchProjectFactory">
+    <owner class="org.jenkinsci.plugins.workflow.multibranch.WorkflowMultiBranchProject" reference="../.."/>
+    <scriptPath>Jenkinsfile</scriptPath>
+  </factory>
+</org.jenkinsci.plugins.workflow.multibranch.WorkflowMultiBranchProject>`;
+  }
+
+  // [advice from AI] Phase 2: 연결 테스트
+  async testConnection() {
+    try {
+      console.log(`🔍 Jenkins 연결 테스트: ${this.jenkinsURL}`);
+      
+      const healthResult = await this.checkJenkinsHealth();
+      if (healthResult.status !== 'healthy') {
+        return {
+          success: false,
+          error: 'Jenkins 서버 헬스 체크 실패',
+          details: healthResult
+        };
+      }
+      
+      const jobsResult = await this.listJenkinsJobs();
+      
+      console.log('✅ Jenkins 연결 테스트 성공');
+      return {
+        success: true,
+        server: {
+          url: this.jenkinsURL,
+          version: healthResult.version,
+          user: this.jenkinsUser,
+          mode: healthResult.mode,
+          executors: healthResult.numExecutors
+        },
+        jobs: {
+          count: jobsResult.jobs.length,
+          list: jobsResult.jobs.slice(0, 5).map(job => ({
+            name: job.name,
+            status: job.status,
+            lastBuild: job.lastBuild
+          }))
+        },
+        features: {
+          crumbIssuer: this.crumbToken !== null,
+          blueOcean: await this.checkBlueOceanPlugin(),
+          multiBranch: true,
+          webhooks: true
+        }
+      };
+      
+    } catch (error) {
+      console.error('❌ Jenkins 연결 테스트 실패:', error.message);
+      return {
+        success: false,
+        error: error.message,
+        server: {
+          url: this.jenkinsURL,
+          user: this.jenkinsUser
+        }
+      };
+    }
+  }
+
+  // [advice from AI] Phase 2: Blue Ocean 플러그인 확인
+  async checkBlueOceanPlugin() {
+    try {
+      await this.makeJenkinsRequest('GET', '/blue/rest/organizations/jenkins/');
+      return true;
+    } catch (error) {
+      return false;
     }
   }
 }

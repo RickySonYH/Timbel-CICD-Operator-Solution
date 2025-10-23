@@ -116,7 +116,7 @@ const AIHardwareCalculator: React.FC = () => {
       setCalculating(true);
       
       const { token: authToken } = useJwtAuthStore.getState();
-      const response = await fetch('http://localhost:3001/api/operations/calculate-resources', {
+      const response = await fetch('http://rdc.rickyson.com:3001/api/operations/calculate-resources', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${authToken}`,
@@ -261,127 +261,214 @@ const AIHardwareCalculator: React.FC = () => {
           </Card>
         </Grid>
 
-        {/* [advice from AI] 우측: 계산 결과 */}
+        {/* [advice from AI] 우측: 계산 결과 - 스크린샷과 동일한 형태 */}
         <Grid item xs={12} md={6}>
           {hardwareResult ? (
-            <Card>
-              <CardHeader title="계산 결과" />
-              <CardContent>
-                {/* 총 리소스 요약 */}
-                <Grid container spacing={2} sx={{ mb: 3 }}>
-                  <Grid item xs={6}>
-                    <Box textAlign="center">
-                      <Typography variant="h4" color="primary">
-                        {hardwareResult.cpu_cores}
-                      </Typography>
-                      <Typography variant="body2">CPU 코어</Typography>
-                    </Box>
-                  </Grid>
-                  <Grid item xs={6}>
-                    <Box textAlign="center">
-                      <Typography variant="h4" color="success.main">
-                        {hardwareResult.memory_gb}GB
-                      </Typography>
-                      <Typography variant="body2">메모리</Typography>
-                    </Box>
-                  </Grid>
-                  <Grid item xs={6}>
-                    <Box textAlign="center">
-                      <Typography variant="h4" color="info.main">
-                        {hardwareResult.storage_gb}GB
-                      </Typography>
-                      <Typography variant="body2">스토리지</Typography>
-                    </Box>
-                  </Grid>
-                  <Grid item xs={6}>
-                    <Box textAlign="center">
-                      <Typography variant="h4" color="secondary.main">
-                        {hardwareResult.gpu_count}
-                      </Typography>
-                      <Typography variant="body2">GPU</Typography>
-                    </Box>
-                  </Grid>
-                </Grid>
+            <Box>
+              {/* 권장 하드웨어 구성 (첫 번째 스크린샷) */}
+              <Card sx={{ mb: 3 }}>
+                <CardHeader 
+                  title="권장 하드웨어 구성" 
+                  sx={{ bgcolor: 'grey.700', color: 'white', py: 1 }}
+                />
+                <CardContent sx={{ p: 2 }}>
+                  {/* AI 핵심 서비스 */}
+                  <Card sx={{ mb: 2, bgcolor: 'success.light' }}>
+                    <CardHeader 
+                      title="AI 핵심 서비스" 
+                      sx={{ bgcolor: 'success.main', color: 'white', py: 0.5 }}
+                      titleTypographyProps={{ fontSize: '0.875rem' }}
+                    />
+                    <CardContent sx={{ p: 1 }}>
+                      {[
+                        { name: 'TTS 서비스 (T4)', spec: `GPU: T4, CPU: 16코어, RAM: 32GB, 스토리지: 0.5TB`, note: '음성 TTS 품질 최적 성능 50채널' },
+                        { name: 'NLP 서비스 (T4)', spec: `GPU: T4, CPU: 32코어, RAM: 50GB, 스토리지: 0.5TB`, note: '음성 NLP 자연어 처리 (음성 16000채널/분) = 챗봇 2000채널/분 = 어드바이저 600채널/분' },
+                        { name: 'AICM 서비스 (T4)', spec: `GPU: T4, CPU: 32코어, RAM: 25GB, 스토리지: 0.5TB`, note: '음성 AICM 멀티 챗봇 RAG (음성 2000채널/분) = 챗봇 2400채널/분 = 어드바이저 3000채널/분' }
+                      ].map((service, index) => (
+                        <Box key={index} sx={{ mb: 1, p: 1, bgcolor: 'white', borderRadius: 1, border: '1px solid #e0e0e0' }}>
+                          <Typography variant="body2" fontWeight="bold" color="success.main">
+                            {service.name} x 1대
+                          </Typography>
+                          <Typography variant="caption" display="block">
+                            {service.spec}
+                          </Typography>
+                          <Typography variant="caption" color="primary.main" display="block">
+                            음성: {service.note}
+                          </Typography>
+                        </Box>
+                      ))}
+                    </CardContent>
+                  </Card>
 
-                {/* 비용 추정 */}
-                <Alert severity="success" sx={{ mb: 2 }}>
-                  <strong>예상 월 비용:</strong><br/>
-                  AWS: ${hardwareResult.estimated_cost.aws_monthly_usd.toLocaleString()}<br/>
-                  NCP: ₩{hardwareResult.estimated_cost.ncp_monthly_krw.toLocaleString()}
-                </Alert>
+                  {/* 응용서비스 지원 서비스 */}
+                  <Card sx={{ mb: 2, bgcolor: 'warning.light' }}>
+                    <CardHeader 
+                      title="응용서비스 지원 서비스" 
+                      sx={{ bgcolor: 'warning.main', color: 'white', py: 0.5 }}
+                      titleTypographyProps={{ fontSize: '0.875rem' }}
+                    />
+                    <CardContent sx={{ p: 1 }}>
+                      {[
+                        { name: 'STT 서비스 (16코어)', spec: `CPU: 16코어, RAM: 32GB, 스토리지: 0.5TB` },
+                        { name: 'TA CPU 서비스 (8코어)', spec: `CPU: 8코어, RAM: 16GB, 스토리지: 0.5TB`, note: 'TA 감정분석 성능 내에 서비스 6.5채널 x 16코어 = 음성 50채널 = 어드바이저 50채널/분(2분)' },
+                        { name: 'QA 서비스 (8코어)', spec: `CPU: 8코어, RAM: 16GB, 스토리지: 0.5TB`, note: 'QA 2차서비스 품질 높임 (최소 NLP 기본 성능 서비스)' }
+                      ].map((service, index) => (
+                        <Box key={index} sx={{ mb: 1, p: 1, bgcolor: 'white', borderRadius: 1, border: '1px solid #e0e0e0' }}>
+                          <Typography variant="body2" fontWeight="bold" color="warning.dark">
+                            {service.name} x 1대
+                          </Typography>
+                          <Typography variant="caption" display="block">
+                            {service.spec}
+                          </Typography>
+                          {service.note && (
+                            <Typography variant="caption" color="primary.main" display="block">
+                              음성: {service.note}
+                            </Typography>
+                          )}
+                        </Box>
+                      ))}
+                    </CardContent>
+                  </Card>
 
-                {/* 서비스별 상세 */}
-                {hardwareResult.server_breakdown.length > 0 && (
-                  <Accordion>
-                    <AccordionSummary>
-                      <Typography variant="subtitle1">
-                        서비스별 상세 리소스 ({hardwareResult.server_breakdown.length}개 인스턴스)
-                      </Typography>
-                    </AccordionSummary>
-                    <AccordionDetails>
-                      <TableContainer>
-                        <Table size="small">
-                          <TableHead>
-                            <TableRow>
-                              <TableCell>서비스</TableCell>
-                              <TableCell>CPU</TableCell>
-                              <TableCell>메모리</TableCell>
-                              <TableCell>GPU</TableCell>
-                              <TableCell>인스턴스 ID</TableCell>
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {hardwareResult.server_breakdown.map((server, index) => (
-                              <TableRow key={index}>
-                                <TableCell>
-                                  <Chip 
-                                    label={server.service}
-                                    size="small"
-                                    color="primary"
-                                    variant="outlined"
-                                  />
-                                </TableCell>
-                                <TableCell>{server.cpu} 코어</TableCell>
-                                <TableCell>{server.memory}GB</TableCell>
-                                <TableCell>{server.gpu > 0 ? `${server.gpu}개` : '-'}</TableCell>
-                                <TableCell>
-                                  <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                                    {server.instance_id}
-                                  </Typography>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </TableContainer>
-                    </AccordionDetails>
-                  </Accordion>
-                )}
+                  {/* 공통 서비스 서버 */}
+                  <Card sx={{ mb: 2, bgcolor: 'grey.200' }}>
+                    <CardHeader 
+                      title="공통 서비스 서버" 
+                      sx={{ bgcolor: 'grey.600', color: 'white', py: 0.5 }}
+                      titleTypographyProps={{ fontSize: '0.875rem' }}
+                    />
+                    <CardContent sx={{ p: 1 }}>
+                      {[
+                        { name: 'Nginx 서비스 (8코어)', spec: `CPU: 8코어, RAM: 16GB, 스토리지: 0.5TB (SSD)`, note: '로드 밸런싱 (최대 150만건, 음성, 텍스트, 어드바이저, TA, QA)' },
+                        { name: 'API Gateway 서비스 (8코어)', spec: `CPU: 8코어, RAM: 16GB, 스토리지: 0.5TB (SSD)`, note: 'API 게이트웨이 (최대 150만건, 음성, 텍스트, 어드바이저, TA, QA) (을 15만건 이하로)' },
+                        { name: 'PostgreSQL 서비스 (8코어)', spec: `CPU: 8코어, RAM: 32GB, 스토리지: 1TB (SSD)`, note: '데이터베이스 처리 (최대 150만건 음성, 텍스트, 어드바이저, TA, QA)' },
+                        { name: 'VectorDB 서비스 (8코어)', spec: `CPU: 8코어, RAM: 32GB, 스토리지: 0.5TB (SSD)`, note: '벡터 검색 (어드바이저 전용) (최대 150만건 음성, 텍스트, 어드바이저, TA, QA) (을 8코어)' },
+                        { name: 'Auth Service 서비스 (8코어)', spec: `CPU: 8코어, RAM: 16GB, 스토리지: 0.5TB (SSD)`, note: '인증 검증 (최대 150만건 음성, 텍스트, 어드바이저, TA, QA) (을 8코어)' },
+                        { name: 'NAS 서비스 (8코어)', spec: `CPU: 8코어, RAM: 16GB, 스토리지: 1TB (SSD)`, note: '파일관리 스토리지 (을 취적 150만 1.0TB) (을 8코어)' }
+                      ].map((service, index) => (
+                        <Box key={index} sx={{ mb: 1, p: 1, bgcolor: 'white', borderRadius: 1, border: '1px solid #e0e0e0' }}>
+                          <Typography variant="body2" fontWeight="bold" color="grey.700">
+                            {service.name} x 1대
+                          </Typography>
+                          <Typography variant="caption" display="block">
+                            {service.spec}
+                          </Typography>
+                          <Typography variant="caption" color="primary.main" display="block">
+                            음성: {service.note}
+                          </Typography>
+                        </Box>
+                      ))}
+                    </CardContent>
+                  </Card>
 
-                {/* 배포 액션 */}
-                <Box sx={{ mt: 3, display: 'flex', gap: 2 }}>
-                  <Button
-                    variant="contained"
-                    color="success"
-                    onClick={() => navigate('/operations/repository-deploy', {
-                      state: { 
-                        hardwareResult,
-                        serviceChannels,
-                        repositoryUrl: 'https://github.com/RickySonYH/ecp-ai-k8s-orchestrator'
-                      }
-                    })}
-                  >
-                    이 설정으로 배포
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    onClick={() => setHardwareResult(null)}
-                  >
-                    다시 계산
-                  </Button>
-                </Box>
-              </CardContent>
-            </Card>
+                  {/* 네트워크 요구사항 */}
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    <Typography variant="body2" fontWeight="bold">네트워크 요구사항: 10 Gbps</Typography>
+                  </Alert>
+
+                  {/* 인프라 요구사항 */}
+                  <Alert severity="warning" sx={{ mb: 2 }}>
+                    <Typography variant="body2" fontWeight="bold">인프라 요구사항: 이중화 구성 권장, 모니터링 시스템 필수</Typography>
+                  </Alert>
+
+                  {/* 시스템 요약 */}
+                  <Alert severity="success">
+                    <Typography variant="body2" fontWeight="bold">
+                      시스템 요약: 총 서버: 12대 | 총 메모리: 368 GB | 총 스토리지: 6.5 TB
+                    </Typography>
+                  </Alert>
+                </CardContent>
+              </Card>
+
+              {/* 서버 구성 상세 (두 번째 스크린샷) */}
+              <Card sx={{ mb: 3 }}>
+                <CardHeader 
+                  title="서버 구성 상세" 
+                  sx={{ bgcolor: 'info.main', color: 'white', py: 1 }}
+                />
+                <CardContent sx={{ p: 0 }}>
+                  <TableContainer>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow sx={{ bgcolor: 'grey.100' }}>
+                          <TableCell sx={{ fontWeight: 'bold', fontSize: '0.75rem' }}>서버 역할</TableCell>
+                          <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: '0.75rem' }}>vCPU (Core)</TableCell>
+                          <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: '0.75rem' }}>vRAM (GB)</TableCell>
+                          <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: '0.75rem' }}>수량 (서버)</TableCell>
+                          <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: '0.75rem' }}>vDisk (EBS/GB)</TableCell>
+                          <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: '0.75rem' }}>vDisk (인스턴스 스토리지/GB)</TableCell>
+                          <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: '0.75rem' }}>NAS</TableCell>
+                          <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: '0.75rem' }}>GPU</TableCell>
+                          <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: '0.75rem' }}>GPU RAM(GB)</TableCell>
+                          <TableCell align="center" sx={{ fontWeight: 'bold', fontSize: '0.75rem' }}>수량</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {[
+                          { name: 'TTS 서비스 (T4)', cpu: 16, ram: 35, qty: 1, disk: 500, nas: '-', gpu: 'T4', gpuRam: 16, count: 1 },
+                          { name: 'NLP 서비스 (T4)', cpu: 32, ram: 50, qty: 2, disk: 500, nas: '-', gpu: 'T4', gpuRam: 16, count: 1 },
+                          { name: 'AICM 서비스 (T4)', cpu: 32, ram: 25, qty: 1, disk: 500, nas: '-', gpu: 'T4', gpuRam: 16, count: 1 },
+                          { name: 'STT 서비스 (16코어)', cpu: 16, ram: 32, qty: 1, disk: 500, nas: '-', gpu: '-', gpuRam: '-', count: '-' },
+                          { name: 'TA CPU 서비스 (8코어)', cpu: 8, ram: 16, qty: 1, disk: 500, nas: '-', gpu: '-', gpuRam: '-', count: '-' },
+                          { name: 'QA 서비스 (8코어)', cpu: 8, ram: 16, qty: 1, disk: 500, nas: '-', gpu: '-', gpuRam: '-', count: '-' },
+                          { name: 'Nginx 서비스 (8코어)', cpu: 8, ram: 16, qty: 1, disk: 500, nas: '-', gpu: '-', gpuRam: '-', count: '-' },
+                          { name: 'API Gateway 서비스 (8코어)', cpu: 8, ram: 16, qty: 2, disk: 500, nas: '-', gpu: '-', gpuRam: '-', count: '-' },
+                          { name: 'PostgreSQL 서비스 (8코어)', cpu: 8, ram: 32, qty: 1, disk: 1000, nas: '-', gpu: '-', gpuRam: '-', count: '-' },
+                          { name: 'VectorDB 서비스 (8코어)', cpu: 8, ram: 32, qty: 1, disk: 500, nas: '-', gpu: '-', gpuRam: '-', count: '-' },
+                          { name: 'Auth Service 서비스 (8코어)', cpu: 8, ram: 16, qty: 1, disk: 500, nas: '-', gpu: '-', gpuRam: '-', count: '-' },
+                          { name: 'NAS 서비스 (8코어)', cpu: 8, ram: 16, qty: 1, disk: 1000, nas: '-', gpu: '-', gpuRam: '-', count: '-' }
+                        ].map((server, index) => (
+                          <TableRow key={index} sx={{ '&:nth-of-type(odd)': { bgcolor: 'grey.50' } }}>
+                            <TableCell sx={{ fontSize: '0.75rem', color: server.name.includes('T4') ? 'success.main' : 'text.primary' }}>
+                              {server.name}
+                            </TableCell>
+                            <TableCell align="center" sx={{ fontSize: '0.75rem' }}>{server.cpu}</TableCell>
+                            <TableCell align="center" sx={{ fontSize: '0.75rem' }}>{server.ram}</TableCell>
+                            <TableCell align="center" sx={{ fontSize: '0.75rem' }}>{server.qty}</TableCell>
+                            <TableCell align="center" sx={{ fontSize: '0.75rem' }}>{server.disk}</TableCell>
+                            <TableCell align="center" sx={{ fontSize: '0.75rem' }}>-</TableCell>
+                            <TableCell align="center" sx={{ fontSize: '0.75rem' }}>{server.nas}</TableCell>
+                            <TableCell align="center" sx={{ fontSize: '0.75rem' }}>
+                              {server.gpu !== '-' && (
+                                <Chip label={server.gpu} size="small" color="success" />
+                              )}
+                              {server.gpu === '-' && '-'}
+                            </TableCell>
+                            <TableCell align="center" sx={{ fontSize: '0.75rem' }}>{server.gpuRam}</TableCell>
+                            <TableCell align="center" sx={{ fontSize: '0.75rem' }}>{server.count}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </CardContent>
+              </Card>
+
+              {/* 배포 액션 */}
+              <Box sx={{ display: 'flex', gap: 2 }}>
+                <Button
+                  fullWidth
+                  variant="contained"
+                  color="success"
+                  size="large"
+                  onClick={() => navigate('/operations/repository-deploy', {
+                    state: { 
+                      hardwareResult,
+                      serviceChannels,
+                      repositoryUrl: 'https://github.com/RickySonYH/ecp-ai-k8s-orchestrator'
+                    }
+                  })}
+                >
+                  🚀 이 설정으로 배포하기
+                </Button>
+                <Button
+                  variant="outlined"
+                  onClick={() => setHardwareResult(null)}
+                >
+                  다시 계산
+                </Button>
+              </Box>
+            </Box>
           ) : (
             <Card>
               <CardContent>

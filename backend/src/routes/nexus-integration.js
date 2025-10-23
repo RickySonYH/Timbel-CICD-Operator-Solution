@@ -89,17 +89,22 @@ class NexusAPI {
 // [advice from AI] Nexus 설정 조회 및 API 인스턴스 생성
 async function getNexusAPI() {
   const result = await pool.query(`
-    SELECT endpoint_url, username, password 
-    FROM monitoring_configurations 
-    WHERE config_type = 'nexus' AND status = 'connected'
-    LIMIT 1
+    SELECT config_value 
+    FROM system_configurations 
+    WHERE category = 'nexus' AND config_key IN ('nexus_url', 'nexus_username', 'nexus_password')
   `);
 
   if (result.rows.length === 0) {
     throw new Error('연결된 Nexus 서버가 없습니다.');
   }
 
-  const config = result.rows[0];
+  const config = {};
+  result.rows.forEach(row => {
+    if (row.config_key === 'nexus_url') config.endpoint_url = row.config_value;
+    if (row.config_key === 'nexus_username') config.username = row.config_value;
+    if (row.config_key === 'nexus_password') config.password = row.config_value;
+  });
+
   return new NexusAPI(config.endpoint_url, config.username, config.password);
 }
 
@@ -112,6 +117,7 @@ router.get('/repositories', jwtAuth.verifyToken, async (req, res) => {
     res.json({
       success: true,
       repositories: result.repositories || [],
+      total: result.repositories ? result.repositories.length : 0,
       nexus_url: nexusAPI.baseUrl
     });
 
