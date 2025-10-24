@@ -1097,7 +1097,7 @@ router.get('/monitoring/tenants/:tenantId/status', async (req, res) => {
   }
 });
 
-// [advice from AI] 메트릭 수집 (ECP-AI 스타일 시계열 데이터)
+// [advice from AI] 메트릭 수집 (Prometheus 실제 연동)
 router.get('/monitoring/tenants/:tenantId/metrics', async (req, res) => {
   try {
     const { tenantId } = req.params;
@@ -1111,18 +1111,20 @@ router.get('/monitoring/tenants/:tenantId/metrics', async (req, res) => {
       });
     }
 
-    console.log('메트릭 수집:', { tenantId, timeRange });
+    console.log('📊 메트릭 수집 요청:', { tenantId, timeRange });
 
-    const result = await monitoringService.collectMetrics(tenantId, timeRange);
+    // [advice from AI] 실제 Prometheus 연동 메서드 호출
+    const result = await monitoringService.collectMetricsFromPrometheus(tenantId, timeRange);
     
     res.json({
       success: true,
       data: result.data,
-      message: result.message
+      message: result.message,
+      source: result.data.source // 'prometheus' 또는 'mock'
     });
 
   } catch (error) {
-    console.error('메트릭 수집 API 오류:', error);
+    console.error('❌ 메트릭 수집 API 오류:', error);
     res.status(500).json({
       success: false,
       error: 'Internal Server Error',

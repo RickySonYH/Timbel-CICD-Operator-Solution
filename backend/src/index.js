@@ -46,31 +46,15 @@ const MonitoringScheduler = require('./services/monitoringScheduler');
 // 미들웨어 설정
 dotenv.config();
 
-// [advice from AI] PostgreSQL 연결 설정 - 데이터베이스 분리
-// 지식자원 관리 DB (사용자, 프로젝트, 승인 등)
-const knowledgePool = new Pool({
-  user: process.env.DB_USER || 'timbel_user',
-  host: process.env.DB_HOST || 'postgres',
-  database: 'timbel_knowledge',
-  password: process.env.DB_PASSWORD || 'timbel_password',
-  port: process.env.DB_PORT || 5432,
-});
-
-// 운영센터 관리 DB (CI/CD, 클러스터, 모니터링 등)
-const operationsPool = new Pool({
-  user: process.env.DB_USER || 'timbel_user',
-  host: process.env.DB_HOST || 'postgres',
-  database: 'timbel_cicd_operator',
-  password: process.env.DB_PASSWORD || 'timbel_password',
-  port: process.env.DB_PORT || 5432,
-});
-
-// 하위 호환성을 위한 기본 pool (operations DB 사용)
-const pool = operationsPool;
+// [advice from AI] PostgreSQL 연결 설정 - DatabaseManager 사용
+const { databaseManager } = require('./config/database');
 
 // [advice from AI] 데이터베이스 풀을 전역적으로 사용할 수 있도록 내보내기
-global.knowledgePool = knowledgePool;
-global.operationsPool = operationsPool;
+global.knowledgePool = databaseManager.getPool('knowledge');
+global.operationsPool = databaseManager.getPool('operations');
+const knowledgePool = global.knowledgePool;
+const operationsPool = global.operationsPool;
+const pool = operationsPool; // 하위 호환성
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -438,7 +422,38 @@ app.use('/api/argocd', require('./routes/argocd-automation'));
 app.use('/api/prometheus', require('./routes/prometheus-integration'));
 app.use('/api/issues', require('./routes/issues-management'));
 app.use('/api/pipeline-templates', require('./routes/pipeline-templates'));
+app.use('/api/pipeline-history', require('./routes/pipeline-history'));
+app.use('/api/rollback', require('./routes/rollback'));
+app.use('/api/slack', require('./routes/slack-notifications'));
+app.use('/api/email', require('./routes/email-notifications'));
+app.use('/api/audit', require('./routes/audit-logs'));
+app.use('/api/backup', require('./routes/database-backup'));
 app.use('/api/github', require('./routes/github-webhooks'));
+app.use('/api/cluster-monitor', require('./routes/cluster-resource-monitor'));
+app.use('/api/multi-cluster', require('./routes/multi-cluster-deployment'));
+app.use('/api/alert-rules', require('./routes/alert-rules'));
+app.use('/api/hpa', require('./routes/kubernetes-hpa'));
+app.use('/api/rate-limit', require('./routes/rate-limit-admin'));
+app.use('/api/sla', require('./routes/sla-monitoring'));
+app.use('/api/security/scan', require('./routes/security-scan'));
+app.use('/api/tenants', require('./routes/tenants'));
+
+// [advice from AI] API 버전 관리 활성화
+const apiVersioning = require('./middleware/apiVersioning');
+app.use(apiVersioning.extractVersion());
+
+// API v1, v2 라우터
+app.use('/api/v1', require('./routes/v1'));
+app.use('/api/v2', require('./routes/v2'));
+
+// [advice from AI] 고급 Rate Limiting 활성화 (선택적)
+const rateLimiter = require('./middleware/advancedRateLimiter');
+if (rateLimiter.enabled) {
+  app.use(rateLimiter.checkLimit());
+  console.log('✅ 고급 Rate Limiting 활성화');
+} else {
+  console.log('ℹ️  Rate Limiting 비활성화 (개발 모드)');
+}
 
 // [advice from AI] 운영센터 통합 라우트 (중복 제거)
 app.use('/api/operations', require('./routes/operations'));
@@ -686,8 +701,31 @@ const certificateMonitoringService = require('./services/certificateMonitoringSe
 // [advice from AI] KIND 클러스터 자동 감지 유틸리티
 const { registerKindCluster } = require('./utils/detect-kind-cluster');
 
+// [advice from AI] 알림 규칙 엔진
+const alertRuleEngine = require('./services/alertRuleEngine');
+
+// [advice from AI] WebSocket 서버 설정
+const http = require('http');
+const { WebSocketServer } = require('ws');
+const { setupLogStreamHandler } = require('./websocket/logStreamHandler');
+
+const server = http.createServer(app);
+
+// WebSocket 서버 생성
+const wss = new WebSocketServer({ 
+  server,
+  path: '/ws/logs',
+  verifyClient: (info, callback) => {
+    // 향후 JWT 토큰 검증 추가 가능
+    callback(true);
+  }
+});
+
+// WebSocket 핸들러 설정
+setupLogStreamHandler(wss);
+
 // [advice from AI] 포트 사용 중 에러 처리
-const server = app.listen(PORT, async () => {
+server.listen(PORT, async () => {
   console.log(`🚀 Timbel 플랫폼 서버가 포트 ${PORT}에서 실행 중입니다`);
   console.log(`📊 환경: ${process.env.NODE_ENV}`);
   console.log(`🔗 헬스체크: http://localhost:${PORT}/health`);
@@ -695,6 +733,7 @@ const server = app.listen(PORT, async () => {
   console.log(`📁 프로젝트 API: http://localhost:${PORT}/api/projects`);
   console.log(`🔧 개발 환경 API: http://localhost:${PORT}/api/dev-environment`);
   console.log(`🛡️ 에러 관리 API: http://localhost:${PORT}/api/admin/error-management`);
+  console.log(`📡 WebSocket 로그 스트리밍: ws://localhost:${PORT}/ws/logs`);
   
   console.log(`\n🛡️ 프로덕션 레벨 에러 처리 시스템:`);
   console.log(`   🔌 Circuit Breaker: ${circuitBreakerManager.getAllStates().globalStats.totalBreakers}개 활성화`);
@@ -750,6 +789,19 @@ const server = app.listen(PORT, async () => {
     certificateMonitoringService.start();
   } catch (error) {
     console.error('❌ 인증서 모니터링 서비스 시작 오류:', error);
+  }
+
+  // [advice from AI] 알림 규칙 엔진 시작
+  if (process.env.ENABLE_ALERT_ENGINE !== 'false') {
+    try {
+      alertRuleEngine.start();
+      console.log(`🚨 알림 규칙 엔진이 시작되었습니다`);
+      console.log(`   ⏱️  평가 주기: 60초`);
+      console.log(`   📊 임계값 기반 알림`);
+      console.log(`   📬 Slack/Email 통합`);
+    } catch (error) {
+      console.error(`⚠️ 알림 규칙 엔진 시작 실패:`, error.message);
+    }
   }
 });
 

@@ -120,22 +120,154 @@ class ComponentAnalyzer {
   }
 
   /**
-   * 파일 구조 분석
+   * 파일 구조 분석 - 실제 GitHub API 연동
    * @param {Object} repositoryData - 레포지토리 데이터
    * @returns {Promise<Array>} - 파일 구조 정보
    */
   async analyzeFileStructure(repositoryData) {
-    // 실제 구현에서는 Git API를 통해 파일 목록을 가져옴
-    // 여기서는 시뮬레이션 데이터를 사용
-    return this.simulateFileStructure(repositoryData);
+    try {
+      console.log('🔍 GitHub API로 파일 구조 분석 시작');
+      
+      // GitHub URL에서 owner/repo 추출
+      const { owner, repo } = this.parseGitHubUrl(repositoryData.url);
+      
+      if (!owner || !repo) {
+        console.warn('⚠️ GitHub URL 파싱 실패, 시뮬레이션 사용');
+        return this.simulateFileStructure(repositoryData);
+      }
+      
+      // 실제 GitHub API 호출
+      const files = await this.fetchGitHubFileTree(owner, repo);
+      
+      if (files && files.length > 0) {
+        console.log(`✅ GitHub에서 ${files.length}개 파일 조회 완료`);
+        return files;
+      }
+      
+      // Fallback to simulation
+      console.warn('⚠️ GitHub API 결과 없음, 시뮬레이션 사용');
+      return this.simulateFileStructure(repositoryData);
+      
+    } catch (error) {
+      console.error('❌ GitHub API 호출 실패:', error.message);
+      console.warn('⚠️ 시뮬레이션으로 Fallback');
+      return this.simulateFileStructure(repositoryData);
+    }
   }
 
   /**
-   * 파일 구조 시뮬레이션 (실제 구현에서는 Git API 사용)
+   * GitHub URL 파싱
+   * @param {string} url - GitHub URL
+   * @returns {Object} - owner와 repo
+   */
+  parseGitHubUrl(url) {
+    try {
+      // https://github.com/owner/repo 형식
+      const match = url.match(/github\.com[:/]([^/]+)\/([^/.]+)/);
+      if (match) {
+        return {
+          owner: match[1],
+          repo: match[2]
+        };
+      }
+      return {};
+    } catch (error) {
+      console.error('URL 파싱 오류:', error);
+      return {};
+    }
+  }
+
+  /**
+   * GitHub API로 파일 트리 조회
+   * @param {string} owner - Repository owner
+   * @param {string} repo - Repository name
+   * @returns {Promise<Array>} - 파일 목록
+   */
+  async fetchGitHubFileTree(owner, repo, path = '') {
+    try {
+      const axios = require('axios');
+      const githubToken = process.env.GITHUB_TOKEN || process.env.GITHUB_API_TOKEN;
+      
+      const headers = {
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'Timbel-CICD-Operator'
+      };
+      
+      if (githubToken) {
+        headers['Authorization'] = `token ${githubToken}`;
+      }
+      
+      const url = `https://api.github.com/repos/${owner}/${repo}/git/trees/main?recursive=1`;
+      
+      const response = await axios.get(url, {
+        headers,
+        timeout: 10000
+      });
+      
+      if (response.data && response.data.tree) {
+        // 파일만 필터링 (디렉토리 제외)
+        const files = response.data.tree
+          .filter(item => item.type === 'blob')
+          .map(item => item.path)
+          .slice(0, 500); // 최대 500개 파일
+        
+        console.log(`✅ GitHub Tree API: ${files.length}개 파일 조회`);
+        return files;
+      }
+      
+      return [];
+      
+    } catch (error) {
+      // main 브랜치가 없으면 master 시도
+      if (error.response?.status === 404) {
+        try {
+          console.log('main 브랜치 없음, master 시도...');
+          const axios = require('axios');
+          const githubToken = process.env.GITHUB_TOKEN || process.env.GITHUB_API_TOKEN;
+          
+          const headers = {
+            'Accept': 'application/vnd.github.v3+json',
+            'User-Agent': 'Timbel-CICD-Operator'
+          };
+          
+          if (githubToken) {
+            headers['Authorization'] = `token ${githubToken}`;
+          }
+          
+          const url = `https://api.github.com/repos/${owner}/${repo}/git/trees/master?recursive=1`;
+          
+          const response = await axios.get(url, {
+            headers,
+            timeout: 10000
+          });
+          
+          if (response.data && response.data.tree) {
+            const files = response.data.tree
+              .filter(item => item.type === 'blob')
+              .map(item => item.path)
+              .slice(0, 500);
+            
+            console.log(`✅ GitHub Tree API (master): ${files.length}개 파일 조회`);
+            return files;
+          }
+          
+        } catch (masterError) {
+          console.warn('⚠️ master 브랜치도 실패:', masterError.message);
+        }
+      }
+      
+      throw error;
+    }
+  }
+
+  /**
+   * 파일 구조 시뮬레이션 (Fallback)
    * @param {Object} repositoryData - 레포지토리 데이터
    * @returns {Array} - 파일 구조 정보
    */
   simulateFileStructure(repositoryData) {
+    console.warn('⚠️ Mock 파일 구조 사용 중 - GitHub API 연결 확인 필요');
+    
     const repoName = this.extractRepoName(repositoryData.url);
     
     // 일반적인 프로젝트 구조 시뮬레이션

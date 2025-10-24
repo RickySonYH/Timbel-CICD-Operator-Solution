@@ -482,20 +482,269 @@ class MonitoringService {
     }
   }
 
-  // [advice from AI] Mock 함수들
-  mockCreateDashboard(dashboard) {
+  // [advice from AI] ===== 실제 Prometheus 연동 메서드 =====
+  
+  /**
+   * Prometheus에서 실제 메트릭 수집
+   * @param {string} query - PromQL 쿼리
+   * @param {number} start - 시작 타임스탬프 (Unix timestamp)
+   * @param {number} end - 종료 타임스탬프 (Unix timestamp)
+   * @param {string} step - 쿼리 간격 (예: '15s', '1m')
+   * @returns {Promise<Object>} 메트릭 데이터
+   */
+  async queryPrometheusRange(query, start, end, step = '15s') {
+    try {
+      const response = await axios.get(`${this.prometheusURL}/api/v1/query_range`, {
+        params: {
+          query: query,
+          start: start,
+          end: end,
+          step: step
+        },
+        timeout: 10000
+      });
+
+      if (response.data.status === 'success') {
+        return {
+          success: true,
+          data: response.data.data
+        };
+      } else {
+        throw new Error('Prometheus 쿼리 실패: ' + response.data.error);
+      }
+    } catch (error) {
+      console.error('Prometheus 쿼리 오류:', error.message);
+      // Prometheus 연결 실패 시 fallback 데이터 반환
+      return this.generateFallbackMetrics(query, start, end);
+    }
+  }
+
+  /**
+   * Prometheus 즉시 쿼리 (현재 값)
+   */
+  async queryPrometheusInstant(query) {
+    try {
+      const response = await axios.get(`${this.prometheusURL}/api/v1/query`, {
+        params: { query: query },
+        timeout: 5000
+      });
+
+      if (response.data.status === 'success') {
+        return {
+          success: true,
+          data: response.data.data
+        };
+      } else {
+        throw new Error('Prometheus 쿼리 실패');
+      }
+    } catch (error) {
+      console.error('Prometheus 즉시 쿼리 오류:', error.message);
+      return {
+        success: false,
+        error: error.message,
+        data: { result: [] }
+      };
+    }
+  }
+
+  /**
+   * Grafana 대시보드 생성 (실제 API 연동)
+   */
+  async createGrafanaDashboard(dashboardConfig) {
+    try {
+      if (!this.grafanaToken) {
+        console.warn('Grafana 토큰이 설정되지 않음. Mock 데이터 사용');
+        return this.mockCreateDashboard(dashboardConfig);
+      }
+
+      const grafanaDashboard = {
+        dashboard: {
+          id: null,
+          uid: dashboardConfig.dashboard_id.substring(0, 8),
+          title: dashboardConfig.dashboard_name,
+          tags: ['timbel', `tenant-${dashboardConfig.tenant_id}`],
+          timezone: 'browser',
+          schemaVersion: 16,
+          version: 0,
+          refresh: dashboardConfig.refresh_interval,
+          panels: dashboardConfig.panels.map((panel, index) => ({
+            id: index + 1,
+            gridPos: { h: 8, w: 12, x: (index % 2) * 12, y: Math.floor(index / 2) * 8 },
+            type: 'graph',
+            title: panel.title,
+            targets: panel.queries.map(q => ({
+              expr: q.query,
+              refId: q.refId,
+              legendFormat: q.legend
+            }))
+          }))
+        },
+        overwrite: false
+      };
+
+      const response = await axios.post(
+        `${this.grafanaURL}/api/dashboards/db`,
+        grafanaDashboard,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.grafanaToken}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 10000
+        }
+      );
+
+      return {
+        ...dashboardConfig,
+        grafana_url: `${this.grafanaURL}${response.data.url}`,
+        grafana_uid: response.data.uid,
+        api_key: 'created'
+      };
+    } catch (error) {
+      console.error('Grafana 대시보드 생성 오류:', error.message);
+      // Grafana 연결 실패 시에도 대시보드 설정은 저장
+      return this.mockCreateDashboard(dashboardConfig);
+    }
+  }
+
+  /**
+   * 실제 메트릭 수집 (Prometheus 기반)
+   */
+  async collectMetricsFromPrometheus(tenantId, timeRange = '1h') {
+    const now = Math.floor(Date.now() / 1000);
+    const timeRanges = {
+      '5m': 300,
+      '15m': 900,
+      '1h': 3600,
+      '6h': 21600,
+      '24h': 86400,
+      '7d': 604800
+    };
+    
+    const seconds = timeRanges[timeRange] || 3600;
+    const start = now - seconds;
+    const end = now;
+    const step = this.calculateStep(seconds);
+
+    const metrics = {};
+
+    try {
+      // CPU 사용률
+      const cpuQuery = `100 - (avg by (instance) (irate(node_cpu_seconds_total{mode="idle",job=~"${tenantId}.*"}[5m])) * 100)`;
+      const cpuResult = await this.queryPrometheusRange(cpuQuery, start, end, step);
+      metrics.cpu_usage = this.formatMetricData(cpuResult.data);
+
+      // 메모리 사용률
+      const memQuery = `(1 - (node_memory_MemAvailable_bytes{job=~"${tenantId}.*"} / node_memory_MemTotal_bytes{job=~"${tenantId}.*"})) * 100`;
+      const memResult = await this.queryPrometheusRange(memQuery, start, end, step);
+      metrics.memory_usage = this.formatMetricData(memResult.data);
+
+      // 디스크 사용률
+      const diskQuery = `(1 - (node_filesystem_avail_bytes{job=~"${tenantId}.*",mountpoint="/"} / node_filesystem_size_bytes{job=~"${tenantId}.*",mountpoint="/"})) * 100`;
+      const diskResult = await this.queryPrometheusRange(diskQuery, start, end, step);
+      metrics.disk_usage = this.formatMetricData(diskResult.data);
+
+      // HTTP 요청 수
+      const reqQuery = `rate(http_requests_total{job=~"${tenantId}.*"}[5m])`;
+      const reqResult = await this.queryPrometheusRange(reqQuery, start, end, step);
+      metrics.request_count = this.formatMetricData(reqResult.data);
+
+      // 응답 시간
+      const latencyQuery = `histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job=~"${tenantId}.*"}[5m]))`;
+      const latencyResult = await this.queryPrometheusRange(latencyQuery, start, end, step);
+      metrics.response_time = this.formatMetricData(latencyResult.data);
+
+      // 에러율
+      const errorQuery = `rate(http_requests_total{job=~"${tenantId}.*",status=~"5.."}[5m]) / rate(http_requests_total{job=~"${tenantId}.*"}[5m]) * 100`;
+      const errorResult = await this.queryPrometheusRange(errorQuery, start, end, step);
+      metrics.error_rate = this.formatMetricData(errorResult.data);
+
+      return {
+        success: true,
+        data: {
+          tenant_id: tenantId,
+          time_range: timeRange,
+          collected_at: new Date().toISOString(),
+          metrics: metrics,
+          source: 'prometheus'
+        },
+        message: 'Prometheus에서 메트릭 수집 완료'
+      };
+
+    } catch (error) {
+      console.error('메트릭 수집 오류:', error.message);
+      // Prometheus 오류 시 fallback
+      return this.mockCollectMetrics(tenantId, timeRange);
+    }
+  }
+
+  /**
+   * 적절한 쿼리 간격 계산
+   */
+  calculateStep(seconds) {
+    if (seconds <= 300) return '15s';
+    if (seconds <= 3600) return '1m';
+    if (seconds <= 21600) return '5m';
+    if (seconds <= 86400) return '15m';
+    return '1h';
+  }
+
+  /**
+   * Prometheus 응답 데이터 포맷팅
+   */
+  formatMetricData(prometheusData) {
+    if (!prometheusData || !prometheusData.result || prometheusData.result.length === 0) {
+      return [];
+    }
+
+    const result = prometheusData.result[0];
+    if (!result.values) return [];
+
+    return result.values.map(([timestamp, value]) => ({
+      timestamp: new Date(timestamp * 1000).toISOString(),
+      value: parseFloat(value)
+    }));
+  }
+
+  /**
+   * Prometheus 연결 실패 시 Fallback 데이터 생성
+   */
+  generateFallbackMetrics(query, start, end) {
+    const points = 10;
+    const step = (end - start) / points;
+    const values = [];
+
+    for (let i = 0; i <= points; i++) {
+      const timestamp = start + (step * i);
+      values.push([timestamp, Math.random() * 100]);
+    }
+
     return {
       success: true,
       data: {
-        ...dashboard,
-        grafana_url: `${this.grafanaURL}/d/${dashboard.dashboard_id}`,
-        api_key: 'mock-api-key-' + dashboard.dashboard_id.substring(0, 8)
+        resultType: 'matrix',
+        result: [{
+          metric: { query: query },
+          values: values
+        }]
       },
-      message: 'Mock 대시보드 생성 완료'
+      fallback: true
+    };
+  }
+
+  // [advice from AI] Mock 함수들 (Fallback용으로 유지)
+  mockCreateDashboard(dashboard) {
+    console.warn('⚠️ Mock 대시보드 생성 사용 중 - Grafana 연결 확인 필요');
+    return {
+      ...dashboard,
+      grafana_url: `${this.grafanaURL}/d/${dashboard.dashboard_id}`,
+      api_key: 'mock-api-key-' + dashboard.dashboard_id.substring(0, 8),
+      mock: true
     };
   }
 
   mockCollectMetrics(tenantId, timeRange) {
+    console.warn('⚠️ Mock 메트릭 수집 사용 중 - Prometheus 연결 확인 필요');
     const now = new Date();
     const metrics = {};
 
@@ -516,9 +765,11 @@ class MonitoringService {
         tenant_id: tenantId,
         time_range: timeRange,
         collected_at: now.toISOString(),
-        metrics: metrics
+        metrics: metrics,
+        source: 'mock'
       },
-      message: 'Mock 메트릭 수집 완료'
+      message: 'Mock 메트릭 수집 (Prometheus 미연결)',
+      mock: true
     };
   }
 

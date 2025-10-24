@@ -94,19 +94,22 @@ class DatabaseManager {
       });
       
       pool.on('acquire', (client) => {
-        console.log(`🔗 ${name} DB 연결 획득: ${client.processID}`);
+        const pid = client && client.processID ? client.processID : 'unknown';
+        console.log(`🔗 ${name} DB 연결 획득: ${pid}`);
         this.metrics.activeConnections++;
         this.metrics.idleConnections--;
       });
       
       pool.on('release', (client) => {
-        console.log(`🔓 ${name} DB 연결 해제: ${client.processID}`);
+        const pid = client && client.processID ? client.processID : 'unknown';
+        console.log(`🔓 ${name} DB 연결 해제: ${pid}`);
         this.metrics.activeConnections--;
         this.metrics.idleConnections++;
       });
       
       pool.on('remove', (client) => {
-        console.log(`❌ ${name} DB 연결 제거: ${client.processID}`);
+        const pid = client && client.processID ? client.processID : 'unknown';
+        console.log(`❌ ${name} DB 연결 제거: ${pid}`);
         this.metrics.totalConnections--;
       });
       
@@ -383,5 +386,7 @@ process.on('SIGTERM', async () => {
 
 module.exports = {
   databaseManager,
-  DatabaseManager
+  DatabaseManager,
+  knowledgePool: databaseManager.getPool('knowledge'),
+  operationsPool: databaseManager.getPool('operations')
 };

@@ -111,34 +111,44 @@ const ExecutiveDashboard: React.FC = () => {
   const [projectStatuses, setProjectStatuses] = useState<ProjectStatus[]>([]);
   const [deploymentHistory, setDeploymentHistory] = useState<DeploymentHistoryItem[]>([]);
 
-  // [advice from AI] 경영진 메트릭 로드 (실제 데이터 통합)
+  // [advice from AI] 경영진 메트릭 로드 (실제 데이터 통합) - 성능 최적화
   const loadExecutiveMetrics = async () => {
     try {
       setLoading(true);
       
       const { token: authToken } = useJwtAuthStore.getState();
       
+      // [advice from AI] 타임아웃 설정 (5초)
+      const fetchWithTimeout = (url: string, options: RequestInit, timeout = 5000) => {
+        return Promise.race([
+          fetch(url, options),
+          new Promise<Response>((_, reject) =>
+            setTimeout(() => reject(new Error('Request timeout')), timeout)
+          )
+        ]);
+      };
+      
       // 지식자원 카탈로그, 운영센터, 클러스터 데이터를 모두 가져와서 통합
-      const [knowledgeRes, operationsRes, clusterStatsRes, deploymentHistoryRes] = await Promise.all([
-        fetch('/api/knowledge/catalog-stats', {
+      const [knowledgeRes, operationsRes, clusterStatsRes, deploymentHistoryRes] = await Promise.allSettled([
+        fetchWithTimeout('/api/knowledge/catalog-stats', {
           headers: {
             'Authorization': `Bearer ${authToken}`,
             'Content-Type': 'application/json'
           }
         }),
-        fetch('/api/operations/dashboard-stats', {
+        fetchWithTimeout('/api/operations/dashboard-stats', {
           headers: {
             'Authorization': `Bearer ${authToken}`,
             'Content-Type': 'application/json'
           }
         }),
-        fetch('http://localhost:3001/api/clusters/clusters/statistics', {
+        fetchWithTimeout('/api/clusters/clusters/statistics', {
           headers: {
             'Authorization': `Bearer ${authToken}`,
             'Content-Type': 'application/json'
           }
         }),
-        fetch('/api/operations/deployment-history?limit=5', {
+        fetchWithTimeout('/api/operations/deployment-history?limit=5', {
           headers: {
             'Authorization': `Bearer ${authToken}`,
             'Content-Type': 'application/json'
@@ -151,20 +161,29 @@ const ExecutiveDashboard: React.FC = () => {
       let clusterStatsData = null;
       let deploymentHistoryData = null;
 
-      if (knowledgeRes.ok) {
-        knowledgeData = await knowledgeRes.json();
+      // [advice from AI] Promise.allSettled 결과 처리
+      if (knowledgeRes.status === 'fulfilled' && knowledgeRes.value.ok) {
+        knowledgeData = await knowledgeRes.value.json();
+      } else if (knowledgeRes.status === 'rejected') {
+        console.warn('지식자원 데이터 로드 실패:', knowledgeRes.reason);
       }
 
-      if (operationsRes.ok) {
-        operationsData = await operationsRes.json();
+      if (operationsRes.status === 'fulfilled' && operationsRes.value.ok) {
+        operationsData = await operationsRes.value.json();
+      } else if (operationsRes.status === 'rejected') {
+        console.warn('운영센터 데이터 로드 실패:', operationsRes.reason);
       }
 
-      if (clusterStatsRes.ok) {
-        clusterStatsData = await clusterStatsRes.json();
+      if (clusterStatsRes.status === 'fulfilled' && clusterStatsRes.value.ok) {
+        clusterStatsData = await clusterStatsRes.value.json();
+      } else if (clusterStatsRes.status === 'rejected') {
+        console.warn('클러스터 통계 로드 실패:', clusterStatsRes.reason);
       }
 
-      if (deploymentHistoryRes.ok) {
-        deploymentHistoryData = await deploymentHistoryRes.json();
+      if (deploymentHistoryRes.status === 'fulfilled' && deploymentHistoryRes.value.ok) {
+        deploymentHistoryData = await deploymentHistoryRes.value.json();
+      } else if (deploymentHistoryRes.status === 'rejected') {
+        console.warn('배포 이력 로드 실패:', deploymentHistoryRes.reason);
       }
 
       // [advice from AI] 통합 메트릭 생성 (운영 중심, 클러스터 포함)

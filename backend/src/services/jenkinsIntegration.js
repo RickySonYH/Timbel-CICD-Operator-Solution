@@ -588,8 +588,314 @@ pipeline {
 }`;
   }
 
+  // [advice from AI] 실제 Docker Registry API 연동 - 이미지 목록 조회
+  async getAvailableImages(registryUrl, registryType, credentials = {}) {
+    try {
+      console.log(`📦 Docker Registry 이미지 조회: ${registryUrl} (${registryType})`);
+      
+      // Registry 타입별 API 엔드포인트 결정
+      let apiUrl;
+      let authHeaders = {};
+      
+      if (registryType === 'harbor') {
+        // Harbor v2 API
+        apiUrl = `${registryUrl}/api/v2.0/projects`;
+        if (credentials.username && credentials.password) {
+          authHeaders = {
+            'Authorization': `Basic ${Buffer.from(`${credentials.username}:${credentials.password}`).toString('base64')}`
+          };
+        }
+      } else if (registryType === 'docker-hub') {
+        // Docker Hub API
+        apiUrl = `https://registry.hub.docker.com/v2/repositories/${credentials.namespace || 'library'}`;
+      } else {
+        // Docker Registry V2 API (기본)
+        apiUrl = `${registryUrl}/v2/_catalog`;
+        if (credentials.username && credentials.password) {
+          authHeaders = {
+            'Authorization': `Basic ${Buffer.from(`${credentials.username}:${credentials.password}`).toString('base64')}`
+          };
+        }
+      }
+      
+      const response = await axios.get(apiUrl, {
+        headers: authHeaders,
+        timeout: 10000,
+        httpsAgent: new https.Agent({
+          rejectUnauthorized: process.env.DOCKER_REGISTRY_VERIFY_SSL !== 'false'
+        })
+      });
+      
+      let images = [];
+      
+      // 응답 파싱 (Registry 타입별)
+      if (registryType === 'harbor') {
+        // Harbor: 프로젝트 목록에서 레포지토리 조회
+        const projects = response.data || [];
+        for (const project of projects.slice(0, 10)) { // 최대 10개 프로젝트
+          try {
+            const reposResponse = await axios.get(
+              `${registryUrl}/api/v2.0/projects/${project.name}/repositories`,
+              { headers: authHeaders, timeout: 5000 }
+            );
+            
+            const repos = reposResponse.data || [];
+            for (const repo of repos) {
+              // 각 레포지토리의 태그 조회
+              const tags = await this.getRegistryImageTags(
+                registryUrl,
+                repo.name,
+                'harbor',
+                credentials
+              );
+              
+              images.push({
+                name: repo.name,
+                tags: tags.slice(0, 5), // 최근 5개 태그
+                size: repo.size || 'N/A',
+                pull_time: repo.pull_time || null,
+                update_time: repo.update_time || null
+              });
+            }
+          } catch (repoError) {
+            console.warn(`⚠️ Harbor 프로젝트 ${project.name} 조회 실패:`, repoError.message);
+          }
+        }
+      } else if (registryType === 'docker-hub') {
+        // Docker Hub
+        const repos = response.data.results || [];
+        images = repos.slice(0, 20).map(repo => ({
+          name: repo.name,
+          tags: ['latest'], // Docker Hub API는 별도 호출 필요
+          size: 'N/A',
+          description: repo.description || '',
+          star_count: repo.star_count || 0
+        }));
+      } else {
+        // Docker Registry V2
+        const repositories = response.data.repositories || [];
+        for (const repoName of repositories.slice(0, 20)) {
+          try {
+            const tags = await this.getRegistryImageTags(
+              registryUrl,
+              repoName,
+              'docker-registry',
+              credentials
+            );
+            
+            images.push({
+              name: repoName,
+              tags: tags.slice(0, 5),
+              size: 'N/A'
+            });
+          } catch (tagError) {
+            console.warn(`⚠️ 태그 조회 실패 (${repoName}):`, tagError.message);
+            images.push({
+              name: repoName,
+              tags: ['latest'],
+              size: 'N/A'
+            });
+          }
+        }
+      }
+      
+      console.log(`✅ Docker Registry 이미지 조회 완료: ${images.length}개`);
+      
+      return {
+        success: true,
+        data: {
+          registry: registryUrl,
+          type: registryType,
+          images: images,
+          total: images.length,
+          last_updated: new Date().toISOString()
+        },
+        message: `${registryType} 레지스트리 이미지 목록 조회 완료`,
+        source: 'docker-registry'
+      };
+      
+    } catch (error) {
+      console.error('❌ Docker Registry 이미지 조회 실패:', error.message);
+      
+      // Fallback to mock
+      console.warn('⚠️ Registry 조회 실패, Mock 데이터로 Fallback');
+      return this.mockGetAvailableImages(registryUrl, registryType);
+    }
+  }
+
+  // [advice from AI] Docker Registry 이미지 태그 조회
+  async getRegistryImageTags(registryUrl, imageName, registryType, credentials = {}) {
+    try {
+      let apiUrl;
+      let authHeaders = {};
+      
+      if (registryType === 'harbor') {
+        apiUrl = `${registryUrl}/api/v2.0/projects/${imageName.split('/')[0]}/repositories/${imageName.split('/')[1]}/artifacts`;
+        if (credentials.username && credentials.password) {
+          authHeaders = {
+            'Authorization': `Basic ${Buffer.from(`${credentials.username}:${credentials.password}`).toString('base64')}`
+          };
+        }
+      } else {
+        apiUrl = `${registryUrl}/v2/${imageName}/tags/list`;
+        if (credentials.username && credentials.password) {
+          authHeaders = {
+            'Authorization': `Basic ${Buffer.from(`${credentials.username}:${credentials.password}`).toString('base64')}`
+          };
+        }
+      }
+      
+      const response = await axios.get(apiUrl, {
+        headers: authHeaders,
+        timeout: 5000,
+        httpsAgent: new https.Agent({
+          rejectUnauthorized: false
+        })
+      });
+      
+      if (registryType === 'harbor') {
+        return (response.data || []).map(artifact => artifact.tags?.[0]?.name || 'latest');
+      } else {
+        return response.data.tags || ['latest'];
+      }
+      
+    } catch (error) {
+      console.warn(`⚠️ 태그 조회 실패 (${imageName}):`, error.message);
+      return ['latest'];
+    }
+  }
+
+  // [advice from AI] 실제 Jenkins 빌드 파이프라인 생성
+  async createBuildPipeline(pipelineConfig) {
+    try {
+      console.log(`🔨 Jenkins 파이프라인 생성: ${pipelineConfig.pipeline_name}`);
+      
+      // Jenkinsfile 생성
+      const jenkinsfile = this.generateJenkinsfile(pipelineConfig);
+      
+      // Jenkins Job 설정 XML 생성
+      const jobConfigXml = this.generateJenkinsJobConfig(pipelineConfig, jenkinsfile);
+      
+      // Jenkins API를 통해 Job 생성
+      await axios.post(
+        `${this.jenkinsURL}/createItem?name=${encodeURIComponent(pipelineConfig.pipeline_name)}`,
+        jobConfigXml,
+        {
+          headers: {
+            'Content-Type': 'application/xml',
+            'Authorization': this.authHeader,
+            ...(this.crumbToken && { [this.crumbField]: this.crumbToken })
+          },
+          timeout: 10000
+        }
+      );
+      
+      console.log(`✅ Jenkins Job 생성 완료: ${pipelineConfig.pipeline_name}`);
+      
+      // Webhook URL 생성 (Generic Webhook Trigger 플러그인 사용)
+      const webhookToken = uuidv4();
+      this.webhookTokens.set(pipelineConfig.pipeline_name, webhookToken);
+      
+      const webhookUrl = `${this.jenkinsURL}/generic-webhook-trigger/invoke?token=${webhookToken}`;
+      
+      return {
+        success: true,
+        data: {
+          ...pipelineConfig,
+          jenkins_job_url: `${this.jenkinsURL}/job/${pipelineConfig.pipeline_name}`,
+          jenkins_job_config_url: `${this.jenkinsURL}/job/${pipelineConfig.pipeline_name}/configure`,
+          webhook_url: webhookUrl,
+          webhook_token: webhookToken,
+          created_at: new Date().toISOString()
+        },
+        message: 'Jenkins 빌드 파이프라인 생성 완료',
+        source: 'jenkins'
+      };
+      
+    } catch (error) {
+      console.error('❌ Jenkins 파이프라인 생성 실패:', error.message);
+      
+      // Job이 이미 존재하는 경우
+      if (error.response?.status === 400 && error.response?.data?.includes('already exists')) {
+        console.warn('⚠️ Jenkins Job이 이미 존재함, 업데이트 시도');
+        
+        try {
+          // Job 업데이트
+          const jenkinsfile = this.generateJenkinsfile(pipelineConfig);
+          const jobConfigXml = this.generateJenkinsJobConfig(pipelineConfig, jenkinsfile);
+          
+          await axios.post(
+            `${this.jenkinsURL}/job/${encodeURIComponent(pipelineConfig.pipeline_name)}/config.xml`,
+            jobConfigXml,
+            {
+              headers: {
+                'Content-Type': 'application/xml',
+                'Authorization': this.authHeader,
+                ...(this.crumbToken && { [this.crumbField]: this.crumbToken })
+              },
+              timeout: 10000
+            }
+          );
+          
+          console.log(`✅ Jenkins Job 업데이트 완료: ${pipelineConfig.pipeline_name}`);
+          
+          return {
+            success: true,
+            data: {
+              ...pipelineConfig,
+              jenkins_job_url: `${this.jenkinsURL}/job/${pipelineConfig.pipeline_name}`,
+              updated_at: new Date().toISOString()
+            },
+            message: 'Jenkins 빌드 파이프라인 업데이트 완료',
+            source: 'jenkins'
+          };
+          
+        } catch (updateError) {
+          console.error('❌ Jenkins Job 업데이트 실패:', updateError.message);
+        }
+      }
+      
+      // Fallback to mock
+      console.warn('⚠️ Jenkins 파이프라인 생성 실패, Mock으로 Fallback');
+      return this.mockCreateBuildPipeline(pipelineConfig);
+    }
+  }
+
+  // [advice from AI] Jenkins Job Config XML 생성
+  generateJenkinsJobConfig(pipelineConfig, jenkinsfile) {
+    return `<?xml version='1.1' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job@2.40">
+  <description>${pipelineConfig.description || 'Auto-generated pipeline'}</description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>BRANCH</name>
+          <defaultValue>main</defaultValue>
+          <trim>true</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>COMMIT_HASH</name>
+          <defaultValue></defaultValue>
+          <trim>true</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@2.92">
+    <script>${jenkinsfile.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</script>
+    <sandbox>true</sandbox>
+  </definition>
+  <triggers/>
+  <disabled>false</disabled>
+</flow-definition>`;
+  }
+
   // [advice from AI] Mock 함수들
   mockGetAvailableImages(registryUrl, registryType) {
+    console.warn('⚠️ Mock Docker Registry 이미지 목록 사용 중 - Registry 연결 확인 필요');
+    
     const mockImages = {
       'harbor.ecp-ai.com': [
         { name: 'ecp-ai/callbot', tags: ['latest', 'v1.2.0', 'v1.1.5'], size: '245MB' },
@@ -617,11 +923,15 @@ pipeline {
         total: mockImages[registryUrl]?.length || 0,
         last_updated: new Date().toISOString()
       },
-      message: `Mock ${registryType} 레지스트리 이미지 목록 조회 완료`
+      message: `Mock ${registryType} 레지스트리 이미지 목록 (Registry 미연결)`,
+      mock: true,
+      warning: 'Docker Registry 미연결 상태'
     };
   }
 
   mockCreateBuildPipeline(pipelineConfig) {
+    console.warn('⚠️ Mock Jenkins 파이프라인 생성 사용 중 - Jenkins 서버 연결 확인 필요');
+    
     return {
       success: true,
       data: {
@@ -630,7 +940,9 @@ pipeline {
         webhook_url: pipelineConfig.webhook_url,
         estimated_build_time: '3-5 minutes'
       },
-      message: 'Mock Jenkins 빌드 파이프라인 생성 완료'
+      message: 'Mock Jenkins 빌드 파이프라인 생성 (실제 생성 아님)',
+      mock: true,
+      warning: 'Jenkins 미연결 상태'
     };
   }
 

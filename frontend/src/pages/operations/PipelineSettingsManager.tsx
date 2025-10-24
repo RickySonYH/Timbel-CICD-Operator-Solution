@@ -20,8 +20,6 @@ import {
   TableHead,
   TableRow,
   Paper,
-  IconButton,
-  Tooltip,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -38,20 +36,7 @@ import {
   Switch,
   FormControlLabel
 } from '@mui/material';
-import {
-  Home as HomeIcon,
-  Settings as SettingsIcon,
-  Timeline as TimelineIcon,
-  Visibility as ViewIcon,
-  Edit as EditIcon,
-  Delete as DeleteIcon,
-  Add as AddIcon,
-  PlayArrow as PlayIcon,
-  Security as SecurityIcon,
-  Key as KeyIcon,
-  Lock as LockIcon,
-  Refresh as RefreshIcon
-} from '@mui/icons-material';
+// [advice from AI] 아이콘 최소화 - 텍스트 중심 UI로 변경
 import { useJwtAuthStore } from '../../store/jwtAuthStore';
 import SolutionInstanceManager from '../../components/operations/SolutionInstanceManager';
 
@@ -525,13 +510,11 @@ const PipelineSettingsManager: React.FC = () => {
           color="inherit" 
           href="#" 
           onClick={(e) => { e.preventDefault(); navigate('/operations'); }}
-          sx={{ display: 'flex', alignItems: 'center', textDecoration: 'none' }}
+          sx={{ textDecoration: 'none' }}
         >
-          <HomeIcon sx={{ mr: 0.5, fontSize: '1rem' }} />
           운영센터
         </Link>
-        <Typography color="text.primary" sx={{ display: 'flex', alignItems: 'center' }}>
-          <SettingsIcon sx={{ mr: 0.5, fontSize: '1rem' }} />
+        <Typography color="text.primary">
           파이프라인 설정 관리
         </Typography>
       </Breadcrumbs>
@@ -548,8 +531,7 @@ const PipelineSettingsManager: React.FC = () => {
         {/* 통계 칩들 */}
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
           <Chip 
-            icon={<TimelineIcon />} 
-            label={`실행 중인 파이프라인 ${pipelines.length}개`} 
+            label={`파이프라인 ${pipelines.length}개`} 
             color="primary" 
           />
           <Chip 
@@ -638,12 +620,11 @@ const PipelineSettingsManager: React.FC = () => {
         <CardContent>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
             <Typography variant="h6">
-              🚀 실행 중인 파이프라인 ({pipelines.length})
+              실행 중인 파이프라인 ({pipelines.length})
             </Typography>
             <Box>
               <Button
                 variant="outlined"
-                startIcon={<RefreshIcon />}
                 onClick={loadPipelines}
                 sx={{ mr: 1 }}
               >
@@ -651,7 +632,6 @@ const PipelineSettingsManager: React.FC = () => {
               </Button>
               <Button
                 variant="contained"
-                startIcon={<AddIcon />}
                 onClick={() => {
                   setSelectedPipeline(null);
                   setPipelineFormData({
@@ -745,25 +725,20 @@ const PipelineSettingsManager: React.FC = () => {
                         {pipeline.updated_at ? new Date(pipeline.updated_at).toLocaleString() : '-'}
                       </TableCell>
                       <TableCell align="center">
-                        <Tooltip title="상세 보기">
-                          <IconButton size="small" onClick={() => handleViewPipeline(pipeline)} color="primary">
-                            <ViewIcon />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="편집">
-                          <IconButton size="small" onClick={() => handleEditPipeline(pipeline)} color="info">
-                            <EditIcon />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="삭제">
-                          <IconButton 
-                            size="small" 
-                            onClick={() => handleDeletePipeline(pipeline.id, pipeline.pipeline_name)}
-                            color="error"
-                          >
-                            <DeleteIcon />
-                          </IconButton>
-                        </Tooltip>
+                        <Button size="small" onClick={() => handleViewPipeline(pipeline)} sx={{ mr: 0.5, minWidth: '60px' }}>
+                          보기
+                        </Button>
+                        <Button size="small" onClick={() => handleEditPipeline(pipeline)} sx={{ mr: 0.5, minWidth: '60px' }}>
+                          편집
+                        </Button>
+                        <Button 
+                          size="small" 
+                          onClick={() => handleDeletePipeline(pipeline.id, pipeline.pipeline_name)}
+                          color="error"
+                          sx={{ minWidth: '60px' }}
+                        >
+                          삭제
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))
@@ -779,11 +754,10 @@ const PipelineSettingsManager: React.FC = () => {
         <CardContent>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
             <Typography variant="h6">
-              📋 표준 템플릿 라이브러리 ({templates.length})
+              표준 템플릿 라이브러리 ({templates.length})
             </Typography>
             <Button
               variant="outlined"
-              startIcon={<RefreshIcon />}
               onClick={loadTemplates}
             >
               새로고침
@@ -838,16 +812,12 @@ const PipelineSettingsManager: React.FC = () => {
                         {template.last_used ? new Date(template.last_used).toLocaleDateString() : '-'}
                       </TableCell>
                       <TableCell align="center">
-                        <Tooltip title="이 템플릿으로 파이프라인 생성">
-                          <IconButton size="small" onClick={() => handleCreateFromTemplate(template)} color="success">
-                            <AddIcon />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="상세 보기">
-                          <IconButton size="small" onClick={() => handleViewTemplate(template)} color="primary">
-                            <ViewIcon />
-                          </IconButton>
-                        </Tooltip>
+                        <Button size="small" onClick={() => handleCreateFromTemplate(template)} color="success" sx={{ mr: 0.5, minWidth: '80px' }}>
+                          생성
+                        </Button>
+                        <Button size="small" onClick={() => handleViewTemplate(template)} sx={{ minWidth: '60px' }}>
+                          보기
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))
@@ -863,11 +833,10 @@ const PipelineSettingsManager: React.FC = () => {
         <CardContent>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
             <Typography variant="h6">
-              🔐 인증 및 보안 ({credentials.length})
+              인증 및 보안 ({credentials.length})
             </Typography>
             <Button
               variant="outlined"
-              startIcon={<RefreshIcon />}
               onClick={loadCredentials}
             >
               새로고침
@@ -913,15 +882,13 @@ const PipelineSettingsManager: React.FC = () => {
                       </TableCell>
                       <TableCell>
                         <Chip 
-                          icon={<KeyIcon fontSize="small" />}
-                          label={cred.auth_type} 
+                        label={cred.auth_type}
                           size="small" 
                         />
                       </TableCell>
                       <TableCell>{cred.username || '-'}</TableCell>
                       <TableCell>
                         <Chip 
-                          icon={cred.ssl_enabled ? <LockIcon fontSize="small" /> : undefined}
                           label={cred.ssl_enabled ? 'SSL' : 'No SSL'} 
                           size="small"
                           color={cred.ssl_enabled ? 'success' : 'default'}
@@ -938,20 +905,17 @@ const PipelineSettingsManager: React.FC = () => {
                         {cred.last_verified ? new Date(cred.last_verified).toLocaleString() : '-'}
                       </TableCell>
                       <TableCell align="center">
-                        <Tooltip title="인증 정보 편집">
-                          <IconButton size="small" onClick={() => handleEditCredential(cred)} color="primary">
-                            <EditIcon />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="연결 테스트">
-                          <IconButton 
-                            size="small" 
-                            onClick={() => handleTestCredential(cred.instance_id)}
-                            color="success"
-                          >
-                            <PlayIcon />
-                          </IconButton>
-                        </Tooltip>
+                        <Button size="small" onClick={() => handleEditCredential(cred)} sx={{ mr: 0.5, minWidth: '60px' }}>
+                          편집
+                        </Button>
+                        <Button 
+                          size="small" 
+                          onClick={() => handleTestCredential(cred.instance_id)}
+                          color="success"
+                          sx={{ minWidth: '70px' }}
+                        >
+                          테스트
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))
@@ -1086,10 +1050,7 @@ const PipelineSettingsManager: React.FC = () => {
       {/* [advice from AI] 인증 정보 편집 다이얼로그 */}
       <Dialog open={securityDialogOpen} onClose={() => setSecurityDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <SecurityIcon color="primary" />
-            인증 정보 편집
-          </Box>
+          인증 정보 편집
         </DialogTitle>
         <DialogContent dividers>
           {selectedCredential && (
@@ -1169,7 +1130,6 @@ const PipelineSettingsManager: React.FC = () => {
             onClick={handleSaveCredential}
             variant="contained"
             color="primary"
-            startIcon={<SecurityIcon />}
           >
             저장
           </Button>

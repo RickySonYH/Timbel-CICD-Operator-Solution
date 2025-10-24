@@ -118,7 +118,7 @@ class CICDPipelineService {
     }
   }
 
-  // [advice from AI] 파이프라인 실행
+  // [advice from AI] 파이프라인 실행 - 실제 Jenkins/GitLab CI 연동
   async runPipeline(pipelineId, runConfig = {}) {
     try {
       if (!pipelineId) {
@@ -145,25 +145,41 @@ class CICDPipelineService {
         }))
       };
 
-      console.log('파이프라인 실행:', pipelineRun);
+      console.log('🚀 파이프라인 실행 요청:', { pipelineId, runConfig });
 
-      // [advice from AI] Mock 응답
+      // [advice from AI] Jenkins 연결 확인
       if (this.jenkinsToken === '' || this.jenkinsURL.includes('mock')) {
+        console.warn('⚠️ Jenkins 미연결, Mock 실행 사용');
         return this.mockRunPipeline(pipelineRun);
       }
 
-      // [advice from AI] 실제 파이프라인 실행
+      // [advice from AI] 실제 Jenkins 파이프라인 실행
+      console.log('✅ Jenkins로 실제 파이프라인 실행 시작');
       const result = await this.executeJenkinsPipeline(pipelineId, runConfig);
+      
+      // 실행 결과와 runId 연결
+      result.run_id = runId;
+      result.pipeline_id = pipelineId;
       
       return {
         success: true,
         data: result,
-        message: '파이프라인 실행이 시작되었습니다'
+        message: 'Jenkins 파이프라인 실행이 시작되었습니다',
+        source: 'jenkins'
       };
 
     } catch (error) {
-      console.error('파이프라인 실행 오류:', error);
-      throw new Error(`파이프라인 실행 실패: ${error.message}`);
+      console.error('❌ 파이프라인 실행 오류:', error);
+      // Fallback to mock on error
+      console.warn('⚠️ Jenkins 실행 실패, Mock으로 Fallback');
+      const mockResult = this.mockRunPipeline({
+        run_id: uuidv4(),
+        pipeline_id: pipelineId,
+        ...runConfig
+      });
+      mockResult.fallback = true;
+      mockResult.error = error.message;
+      return mockResult;
     }
   }
 
@@ -307,6 +323,268 @@ class CICDPipelineService {
     return pipeline;
   }
 
+  // [advice from AI] 실제 Jenkins 파이프라인 실행
+  async executeJenkinsPipeline(pipelineId, runConfig) {
+    try {
+      console.log(`🔄 Jenkins 파이프라인 트리거: ${pipelineId}`);
+      
+      // Jenkins 빌드 파라미터 준비
+      const buildParams = {
+        BRANCH: runConfig.branch || 'main',
+        COMMIT_HASH: runConfig.commitHash || '',
+        TRIGGER_USER: runConfig.triggeredBy || 'system',
+        ...runConfig.parameters
+      };
+
+      // Jenkins buildWithParameters API 호출
+      const response = await axios.post(
+        `${this.jenkinsURL}/job/${pipelineId}/buildWithParameters`,
+        null,
+        {
+          params: buildParams,
+          auth: {
+            username: this.jenkinsUser,
+            password: this.jenkinsToken
+          },
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded'
+          },
+          timeout: 10000
+        }
+      );
+
+      // Jenkins는 Location 헤더에 빌드 큐 URL을 반환
+      const queueUrl = response.headers.location;
+      console.log(`✅ Jenkins 빌드 큐에 추가됨: ${queueUrl}`);
+
+      // 큐 아이템에서 빌드 번호 추출 (비동기)
+      let buildNumber = null;
+      if (queueUrl) {
+        try {
+          const queueItem = await this.getJenkinsQueueItem(queueUrl);
+          buildNumber = queueItem.executable?.number;
+        } catch (queueError) {
+          console.warn('⚠️ 빌드 번호 조회 실패:', queueError.message);
+        }
+      }
+
+      return {
+        status: 'queued',
+        queue_url: queueUrl,
+        build_number: buildNumber,
+        build_url: buildNumber ? `${this.jenkinsURL}/job/${pipelineId}/${buildNumber}/` : null,
+        started_at: new Date().toISOString(),
+        parameters: buildParams
+      };
+
+    } catch (error) {
+      console.error('❌ Jenkins 파이프라인 실행 실패:', error.message);
+      throw error;
+    }
+  }
+
+  // [advice from AI] Jenkins 큐 아이템 조회
+  async getJenkinsQueueItem(queueUrl) {
+    try {
+      const response = await axios.get(`${queueUrl}api/json`, {
+        auth: {
+          username: this.jenkinsUser,
+          password: this.jenkinsToken
+        },
+        timeout: 5000
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(`큐 아이템 조회 실패: ${error.message}`);
+    }
+  }
+
+  // [advice from AI] Jenkins 파이프라인 상태 조회
+  async getJenkinsPipelineStatus(runId) {
+    try {
+      // runId는 Jenkins 빌드 URL 또는 buildNumber를 포함
+      const [pipelineId, buildNumber] = runId.split('/');
+      
+      const response = await axios.get(
+        `${this.jenkinsURL}/job/${pipelineId}/${buildNumber}/api/json`,
+        {
+          auth: {
+            username: this.jenkinsUser,
+            password: this.jenkinsToken
+          },
+          timeout: 5000
+        }
+      );
+
+      const buildData = response.data;
+      
+      return {
+        run_id: runId,
+        pipeline_id: pipelineId,
+        build_number: buildNumber,
+        status: buildData.result ? buildData.result.toLowerCase() : 'running',
+        progress: buildData.duration ? 100 : (buildData.estimatedDuration ? 
+          Math.min((Date.now() - buildData.timestamp) / buildData.estimatedDuration * 100, 99) : 0),
+        started_at: new Date(buildData.timestamp).toISOString(),
+        finished_at: buildData.duration ? new Date(buildData.timestamp + buildData.duration).toISOString() : null,
+        duration: buildData.duration,
+        url: buildData.url,
+        console_url: `${buildData.url}console`
+      };
+
+    } catch (error) {
+      console.error('❌ Jenkins 상태 조회 실패:', error.message);
+      throw error;
+    }
+  }
+
+  // [advice from AI] Jenkins 파이프라인 목록 조회
+  async getJenkinsPipelines(filters) {
+    try {
+      const response = await axios.get(`${this.jenkinsURL}/api/json?tree=jobs[name,url,lastBuild[number,result,timestamp]]`, {
+        auth: {
+          username: this.jenkinsUser,
+          password: this.jenkinsToken
+        },
+        timeout: 10000
+      });
+
+      const jobs = response.data.jobs || [];
+      
+      // 필터 적용
+      let filteredJobs = jobs;
+      if (filters.status) {
+        filteredJobs = jobs.filter(job => {
+          if (!job.lastBuild) return false;
+          const status = job.lastBuild.result?.toLowerCase() || 'running';
+          return status === filters.status;
+        });
+      }
+
+      // 페이지네이션
+      const page = filters.page || 1;
+      const limit = filters.limit || 20;
+      const startIndex = (page - 1) * limit;
+      const endIndex = startIndex + limit;
+
+      return {
+        pipelines: filteredJobs.slice(startIndex, endIndex).map(job => ({
+          pipeline_id: job.name,
+          pipeline_name: job.name,
+          url: job.url,
+          last_build: job.lastBuild ? {
+            number: job.lastBuild.number,
+            status: job.lastBuild.result?.toLowerCase() || 'running',
+            timestamp: new Date(job.lastBuild.timestamp).toISOString()
+          } : null
+        })),
+        total: filteredJobs.length,
+        page,
+        limit,
+        total_pages: Math.ceil(filteredJobs.length / limit)
+      };
+
+    } catch (error) {
+      console.error('❌ Jenkins 파이프라인 목록 조회 실패:', error.message);
+      throw error;
+    }
+  }
+
+  // [advice from AI] 실제 배포 실행 (Kubernetes via kubectl)
+  async executeDeployment(deployment) {
+    try {
+      console.log(`🚀 배포 실행: ${deployment.deployment_id}`);
+      
+      // Kubernetes 배포 매니페스트 생성
+      const manifest = this.generateK8sManifest(deployment);
+      
+      // kubectl apply 실행 (exec를 통해)
+      const { exec } = require('child_process');
+      const util = require('util');
+      const execPromise = util.promisify(exec);
+
+      try {
+        const { stdout, stderr } = await execPromise(
+          `echo '${JSON.stringify(manifest)}' | kubectl apply -f -`
+        );
+        
+        console.log('✅ Kubernetes 배포 성공:', stdout);
+        
+        return {
+          ...deployment,
+          status: 'deployed',
+          finished_at: new Date().toISOString(),
+          kubectl_output: stdout
+        };
+
+      } catch (kubectlError) {
+        console.error('❌ kubectl 실행 실패:', kubectlError);
+        throw kubectlError;
+      }
+
+    } catch (error) {
+      console.error('❌ 배포 실행 실패:', error.message);
+      throw error;
+    }
+  }
+
+  // [advice from AI] Kubernetes 매니페스트 생성
+  generateK8sManifest(deployment) {
+    return {
+      apiVersion: 'apps/v1',
+      kind: 'Deployment',
+      metadata: {
+        name: `${deployment.pipeline_id}-${deployment.environment}`,
+        namespace: deployment.environment,
+        labels: {
+          app: deployment.pipeline_id,
+          environment: deployment.environment,
+          'deployment-id': deployment.deployment_id
+        }
+      },
+      spec: {
+        replicas: deployment.replicas,
+        strategy: {
+          type: deployment.strategy === 'rolling' ? 'RollingUpdate' : 'Recreate',
+          rollingUpdate: deployment.strategy === 'rolling' ? {
+            maxSurge: 1,
+            maxUnavailable: 0
+          } : undefined
+        },
+        selector: {
+          matchLabels: {
+            app: deployment.pipeline_id,
+            environment: deployment.environment
+          }
+        },
+        template: {
+          metadata: {
+            labels: {
+              app: deployment.pipeline_id,
+              environment: deployment.environment
+            }
+          },
+          spec: {
+            containers: [{
+              name: deployment.pipeline_id,
+              image: `${this.dockerRegistry}/${deployment.pipeline_id}:${deployment.image_tag}`,
+              resources: {
+                requests: {
+                  cpu: deployment.resources.cpu,
+                  memory: deployment.resources.memory
+                },
+                limits: {
+                  cpu: deployment.resources.cpu,
+                  memory: deployment.resources.memory
+                }
+              }
+            }]
+          }
+        }
+      }
+    };
+  }
+
   // [advice from AI] Jenkinsfile 생성
   generateJenkinsfile(pipeline) {
     const stages = pipeline.stages
@@ -394,6 +672,7 @@ pipeline {
 
   // [advice from AI] Mock 파이프라인 생성
   mockCreatePipeline(pipeline) {
+    console.warn('⚠️ Mock 파이프라인 생성 사용 중 - Jenkins 연결 확인 필요');
     return {
       success: true,
       data: {
@@ -401,12 +680,16 @@ pipeline {
         jenkins_job_url: `${this.jenkinsURL}/job/${pipeline.pipeline_name}`,
         webhook_url: `${this.jenkinsURL}/generic-webhook-trigger/invoke?token=${pipeline.pipeline_id}`
       },
-      message: 'Mock 파이프라인 생성 완료'
+      message: 'Mock 파이프라인 생성 완료',
+      mock: true,
+      warning: 'Jenkins 미연결 상태'
     };
   }
 
   // [advice from AI] Mock 파이프라인 실행
   mockRunPipeline(pipelineRun) {
+    console.warn('⚠️ Mock 파이프라인 실행 사용 중 - 실제 CI/CD 서버 미연결');
+    
     // [advice from AI] 단계별 진행 시뮬레이션
     setTimeout(() => {
       pipelineRun.stages[0].status = 'completed';
@@ -418,7 +701,9 @@ pipeline {
     return {
       success: true,
       data: pipelineRun,
-      message: 'Mock 파이프라인 실행 시뮬레이션 시작'
+      message: 'Mock 파이프라인 실행 시뮬레이션 (실제 실행 아님)',
+      mock: true,
+      warning: 'Jenkins/GitLab CI 미연결 상태'
     };
   }
 
@@ -457,6 +742,7 @@ pipeline {
 
   // [advice from AI] Mock 파이프라인 목록
   mockGetPipelines(filters) {
+    console.warn('⚠️ Mock 파이프라인 목록 사용 중 - Jenkins 연결 확인 필요');
     const mockPipelines = [
       {
         pipeline_id: 'timbel-pipeline-001',
@@ -502,6 +788,7 @@ pipeline {
 
   // [advice from AI] Mock 배포
   mockDeploy(deployment) {
+    console.warn('⚠️ Mock 배포 사용 중 - Kubernetes 클러스터 연결 확인 필요');
     return {
       success: true,
       data: {
@@ -514,7 +801,9 @@ pipeline {
           { name: 'Traffic Switch', status: 'pending', progress: 0 }
         ]
       },
-      message: 'Mock 배포 시뮬레이션 시작'
+      message: 'Mock 배포 시뮬레이션 (실제 배포 아님)',
+      mock: true,
+      warning: 'Kubernetes 미연결 상태'
     };
   }
 }

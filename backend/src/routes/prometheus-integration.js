@@ -35,29 +35,43 @@ class PrometheusAPI {
 
       console.log(`Prometheus 쿼리: ${prometheusQuery}`);
       
-      // 실제 Prometheus API 호출
-      const response = await fetch(`${url}?${new URLSearchParams(params)}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        timeout: 10000
-      });
-
-      if (!response.ok) {
-        throw new Error(`Prometheus API 오류: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json();
+      // [advice from AI] AbortController로 타임아웃 구현 (3초)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
       
-      if (data.status !== 'success') {
-        throw new Error(`Prometheus 쿼리 실패: ${data.error}`);
-      }
+      try {
+        // 실제 Prometheus API 호출
+        const response = await fetch(`${url}?${new URLSearchParams(params)}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          signal: controller.signal
+        });
 
-      return {
-        success: true,
-        data: data
-      };
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          throw new Error(`Prometheus API 오류: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        
+        if (data.status !== 'success') {
+          throw new Error(`Prometheus 쿼리 실패: ${data.error}`);
+        }
+
+        return {
+          success: true,
+          data: data.data
+        };
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        if (fetchError.name === 'AbortError') {
+          throw new Error('Prometheus 쿼리 타임아웃 (3초)');
+        }
+        throw fetchError;
+      }
     } catch (error) {
       console.error('Prometheus 쿼리 오류:', error);
       console.log('실제 시스템 메트릭으로 대체합니다...');
@@ -98,29 +112,43 @@ class PrometheusAPI {
         step: step
       };
 
-      // 실제 Prometheus API 호출
-      const response = await fetch(`${url}?${new URLSearchParams(params)}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        timeout: 15000
-      });
+      // [advice from AI] AbortController로 타임아웃 구현 (5초)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-      if (!response.ok) {
-        throw new Error(`Prometheus API 오류: ${response.status} ${response.statusText}`);
+      try {
+        // 실제 Prometheus API 호출
+        const response = await fetch(`${url}?${new URLSearchParams(params)}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          throw new Error(`Prometheus API 오류: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        
+        if (data.status !== 'success') {
+          throw new Error(`Prometheus 쿼리 실패: ${data.error}`);
+        }
+
+        return {
+          success: true,
+          data: data.data
+        };
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        if (fetchError.name === 'AbortError') {
+          throw new Error('Prometheus 범위 쿼리 타임아웃 (5초)');
+        }
+        throw fetchError;
       }
-
-      const data = await response.json();
-      
-      if (data.status !== 'success') {
-        throw new Error(`Prometheus 쿼리 실패: ${data.error}`);
-      }
-
-      return {
-        success: true,
-        data: data
-      };
     } catch (error) {
       console.error('Prometheus 범위 쿼리 오류:', error);
       console.log('실제 시스템 메트릭으로 시계열 데이터 대체합니다...');

@@ -58,6 +58,27 @@ interface MetricData {
   value: [number, string];
 }
 
+interface MetricsResponse {
+  success: boolean;
+  data: {
+    tenant_id: string;
+    time_range: string;
+    collected_at: string;
+    metrics: {
+      cpu_usage: Array<{ timestamp: string; value: number }>;
+      memory_usage: Array<{ timestamp: string; value: number }>;
+      disk_usage: Array<{ timestamp: string; value: number }>;
+      request_count: Array<{ timestamp: string; value: number }>;
+      response_time: Array<{ timestamp: string; value: number }>;
+      error_rate: Array<{ timestamp: string; value: number }>;
+    };
+    source: 'prometheus' | 'mock';
+  };
+  message: string;
+  source?: 'prometheus' | 'mock';
+  mock?: boolean;
+}
+
 interface SLAData {
   service_name: string;
   uptime_percentage: number;
@@ -95,6 +116,10 @@ const ComprehensiveMonitoring: React.FC = () => {
   const [cicdMetrics, setCicdMetrics] = useState<{ [key: string]: MetricData[] }>({});
   const [applicationMetrics, setApplicationMetrics] = useState<{ [key: string]: MetricData[] }>({});
   
+  // 데이터 소스 정보
+  const [dataSource, setDataSource] = useState<'prometheus' | 'mock'>('mock');
+  const [timeRange, setTimeRange] = useState<string>('1h');
+  
   // SLA 데이터
   const [slaData, setSlaData] = useState<SLAData[]>([]);
   
@@ -111,24 +136,38 @@ const ComprehensiveMonitoring: React.FC = () => {
     severity: 'warning'
   });
 
-  // [advice from AI] 메트릭 데이터 로드
-  const loadMetrics = async (metricType: string) => {
+  // [advice from AI] 메트릭 데이터 로드 - 실제 Prometheus API 연동
+  const loadMetrics = async (tenantId: string = 'timbel-system') => {
     try {
       const { token: authToken } = useJwtAuthStore.getState();
-      const response = await fetch(`/api/prometheus/metrics/current?metric_type=${metricType}`, {
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Content-Type': 'application/json'
+      const response = await fetch(
+        `/api/operations/monitoring/tenants/${tenantId}/metrics?timeRange=${timeRange}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json'
+          }
         }
-      });
+      );
 
       if (response.ok) {
-        const data = await response.json();
-        return data.metrics || {};
+        const result: MetricsResponse = await response.json();
+        
+        // 데이터 소스 업데이트
+        setDataSource(result.data.source);
+        
+        // Mock 데이터 사용 시 콘솔 경고
+        if (result.mock || result.data.source === 'mock') {
+          console.warn('⚠️ Mock 데이터 사용 중 - Prometheus 연결 확인 필요');
+        } else {
+          console.log('✅ Prometheus에서 실제 데이터 로드 완료');
+        }
+        
+        return result.data.metrics;
       }
       return {};
     } catch (error) {
-      console.error(`${metricType} 메트릭 로드 실패:`, error);
+      console.error('메트릭 로드 실패:', error);
       return {};
     }
   };
@@ -181,15 +220,29 @@ const ComprehensiveMonitoring: React.FC = () => {
     try {
       setLoading(true);
       
-      const [systemData, cicdData, appData] = await Promise.all([
-        loadMetrics('system'),
-        loadMetrics('cicd'),
-        loadMetrics('applications')
-      ]);
-
-      setSystemMetrics(systemData);
-      setCicdMetrics(cicdData);
-      setApplicationMetrics(appData);
+      // 실제 Prometheus API 호출
+      const metricsData = await loadMetrics('timbel-system');
+      
+      // 메트릭 데이터를 각 카테고리별로 분리
+      if (metricsData) {
+        // System 메트릭
+        setSystemMetrics({
+          cpu_usage: metricsData.cpu_usage || [],
+          memory_usage: metricsData.memory_usage || [],
+          disk_usage: metricsData.disk_usage || []
+        });
+        
+        // CI/CD 메트릭
+        setCicdMetrics({
+          request_count: metricsData.request_count || [],
+          response_time: metricsData.response_time || []
+        });
+        
+        // Application 메트릭
+        setApplicationMetrics({
+          error_rate: metricsData.error_rate || []
+        });
+      }
 
       await Promise.all([
         loadSLAData(),
@@ -293,14 +346,44 @@ const ComprehensiveMonitoring: React.FC = () => {
       {/* [advice from AI] 헤더 */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box>
-          <Typography variant="h4" gutterBottom>
+          <Typography variant="h4" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             종합 모니터링 대시보드
+            {/* 데이터 소스 표시 */}
+            <Chip
+              label={dataSource === 'prometheus' ? '🟢 Prometheus 연결됨' : '🟡 Mock 데이터'}
+              color={dataSource === 'prometheus' ? 'success' : 'warning'}
+              size="small"
+              sx={{ fontWeight: 'normal' }}
+            />
           </Typography>
           <Typography variant="body1" color="text.secondary">
             Prometheus 메트릭, SLA 모니터링, 실시간 알림 통합 관리
           </Typography>
+          {dataSource === 'mock' && (
+            <Alert severity="warning" sx={{ mt: 1 }}>
+              ⚠️ Prometheus 서버에 연결할 수 없어 Mock 데이터를 표시하고 있습니다. 
+              PROMETHEUS_URL 환경변수를 확인해주세요.
+            </Alert>
+          )}
         </Box>
-        <Box sx={{ display: 'flex', gap: 1 }}>
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+          <FormControl size="small" sx={{ minWidth: 120 }}>
+            <InputLabel>시간 범위</InputLabel>
+            <Select
+              value={timeRange}
+              label="시간 범위"
+              onChange={(e) => {
+                setTimeRange(e.target.value);
+                loadAllData();
+              }}
+            >
+              <MenuItem value="15m">15분</MenuItem>
+              <MenuItem value="1h">1시간</MenuItem>
+              <MenuItem value="6h">6시간</MenuItem>
+              <MenuItem value="24h">24시간</MenuItem>
+              <MenuItem value="7d">7일</MenuItem>
+            </Select>
+          </FormControl>
           <Tooltip title="새로고침">
             <IconButton 
               onClick={handleRefresh} 

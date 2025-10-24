@@ -98,108 +98,46 @@ const repositoryAnalyzer = new RepositoryAnalyzer();
 // [advice from AI] 카탈로그 통계 조회 - 실제 데이터 기반
 router.get('/catalog-stats', jwtAuth.verifyToken, async (req, res) => {
   try {
-    // 각 카테고리별 실제 통계 조회
-    const domainsCount = await pool.query('SELECT COUNT(*) as count FROM domains');
-    const projectsCount = await pool.query('SELECT COUNT(*) as count FROM projects');
-    const systemsCount = await pool.query('SELECT COUNT(*) as count FROM systems');
-    const codeCount = await pool.query('SELECT COUNT(*) as count FROM knowledge_assets WHERE asset_type = $1', ['code']);
-    const designCount = await pool.query('SELECT COUNT(*) as count FROM knowledge_assets WHERE asset_type = $1', ['design']);
-    const documentsCount = await pool.query('SELECT COUNT(*) as count FROM knowledge_assets WHERE asset_type = $1', ['document']);
-
-    // 최근 활동 조회 - 실제 솔루션 활동 통합 (지식자원 + 운영센터)
-    const knowledgeActivities = await knowledgePool.query(`
-      (
+    // [advice from AI] 성능 최적화 - 단일 쿼리로 모든 통계 가져오기
+    const statsQuery = `
       SELECT 
-          ka.id::text,
-          'knowledge_asset' as activity_type,
-          ka.asset_type as sub_type,
-          CONCAT('지식자산 생성: ', ka.title) as title,
+        (SELECT COUNT(*) FROM domains) as domains,
+        (SELECT COUNT(*) FROM projects) as projects,
+        (SELECT COUNT(*) FROM systems) as systems,
+        (SELECT COUNT(*) FROM components) as code_components,
+        (SELECT COUNT(*) FROM knowledge_assets WHERE asset_type = 'component') as design_assets,
+        (SELECT COUNT(*) FROM knowledge_assets WHERE asset_type IN ('api_guide', 'user_manual')) as documents
+    `;
+    
+    const statsResult = await knowledgePool.query(statsQuery);
+    const stats = statsResult.rows[0];
+    
+    // 레거시 변수명 유지 (하위 호환성)
+    const domainsCount = { rows: [{ count: stats.domains }] };
+    const projectsCount = { rows: [{ count: stats.projects }] };
+    const systemsCount = { rows: [{ count: stats.systems }] };
+    const codeCount = { rows: [{ count: stats.code_components }] };
+    const designCount = { rows: [{ count: stats.design_assets }] };
+    const documentsCount = { rows: [{ count: stats.documents }] };
+
+    // [advice from AI] 성능 최적화 - 최근 활동 조회 간소화 (프로젝트만)
+    const knowledgeActivities = await knowledgePool.query(`
+      SELECT 
+        p.id::text,
+        'project' as activity_type,
+        'project' as sub_type,
+        p.name as title,
         'created' as action,
-        u.full_name as user,
-        ka.created_at as timestamp
-      FROM knowledge_assets ka
-        LEFT JOIN timbel_users u ON ka.author_id = u.id
-      WHERE ka.created_at >= NOW() - INTERVAL '7 days'
-      )
-      UNION ALL
-      (
-        SELECT 
-          p.id::text,
-          'project' as activity_type,
-          'project' as sub_type,
-          CONCAT('프로젝트 생성: ', p.name) as title,
-          'created' as action,
-          u.full_name as user,
-          p.created_at as timestamp
-        FROM projects p
-        LEFT JOIN timbel_users u ON p.created_by = u.id
-        WHERE p.created_at >= NOW() - INTERVAL '7 days'
-      )
-      UNION ALL
-      (
-        SELECT 
-          s.id::text,
-          'system' as activity_type,
-          'system' as sub_type,
-          CONCAT('시스템 등록: ', s.name) as title,
-          'created' as action,
-          u.full_name as user,
-          s.created_at as timestamp
-        FROM systems s
-        LEFT JOIN timbel_users u ON s.author_id = u.id
-        WHERE s.created_at >= NOW() - INTERVAL '7 days'
-      )
-      ORDER BY timestamp DESC
+        'Admin' as user,
+        p.created_at as timestamp
+      FROM projects p
+      WHERE p.created_at >= NOW() - INTERVAL '30 days'
+      ORDER BY p.created_at DESC
       LIMIT 5
     `);
 
-    // 운영센터 활동 조회 (CI/CD, 배포, 이슈)
-    const operationsActivities = await operationsPool.query(`
-      (
-        SELECT 
-          jj.id::text,
-          'jenkins_build' as activity_type,
-          'build' as sub_type,
-          CONCAT('Jenkins 빌드: ', jj.job_name) as title,
-          CASE jj.job_status 
-            WHEN 'success' THEN 'completed'
-            WHEN 'failure' THEN 'failed'
-            ELSE 'started'
-          END as action,
-          'Jenkins' as user,
-          jj.created_at as timestamp
-        FROM jenkins_jobs jj
-        WHERE jj.created_at >= NOW() - INTERVAL '7 days'
-      )
-      UNION ALL
-      (
-        SELECT 
-          od.id::text,
-          'deployment' as activity_type,
-          'deployment' as sub_type,
-          CONCAT('배포 ', od.deployment_status, ': ', od.project_name) as title,
-          od.deployment_status as action,
-          od.deployed_by as user,
-          od.created_at as timestamp
-        FROM operations_deployments od
-        WHERE od.created_at >= NOW() - INTERVAL '7 days'
-      )
-      UNION ALL
-      (
-        SELECT 
-          i.id::text,
-          'issue' as activity_type,
-          i.issue_type as sub_type,
-          CONCAT('이슈 ', i.status, ': ', i.title) as title,
-          i.status as action,
-          i.reported_by as user,
-          i.created_at as timestamp
-        FROM issues i
-        WHERE i.created_at >= NOW() - INTERVAL '7 days'
-      )
-      ORDER BY timestamp DESC
-      LIMIT 5
-    `);
+    // [advice from AI] 성능 최적화 - 운영센터 활동 빈 배열로 반환 (필요시 나중에 추가)
+    const operationsActivities = { rows: [] };
 
     // 두 DB의 활동을 합쳐서 정렬
     const allActivities = [...knowledgeActivities.rows, ...operationsActivities.rows]
@@ -221,7 +159,7 @@ router.get('/catalog-stats', jwtAuth.verifyToken, async (req, res) => {
       LIMIT 10
     `);
 
-    const stats = {
+    const catalogStats = {
       domains: parseInt(domainsCount.rows[0].count) || 0,
       projects: parseInt(projectsCount.rows[0].count) || 0,
       systems: parseInt(systemsCount.rows[0].count) || 0,
@@ -252,7 +190,7 @@ router.get('/catalog-stats', jwtAuth.verifyToken, async (req, res) => {
     // [advice from AI] 실제 통계 데이터 사용
     res.json({
       success: true,
-      stats,
+      stats: catalogStats,
       recentActivities: formattedActivities,
       popularResources: formattedResources
     });
@@ -2664,6 +2602,259 @@ router.get('/catalog-stats-test', jwtAuth.verifyToken, async (req, res) => {
     res.status(500).json({
       success: false,
       message: error.message
+    });
+  }
+});
+
+// ============================================
+// [advice from AI] 문서/가이드 관리 API (knowledge_assets 기반)
+// ============================================
+
+// [advice from AI] 문서 목록 조회 (knowledge_assets 테이블 사용)
+router.get('/documents', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    console.log('📄 문서 목록 조회 요청');
+    
+    const result = await pool.query(`
+      SELECT 
+        id,
+        title,
+        description,
+        asset_type as doc_type,
+        category,
+        tags,
+        'published' as status,
+        version,
+        content_format,
+        file_url as content_url,
+        file_path,
+        file_size,
+        mime_type,
+        download_count,
+        created_at,
+        updated_at,
+        updated_at as last_updated
+      FROM knowledge_assets
+      WHERE asset_type IN ('component', 'api_guide', 'user_manual', 'document', 'guide')
+      ORDER BY created_at DESC
+    `);
+    
+    console.log(`✅ 문서 ${result.rows.length}개 조회 완료`);
+    
+    res.json({
+      success: true,
+      data: result.rows
+    });
+  } catch (error) {
+    console.error('❌ 문서 목록 조회 오류:', error);
+    res.status(500).json({
+      success: false,
+      error: '문서 목록을 가져올 수 없습니다.'
+    });
+  }
+});
+
+// [advice from AI] 문서 등록 (knowledge_assets에 추가)
+router.post('/documents', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    const {
+      title,
+      description,
+      doc_type,
+      category,
+      tags,
+      status,
+      version,
+      content_format,
+      content_url
+    } = req.body;
+    
+    console.log('📝 문서 등록 요청:', { title, doc_type });
+    
+    // 필수 필드 검증
+    if (!title || !doc_type) {
+      return res.status(400).json({
+        success: false,
+        error: '제목과 문서 타입은 필수입니다.'
+      });
+    }
+    
+    const result = await pool.query(`
+      INSERT INTO knowledge_assets (
+        title,
+        description,
+        asset_type,
+        category,
+        tags,
+        version,
+        content_format,
+        file_url,
+        author_id,
+        is_public
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      RETURNING *
+    `, [
+      title,
+      description || '',
+      doc_type,
+      category || 'documentation',
+      JSON.stringify(tags || []),
+      version || '1.0.0',
+      content_format || 'markdown',
+      content_url || '',
+      req.user?.id || null,
+      true
+    ]);
+    
+    console.log('✅ 문서 등록 완료:', result.rows[0].id);
+    
+    res.json({
+      success: true,
+      data: result.rows[0]
+    });
+  } catch (error) {
+    console.error('❌ 문서 등록 오류:', error);
+    res.status(500).json({
+      success: false,
+      error: '문서 등록에 실패했습니다.'
+    });
+  }
+});
+
+// [advice from AI] 문서 수정
+router.put('/documents/:id', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      title,
+      description,
+      doc_type,
+      category,
+      tags,
+      version,
+      content_format,
+      content_url
+    } = req.body;
+    
+    console.log('📝 문서 수정 요청:', id);
+    
+    const result = await pool.query(`
+      UPDATE knowledge_assets SET
+        title = $1,
+        description = $2,
+        asset_type = $3,
+        category = $4,
+        tags = $5,
+        version = $6,
+        content_format = $7,
+        file_url = $8,
+        updated_at = NOW()
+      WHERE id = $9
+      RETURNING *
+    `, [
+      title,
+      description,
+      doc_type,
+      category,
+      JSON.stringify(tags || []),
+      version,
+      content_format,
+      content_url,
+      id
+    ]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: '문서를 찾을 수 없습니다.'
+      });
+    }
+    
+    console.log('✅ 문서 수정 완료:', id);
+    
+    res.json({
+      success: true,
+      data: result.rows[0]
+    });
+  } catch (error) {
+    console.error('❌ 문서 수정 오류:', error);
+    res.status(500).json({
+      success: false,
+      error: '문서 수정에 실패했습니다.'
+    });
+  }
+});
+
+// [advice from AI] 문서 삭제
+router.delete('/documents/:id', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    console.log('🗑️ 문서 삭제 요청:', id);
+    
+    const result = await pool.query('DELETE FROM knowledge_assets WHERE id = $1 RETURNING *', [id]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: '문서를 찾을 수 없습니다.'
+      });
+    }
+    
+    console.log('✅ 문서 삭제 완료:', id);
+    
+    res.json({
+      success: true,
+      message: '문서가 삭제되었습니다.'
+    });
+  } catch (error) {
+    console.error('❌ 문서 삭제 오류:', error);
+    res.status(500).json({
+      success: false,
+      error: '문서 삭제에 실패했습니다.'
+    });
+  }
+});
+
+// [advice from AI] 문서 다운로드
+router.get('/documents/:id/download', jwtAuth.verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    console.log('📥 문서 다운로드 요청:', id);
+    
+    const result = await pool.query(`
+      SELECT title, file_path, file_url, mime_type
+      FROM knowledge_assets
+      WHERE id = $1
+    `, [id]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: '문서를 찾을 수 없습니다.'
+      });
+    }
+    
+    const doc = result.rows[0];
+    
+    // 다운로드 카운트 증가
+    await pool.query('UPDATE knowledge_assets SET download_count = download_count + 1 WHERE id = $1', [id]);
+    
+    // 파일 URL이 있으면 리다이렉트, 없으면 에러
+    if (doc.file_url) {
+      res.redirect(doc.file_url);
+    } else {
+      res.status(404).json({
+        success: false,
+        error: '다운로드 가능한 파일이 없습니다.'
+      });
+    }
+  } catch (error) {
+    console.error('❌ 문서 다운로드 오류:', error);
+    res.status(500).json({
+      success: false,
+      error: '문서 다운로드에 실패했습니다.'
     });
   }
 });
