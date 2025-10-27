@@ -697,66 +697,116 @@ router.post('/sla-alerts/:id/resolve', async (req, res) => {
   }
 });
 
-// [advice from AI] 레포지토리 분석 API
+// [advice from AI] 레포지토리 분석 API - 실제 GitHub API 기반 분석
+const RepositoryAnalyzer = require('../services/repositoryAnalyzer');
+const repositoryAnalyzer = new RepositoryAnalyzer();
+
 router.post('/repository/analyze', async (req, res) => {
   try {
     const { repository_url, branch } = req.body;
     
-    // GitHub API를 통한 실제 레포지토리 분석
-    const repoName = repository_url.split('/').pop() || 'unknown';
-    const isEcpAiOrchestrator = repository_url.includes('ecp-ai-k8s-orchestrator');
+    if (!repository_url) {
+      return res.status(400).json({
+        success: false,
+        error: '레포지토리 URL이 필요합니다.'
+      });
+    }
+
+    console.log('🔍 레포지토리 분석 시작:', repository_url);
+
+    // [advice from AI] 실제 GitHub API를 사용한 레포지토리 분석
+    const analysis = await repositoryAnalyzer.analyzeRepository(repository_url);
     
-    // GitHub API로 실제 파일 존재 여부 체크 (시뮬레이션)
-    const dockerfileCheck = await checkFileExists(repository_url, 'Dockerfile');
-    const k8sManifestsCheck = await checkFileExists(repository_url, 'k8s/') || 
-                             await checkFileExists(repository_url, 'kubernetes/') ||
-                             await checkFileExists(repository_url, 'manifests/');
-    
+    // [advice from AI] 배포에 필요한 형식으로 변환
     const repositoryInfo = {
       url: repository_url,
-      branch: branch || 'main',
-      name: repoName,
-      description: isEcpAiOrchestrator ? 
-        'ECP-AI Kubernetes Orchestrator - Multi-tenant AI Service Deployment System with Hardware Calculator' :
-        `${repoName} - 자동 분석된 프로젝트`,
-      language: isEcpAiOrchestrator ? 'Python' : 'JavaScript',
-      framework: isEcpAiOrchestrator ? 'FastAPI' : 'React',
-      hasDockerfile: dockerfileCheck,
-      hasKubernetesManifests: k8sManifestsCheck,
-      dependencies: isEcpAiOrchestrator ? 
-        ['fastapi', 'uvicorn', 'kubernetes', 'prometheus-client', 'redis', 'postgresql'] :
-        ['react', 'typescript', 'material-ui'],
-      estimatedResources: isEcpAiOrchestrator ? {
-        cpu: 2,
-        memory: 4,
-        storage: 20,
-        replicas: 3
-      } : {
-        cpu: 1,
-        memory: 2,
+      branch: branch || analysis.basic?.defaultBranch || 'main',
+      name: analysis.basic?.name || repository_url.split('/').pop()?.replace('.git', '') || '알 수 없음',
+      description: analysis.basic?.description || '설명 없음',
+      language: analysis.basic?.language || analysis.techStack?.language[0] || '감지되지 않음',
+      framework: analysis.autoDetected?.framework || analysis.techStack?.framework[0] || '감지되지 않음',
+      hasDockerfile: analysis.fileStructure?.hasDockerfile || false,
+      hasKubernetesManifests: analysis.fileStructure?.hasKubernetesFiles || false,
+      dependencies: analysis.packageInfo ? 
+        Object.keys(analysis.packageInfo.dependencies || {}).slice(0, 10) : 
+        [],
+      stars: analysis.basic?.stars || 0,
+      forks: analysis.basic?.forks || 0,
+      license: analysis.basic?.license || '없음',
+      topics: analysis.basic?.topics || [],
+      
+      // 배포 설정
+      deploymentConfig: {
+        buildCommand: analysis.deploymentConfig?.buildCommand || 'npm run build',
+        startCommand: analysis.deploymentConfig?.startCommand || 'npm start',
+        port: analysis.deploymentConfig?.port || 3000,
+        healthCheckPath: analysis.deploymentConfig?.healthCheckPath || '/health',
+        environment: analysis.deploymentConfig?.environment || 'production'
+      },
+      
+      // 리소스 추정
+      estimatedResources: {
+        cpu: analysis.autoDetected?.projectType === 'backend' ? 1 : 0.5,
+        memory: analysis.autoDetected?.projectType === 'backend' ? 2 : 1,
         storage: 10,
         replicas: 2
       },
+      
+      // 기술 스택 상세
+      techStack: {
+        languages: analysis.techStack?.language || [],
+        frameworks: analysis.techStack?.framework || [],
+        databases: analysis.techStack?.database || [],
+        tools: analysis.techStack?.tools || [],
+        deployment: analysis.techStack?.deployment || []
+      },
+      
+      // 자동 감지 정보
+      autoDetected: {
+        projectType: analysis.autoDetected?.projectType || '감지되지 않음',
+        buildTool: analysis.autoDetected?.buildTool || '감지되지 않음',
+        framework: analysis.autoDetected?.framework || '감지되지 않음',
+        database: analysis.autoDetected?.database || [],
+        ports: analysis.autoDetected?.ports || [],
+        environment: analysis.autoDetected?.environment || []
+      },
+      
       // 추가 분석 정보
       analysisDetails: {
-        dockerfile_path: dockerfileCheck ? 'Dockerfile' : null,
-        k8s_manifests_path: k8sManifestsCheck ? 'k8s/' : null,
-        deployment_ready: dockerfileCheck && k8sManifestsCheck,
+        dockerfile_path: analysis.dockerInfo ? 'Dockerfile' : null,
+        k8s_manifests_path: analysis.fileStructure?.hasKubernetesFiles ? 'k8s/' : null,
+        deployment_ready: analysis.fileStructure?.hasDockerfile && analysis.fileStructure?.hasKubernetesFiles,
+        has_ci_cd: analysis.fileStructure?.hasJenkinsfile || analysis.fileStructure?.hasGithubActions,
+        package_manager: analysis.packageInfo ? 'npm' : analysis.fileStructure?.hasRequirementsTxt ? 'pip' : '감지되지 않음',
         analysis_timestamp: new Date().toISOString()
+      },
+      
+      // README 요약
+      readme: analysis.readme ? {
+        has_readme: true,
+        installation_steps: analysis.readme.analysis?.installation?.length || 0,
+        usage_documented: !!analysis.readme.analysis?.usage,
+        deployment_documented: !!analysis.readme.analysis?.deployment
+      } : {
+        has_readme: false
       }
     };
 
+    console.log('✅ 레포지토리 분석 완료:', repositoryInfo.name);
+
     res.json({
       success: true,
-      repository: repositoryInfo
+      repository: repositoryInfo,
+      raw_analysis: analysis // 디버깅용
     });
 
   } catch (error) {
-    console.error('레포지토리 분석 오류:', error);
+    console.error('❌ 레포지토리 분석 오류:', error);
     res.status(500).json({
       success: false,
       error: '레포지토리 분석 중 오류가 발생했습니다.',
-      message: error.message
+      message: error.message,
+      details: error.stack
     });
   }
 });
